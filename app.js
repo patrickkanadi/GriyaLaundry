@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 3; // Bumped to 3 to add members and expenses tables
+const DB_VERSION = 4; // Bumped to 4 to add local_shift_history
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -8,6 +8,7 @@ let globalMenuData = []; let currentCategory = ""; let activeLaundryTickets = []
 let currentCart = []; let activeNumpadItem = null; let numpadValue = "0";
 let activeSettlementTicket = null; window.masterDrawerBalance = 0; let isLoggingOut = false;
 let currentVoidTarget = { type: null, id: null };
+let isMenuLocked = true; // Gatekeeper lock state
 
 // INIT DB & LOGIN
 function initDB() {
@@ -22,12 +23,13 @@ function initDB() {
             if (!db.objectStoreNames.contains("active_shifts")) db.createObjectStore("active_shifts", { keyPath: "pin" }); 
             if (!db.objectStoreNames.contains("cash_drops")) db.createObjectStore("cash_drops", { keyPath: "dropId" }); 
             if (!db.objectStoreNames.contains("shift_reports")) db.createObjectStore("shift_reports", { keyPath: "shiftId" }); 
-            // New Tables
             if (!db.objectStoreNames.contains("expenses")) db.createObjectStore("expenses", { keyPath: "expenseId" });
             if (!db.objectStoreNames.contains("members")) db.createObjectStore("members", { keyPath: "phone" });
             if (!db.objectStoreNames.contains("unsynced_members")) db.createObjectStore("unsynced_members", { keyPath: "phone" });
             if (!db.objectStoreNames.contains("expense_categories")) db.createObjectStore("expense_categories", { keyPath: "name" });
             if (!db.objectStoreNames.contains("void_requests")) db.createObjectStore("void_requests", { keyPath: "id" });
+            // NEW: Permanent Local Shift History
+            if (!db.objectStoreNames.contains("local_shift_history")) db.createObjectStore("local_shift_history", { keyPath: "shiftId" });
         };
         request.onsuccess = (e) => { db = e.target.result; resolve(db); };
     });
@@ -42,11 +44,12 @@ function attemptLogin() {
             document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden");
             document.getElementById("display-cashier").innerText = currentCashier;
             syncMasterData();
+            lockMenu(); // Engage gatekeeper on login
         } else { alert("Invalid PIN"); }
     };
 }
 
-// UI NAVIGATION
+// UI NAVIGATION & GATEKEEPER
 function switchWorkspace(type) {
     document.querySelectorAll('.ws-tab').forEach(b => b.classList.remove('active'));
     document.getElementById("main-workspace").classList.add("hidden");
@@ -62,19 +65,49 @@ function switchWorkspace(type) {
     }
 }
 
+function lockMenu() {
+    isMenuLocked = true;
+    document.getElementById("glass-overlay").style.opacity = "1";
+    document.getElementById("glass-overlay").style.pointerEvents = "auto";
+    document.getElementById("cust-phone").value = "";
+    document.getElementById("cust-name").value = "";
+    currentCart = []; renderCart();
+}
+
+function unlockMenu(isGuest) {
+    if (isGuest) {
+        document.getElementById("cust-phone").value = "";
+        document.getElementById("cust-name").value = "Walk-in";
+    } else {
+        const phone = document.getElementById("cust-phone").value.trim();
+        if (phone.length < 5) return alert("Please enter a valid WhatsApp number.");
+    }
+    isMenuLocked = false;
+    document.getElementById("glass-overlay").style.opacity = "0";
+    setTimeout(() => { document.getElementById("glass-overlay").style.pointerEvents = "none"; }, 300);
+}
+
+// MANUAL SYNC OVERRIDE
+async function manualPushSync() {
+    if (!navigator.onLine) return alert("You are offline!");
+    document.getElementById("network-text").innerText = "Pushing Data...";
+    document.getElementById("network-dot").style.backgroundColor = "#f39c12";
+    await runBackgroundSync(); 
+    document.getElementById("network-text").innerText = "Pulling Data...";
+    await syncMasterData(); 
+    alert("Database Synced Successfully!");
+}
+
 // SYNC ENGINE
 async function syncMasterData() {
     if (!navigator.onLine) {
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Offline Mode";
-        if(document.getElementById("login-network-text")) document.getElementById("login-network-text").innerText = "Offline Mode";
         if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c";
-        if(document.getElementById("login-network-dot")) document.getElementById("login-network-dot").style.backgroundColor = "#e74c3c";
         return;
     }
     
     if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Syncing...";
-    if(document.getElementById("login-network-text")) document.getElementById("login-network-text").innerText = "Syncing...";
-    if(document.getElementById("login-network-dot")) document.getElementById("login-network-dot").style.backgroundColor = "#f39c12";
+    if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#f39c12";
 
     try {
         const response = await fetch(API_URL); 
@@ -102,22 +135,15 @@ async function syncMasterData() {
             if(document.getElementById("ticket-count")) document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
             
             if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Online & Synced";
-            if(document.getElementById("login-network-text")) document.getElementById("login-network-text").innerText = "Database Ready ✅";
             if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#2ecc71";
-            if(document.getElementById("login-network-dot")) document.getElementById("login-network-dot").style.backgroundColor = "#2ecc71";
             
             if (!document.getElementById("pos-screen").classList.contains("hidden")) {
                 loadMenuUI(); renderActiveTickets(); populateMemberDatalist();
             }
-        } else {
-            throw new Error(result.message || "Server error");
-        }
+        } else { throw new Error(result.message || "Server error"); }
     } catch (e) { 
-        alert("CRASH REPORT: " + e.message);
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Sync Failed"; 
-        if(document.getElementById("login-network-text")) document.getElementById("login-network-text").innerText = "Sync Failed ❌";
         if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c";
-        if(document.getElementById("login-network-dot")) document.getElementById("login-network-dot").style.backgroundColor = "#e74c3c";
     }
 }
 
@@ -162,8 +188,11 @@ function renderProductGrid() {
     const grid = document.getElementById("product-grid"); grid.innerHTML = "";
     globalMenuData.filter(i => i.category === currentCategory).forEach(item => {
         const card = document.createElement("div"); card.className = "product-card";
-        card.innerHTML = `<h4>${item.name}</h4><p style="color:#7f8c8d; margin:5px 0;">Rp ${item.price.toLocaleString('id-ID')}</p>`;
-        card.onclick = () => { if (item.inputMode === "DECIMAL") openNumpad(item); else addToCart(item, 1); };
+        card.innerHTML = `<div><h4 style="margin-top:0;">${item.name}</h4></div> <div class="price-badge">Rp ${item.price.toLocaleString('id-ID')}</div>`;
+        card.onclick = () => { 
+            if(isMenuLocked) return; // Prevent clicking if locked
+            if (item.inputMode === "DECIMAL") openNumpad(item); else addToCart(item, 1); 
+        };
         grid.appendChild(card);
     });
 }
@@ -196,7 +225,7 @@ function renderCart() {
     document.getElementById("cart-total").innerText = `Rp ${total.toLocaleString('id-ID')}`;
     window.cartGrandTotal = total;
 }
-function clearCart() { currentCart = []; document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = ""; renderCart(); }
+function clearCart() { lockMenu(); }
 
 // CHECKOUT LOGIC
 function reviewOrder() {
@@ -261,7 +290,7 @@ async function finalizeOrder(shouldPrint) {
         window.print(); 
     }
     
-    clearCart(); closeReview(); renderProductGrid(); runBackgroundSync();
+    closeReview(); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
 
 // ---------------------------------------------------------
@@ -363,7 +392,6 @@ function openExpenseModal() {
     const list = document.getElementById("expense-category-list"); list.innerHTML = "";
     db.transaction(["expense_categories"], "readonly").objectStore("expense_categories").getAll().onsuccess = (e) => { e.target.result.forEach(cat => { const opt = document.createElement("option"); opt.value = cat.name; list.appendChild(opt); }); };
 }
-function closeExpenseModal() { document.getElementById("expense-modal").classList.add("hidden"); }
 function saveExpense() {
     const amount = Number(document.getElementById("exp-amount").value);
     const category = document.getElementById("exp-category").value.trim();
@@ -372,14 +400,13 @@ function saveExpense() {
 
     const payload = { expenseId: "EXP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, category: category, description: document.getElementById("exp-desc").value || "-", amount: amount, status: "Active", syncStatus: "Pending" };
     db.transaction(["expenses"], "readwrite").objectStore("expenses").add(payload);
-    closeExpenseModal(); document.getElementById("exp-amount").value = ""; document.getElementById("exp-category").value = ""; document.getElementById("exp-desc").value = ""; alert("Expense Recorded!"); runBackgroundSync();
+    document.getElementById("expense-modal").classList.add("hidden"); document.getElementById("exp-amount").value = ""; document.getElementById("exp-category").value = ""; document.getElementById("exp-desc").value = ""; alert("Expense Recorded!"); runBackgroundSync();
 }
 
 // ---------------------------------------------------------
 // HISTORY & VOIDS
 // ---------------------------------------------------------
 function openHistoryModal() { document.getElementById("history-modal").classList.remove("hidden"); renderHistoryList('orders'); }
-function closeHistoryModal() { document.getElementById("history-modal").classList.add("hidden"); }
 
 function renderHistoryList(type) {
     const container = document.getElementById("history-container"); container.innerHTML = "";
@@ -403,11 +430,18 @@ function renderHistoryList(type) {
                 container.innerHTML += `<div class="history-row"><div><strong>${exp.category}</strong><br><small style="color:#7f8c8d;">${new Date(exp.timestamp).toLocaleTimeString()} | Rp ${exp.amount.toLocaleString('id-ID')}</small><br><small>${exp.description}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
             });
         };
+    } else if (type === 'shifts') {
+        db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").getAll().onsuccess = (e) => {
+            const shifts = e.target.result.reverse();
+            if(shifts.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">No past shifts locally stored on this device yet.</div>`;
+            shifts.forEach(s => {
+                container.innerHTML += `<div class="history-row"><div><strong>Shift: ${s.shiftId}</strong><br><small style="color:#7f8c8d;">Cashier: ${s.cashier} | ${new Date(s.logoutTime).toLocaleString('id-ID')}</small></div><div style="text-align:right;"><strong>Rp ${s.totalOmset.toLocaleString('id-ID')}</strong><br><small style="color:#27ae60;">Net Cash: Rp ${s.netCash.toLocaleString('id-ID')}</small></div></div>`;
+            });
+        };
     }
 }
 
 function requestVoid(type, id) { currentVoidTarget = { type, id }; document.getElementById("admin-void-pin").value = ""; document.getElementById("admin-void-modal").classList.remove("hidden"); }
-function closeAdminVoidModal() { document.getElementById("admin-void-modal").classList.add("hidden"); }
 
 function submitRemoteVoid() {
     const type = currentVoidTarget.type; const id = currentVoidTarget.id; const storeName = type === 'orders' ? "orders" : "expenses";
@@ -417,7 +451,7 @@ function submitRemoteVoid() {
         db.transaction([storeName], "readwrite").objectStore(storeName).put(item); renderHistoryList(type); 
     };
     db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add({ id: id, type: type, status: "Void Pending", authName: "Waiting" });
-    closeAdminVoidModal(); runBackgroundSync();
+    document.getElementById("admin-void-modal").classList.add("hidden"); runBackgroundSync();
 }
 
 async function confirmAdminVoid() {
@@ -435,13 +469,13 @@ async function confirmAdminVoid() {
                 const item = ev.target.result;
                 if (type === 'orders') { 
                     item.orderStatus = "Voided"; item.voidAuth = authName; 
-                    if(item.items) item.items.forEach(i => i.qty = Number(i.qty)); // Fix for aftermath execution
+                    if(item.items) item.items.forEach(i => i.qty = Number(i.qty)); 
                     applyVoidAftermath(item); 
                 } else { item.status = "Voided"; item.voidAuth = authName; }
                 item.syncStatus = "Pending"; db.transaction([storeName], "readwrite").objectStore(storeName).put(item); renderHistoryList(type);
             };
             db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add({ id: id, type: type, status: "Voided", authName: authName });
-            closeAdminVoidModal(); runBackgroundSync(); alert("Transaction instantly voided by: " + authName);
+            document.getElementById("admin-void-modal").classList.add("hidden"); runBackgroundSync(); alert("Transaction instantly voided by: " + authName);
         } else { alert("Invalid PIN or no Admin privileges."); }
     };
 }
@@ -581,8 +615,12 @@ async function executeFinalLogout(netCash) {
         foodSummary: data.foodSummary, syncStatus: "Pending"
     };
 
+    // Save a permanent copy to the new local history table before syncing
+    db.transaction(["local_shift_history"], "readwrite").objectStore("local_shift_history").add(shiftPayload);
+    
     db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").add(shiftPayload);
     db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").delete(currentPin); 
+    
     if (navigator.onLine) {
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = `Sending Report...`;
         try {
