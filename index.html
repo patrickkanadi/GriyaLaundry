@@ -26,23 +26,34 @@
         .ws-tab.active { background: white; color: #2980b9; border-top: 3px solid #3498db; }
 
         #main-workspace { display: flex; flex: 1; overflow: hidden; }
-        #menu-section { flex: 6; display: flex; flex-direction: column; border-right: 2px solid #ddd; background: #fff; overflow: hidden; }
+        
+        /* THE COMMAND BAR (GATEKEEPER) */
+        #menu-section { flex: 6; display: flex; flex-direction: column; border-right: 2px solid #ddd; background: #fff; overflow: hidden; position: relative;}
+        #command-bar { background: #fff; padding: 15px; border-bottom: 2px solid #ecf0f1; display: flex; gap: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); z-index: 10; align-items: center;}
+        #command-bar input { flex: 1; padding: 12px; font-size: 16px; border: 2px solid #bdc3c7; border-radius: 8px; }
+        
+        /* FROSTED GLASS OVERLAY */
+        #glass-overlay { position: absolute; top: 75px; left: 0; width: 100%; height: calc(100% - 75px); background: rgba(255,255,255,0.8); backdrop-filter: blur(5px); z-index: 20; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; transition: opacity 0.3s; }
+        
         .category-tabs { display: flex; background: #ecf0f1; padding: 10px; gap: 10px; overflow-x: auto; }
         .cat-btn { padding: 15px 20px; border: none; background: white; border-radius: 8px; font-weight: bold; cursor: pointer; white-space: nowrap; }
         .cat-btn.active { background: #3498db; color: white; }
         
-        #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; padding: 15px; overflow-y: auto; background: #f4f7f6; flex: 1; }
-        .product-card { background: #fff; border: 1px solid #ddd; border-radius: 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); padding: 15px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between;}
-        .product-card:active { transform: scale(0.98); }
+        /* SLEEK PRODUCT CARDS */
+        #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 20px; overflow-y: auto; background: #f8f9fa; flex: 1; }
+        .product-card { background: #fff; border: 1px solid #eee; border-radius: 12px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.05); padding: 15px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.1s, box-shadow 0.1s;}
+        .product-card:active { transform: scale(0.96); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .price-badge { background: #e8f4f8; color: #2980b9; font-weight: bold; padding: 6px 12px; border-radius: 20px; display: inline-block; margin-top: 10px;}
 
-        #cart-section { flex: 4; display: flex; flex-direction: column; background: #fdfdfd; }
-        #cart-customer-info { padding: 15px; background: #ecf0f1; border-bottom: 1px solid #ddd; }
+        /* RECEIPT-STYLE CART */
+        #cart-section { flex: 4; display: flex; flex-direction: column; background: #fdfbf7; }
+        #cart-header { padding: 15px; background: #2c3e50; color: white; font-weight: bold; text-align: center; }
         #cart-items { flex: 1; padding: 15px; overflow-y: auto; }
-        .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed #eee; font-size: 15px; }
-        .cart-qty { font-weight: bold; background: #3498db; color: white; padding: 2px 6px; border-radius: 4px; margin-right: 10px; }
+        .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px dashed #ccc; font-size: 15px; }
+        .cart-qty { font-weight: bold; background: #3498db; color: white; padding: 4px 8px; border-radius: 6px; margin-right: 10px; }
         
-        #checkout-panel { padding: 20px; border-top: 2px solid #ddd; background: white; }
-        .grand-total { font-size: 24px; font-weight: bold; color: #e74c3c; margin-top: 10px; border-top: 2px solid #eee; padding-top: 10px; display: flex; justify-content: space-between;}
+        #checkout-panel { padding: 20px; border-top: 2px dashed #ccc; background: #fff; box-shadow: 0 -4px 10px rgba(0,0,0,0.03); }
+        .grand-total { font-size: 24px; font-weight: bold; color: #e74c3c; display: flex; justify-content: space-between;}
         .btn-pay { background: #27ae60; color: white; padding: 15px; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 15px; }
 
         /* KANBAN / ACTIVE TICKETS BOARD */
@@ -53,14 +64,13 @@
         .ticket-header { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
         .ticket-btn { padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; color: white; }
 
-        /* MODALS & NUMPAD */
+        /* MODALS */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 10px;}
         .modal-content { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 95vh; overflow-y: auto; width: 100%; max-width: 450px; }
         .modal-large { max-width: 700px; }
         
         .numpad-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px; }
         .num-btn { padding: 15px; font-size: 20px; font-weight: bold; border: 1px solid #ddd; background: #f9f9f9; border-radius: 8px; cursor: pointer; }
-        .num-btn:active { background: #ecf0f1; }
         
         .form-box { margin-bottom: 15px; }
         .form-box label { display: block; font-weight: bold; margin-bottom: 5px; color: #2c3e50; }
@@ -75,7 +85,6 @@
         .status-pending { background: #fff3cd; color: #856404; }
         .status-voided { background: #f8d7da; color: #721c24; }
 
-        /* 58MM THERMAL RECEIPT CSS */
         #printable-area { display: none; }
         @media print {
             body { background: white; margin: 0; padding: 0; }
@@ -111,7 +120,8 @@
         <div id="top-bar">
             <div><strong>Cashier:</strong> <span id="display-cashier">---</span></div>
             <div class="status-indicator">
-                <span class="dot-online" id="network-dot"></span><span id="network-text">Initializing...</span>
+                <span class="dot-online" id="network-dot"></span><span id="network-text" style="margin-right: 10px;">Initializing...</span>
+                <button class="btn-top" style="background:#34495e; border-color:#34495e;" onclick="manualPushSync()">🔄 Sync</button>
                 <button class="btn-top" style="background:#16a085; border-color:#16a085;" onclick="openCashDrop(false)">🏦 Drawer</button>
                 <button class="btn-top" style="background:#8e44ad; border-color:#8e44ad;" onclick="openHistoryModal()">📋 History</button>
                 <button class="btn-top" style="background:#e67e22; border-color:#e67e22;" onclick="openExpenseModal()">💸 Expenses</button>
@@ -127,20 +137,31 @@
 
         <div id="main-workspace">
             <div id="menu-section">
+                <div id="command-bar">
+                    <input type="text" id="cust-phone" list="member-list" placeholder="Customer WA Number" autocomplete="off">
+                    <datalist id="member-list"></datalist>
+                    <input type="text" id="cust-name" placeholder="Customer Name">
+                    <button onclick="unlockMenu(false)" style="background:#27ae60; color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:bold; cursor:pointer;">Start Order</button>
+                    <button onclick="unlockMenu(true)" style="background:#95a5a6; color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:bold; cursor:pointer;">Guest/Walk-in</button>
+                </div>
+                
                 <div class="category-tabs" id="category-container"></div>
                 <div id="product-grid"></div>
-            </div>
-            <div id="cart-section">
-                <div id="cart-customer-info">
-                    <input type="text" id="cust-phone" list="member-list" placeholder="Customer WA (e.g. 0812...)" style="width:100%; padding:8px; margin-bottom:5px;" autocomplete="off">
-                    <datalist id="member-list"></datalist>
-                    <input type="text" id="cust-name" placeholder="Customer Name" style="width:100%; padding:8px;">
+                
+                <div id="glass-overlay">
+                    <h1 style="color:#2c3e50; font-size:48px; margin:0;">🔒</h1>
+                    <h2 style="color:#2c3e50;">Customer First</h2>
+                    <p style="color:#7f8c8d; max-width:300px; margin:0 auto;">Please enter the WhatsApp number above or select Guest to unlock the menu.</p>
                 </div>
+            </div>
+            
+            <div id="cart-section">
+                <div id="cart-header">Current Cart</div>
                 <div id="cart-items"></div>
                 <div id="checkout-panel">
                     <div class="grand-total"><span>Total:</span> <span id="cart-total">Rp 0</span></div>
                     <button class="btn-pay" onclick="reviewOrder()">Review & Pay</button>
-                    <button class="btn-pay" style="background:#e74c3c; margin-top:10px;" onclick="clearCart()">Clear Cart</button>
+                    <button class="btn-pay" style="background:#e74c3c; margin-top:10px;" onclick="clearCart()">🗑️ Cancel Order</button>
                 </div>
             </div>
         </div>
@@ -156,18 +177,10 @@
             <h3 id="numpad-title" style="margin-top:0; color:#2980b9;">Enter Weight/Qty</h3>
             <div id="numpad-display" style="font-size:36px; font-weight:bold; margin-bottom:15px; padding:10px; border:2px solid #bdc3c7; border-radius:8px; min-height:60px; background:#f9f9f9;">0</div>
             <div class="numpad-grid">
-                <button class="num-btn" onclick="numpadPress(1)">1</button>
-                <button class="num-btn" onclick="numpadPress(2)">2</button>
-                <button class="num-btn" onclick="numpadPress(3)">3</button>
-                <button class="num-btn" onclick="numpadPress(4)">4</button>
-                <button class="num-btn" onclick="numpadPress(5)">5</button>
-                <button class="num-btn" onclick="numpadPress(6)">6</button>
-                <button class="num-btn" onclick="numpadPress(7)">7</button>
-                <button class="num-btn" onclick="numpadPress(8)">8</button>
-                <button class="num-btn" onclick="numpadPress(9)">9</button>
-                <button class="num-btn" onclick="numpadPress('.')">.</button>
-                <button class="num-btn" onclick="numpadPress(0)">0</button>
-                <button class="num-btn" onclick="numpadPress('DEL')" style="background:#e74c3c; color:white;">⌫</button>
+                <button class="num-btn" onclick="numpadPress(1)">1</button><button class="num-btn" onclick="numpadPress(2)">2</button><button class="num-btn" onclick="numpadPress(3)">3</button>
+                <button class="num-btn" onclick="numpadPress(4)">4</button><button class="num-btn" onclick="numpadPress(5)">5</button><button class="num-btn" onclick="numpadPress(6)">6</button>
+                <button class="num-btn" onclick="numpadPress(7)">7</button><button class="num-btn" onclick="numpadPress(8)">8</button><button class="num-btn" onclick="numpadPress(9)">9</button>
+                <button class="num-btn" onclick="numpadPress('.')">.</button><button class="num-btn" onclick="numpadPress(0)">0</button><button class="num-btn" onclick="numpadPress('DEL')" style="background:#e74c3c; color:white;">⌫</button>
             </div>
             <div style="display:flex; gap:10px;">
                 <button onclick="closeNumpad()" style="flex:1; padding:15px; border-radius:8px; border:none; background:#ecf0f1; font-weight:bold;">Cancel</button>
@@ -179,27 +192,20 @@
     <div id="review-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0; border-bottom:2px solid #eee; padding-bottom:10px;">🧾 Checkout</h2>
-            
             <div style="background:#f9f9f9; padding:15px; border-radius:8px; border:1px solid #eee; margin-bottom:15px;">
-                <div style="display:flex; justify-content:space-between; font-size:24px; color:#2c3e50; font-weight:bold;">
-                    <span>Grand Total:</span> <span id="review-grandtotal">Rp 0</span>
-                </div>
+                <div style="display:flex; justify-content:space-between; font-size:24px; color:#2c3e50; font-weight:bold;"><span>Grand Total:</span> <span id="review-grandtotal">Rp 0</span></div>
             </div>
-
             <div class="form-box">
                 <label style="color:#e67e22;">💵 Upfront Deposit / Paid Now (Rp)</label>
                 <input type="number" id="pay-deposit" value="0" onclick="this.select()" oninput="calculateRemaining()" style="border-color:#e67e22; font-size:20px; font-weight:bold;">
             </div>
-
             <div style="display:flex; justify-content:space-between; font-size:18px; color:#c0392b; font-weight:bold; margin-bottom: 20px; padding:10px; background:#fdf2e9; border-radius:8px;">
                 <span>Remaining Balance:</span> <span id="review-remaining">Rp 0</span>
             </div>
-
             <div style="display:flex; gap:10px; margin-bottom:15px;">
                 <label><input type="radio" name="pay-method" value="Cash" checked> Cash</label>
                 <label><input type="radio" name="pay-method" value="QRIS"> QRIS</label>
             </div>
-            
             <div style="display: flex; gap: 10px; flex-wrap:wrap;">
                 <button onclick="closeReview()" style="flex:1; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold;">Back</button>
                 <button onclick="finalizeOrder(false)" style="flex:1; padding:15px; background:#f39c12; color:white; border:none; border-radius:8px; font-weight:bold;">Save (No Print)</button>
@@ -211,13 +217,9 @@
     <div id="settlement-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">💳 Settle Pickup</h2>
-            <p>Customer is picking up clothes. Please collect the remaining balance.</p>
-            <div style="font-size:24px; font-weight:bold; color:#e74c3c; margin-bottom:15px; text-align:center;">
-                Remaining Due: <span id="settle-amount">Rp 0</span>
-            </div>
+            <div style="font-size:24px; font-weight:bold; color:#e74c3c; margin-bottom:15px; text-align:center;">Remaining Due: <span id="settle-amount">Rp 0</span></div>
             <div style="display:flex; gap:10px; margin-bottom:20px; justify-content:center;">
-                <label><input type="radio" name="settle-method" value="Cash" checked> Cash</label>
-                <label><input type="radio" name="settle-method" value="QRIS"> QRIS</label>
+                <label><input type="radio" name="settle-method" value="Cash" checked> Cash</label><label><input type="radio" name="settle-method" value="QRIS"> QRIS</label>
             </div>
             <div style="display:flex; gap:10px;">
                 <button onclick="document.getElementById('settlement-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; font-weight:bold; border:none;">Cancel</button>
@@ -229,15 +231,12 @@
     <div id="expense-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">💸 Record Expense</h2>
-            <div class="form-box"><label>Amount (Rp)</label><input type="number" id="exp-amount" placeholder="e.g. 50000"></div>
-            <div class="form-box">
-                <label>Category</label><input type="text" id="exp-category" list="expense-category-list" placeholder="Click or type category..." autocomplete="off">
-                <datalist id="expense-category-list"></datalist>
-            </div>
-            <div class="form-box"><label>Description</label><input type="text" id="exp-desc" placeholder="e.g., Beli plastik"></div>
+            <div class="form-box"><label>Amount (Rp)</label><input type="number" id="exp-amount"></div>
+            <div class="form-box"><label>Category</label><input type="text" id="exp-category" list="expense-category-list" autocomplete="off"><datalist id="expense-category-list"></datalist></div>
+            <div class="form-box"><label>Description</label><input type="text" id="exp-desc"></div>
             <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button onclick="closeExpenseModal()" style="flex:1; padding:15px; background:#ecf0f1; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Cancel</button>
-                <button onclick="saveExpense()" style="flex:1; padding:15px; background:#e67e22; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Save</button>
+                <button onclick="document.getElementById('expense-modal').classList.add('hidden')" style="flex:1; padding:15px; background:#ecf0f1; border:none; border-radius:8px; font-weight:bold;">Cancel</button>
+                <button onclick="saveExpense()" style="flex:1; padding:15px; background:#e67e22; color:white; border:none; border-radius:8px; font-weight:bold;">Save</button>
             </div>
         </div>
     </div>
@@ -246,56 +245,22 @@
         <div class="modal-content modal-large">
             <h2 style="margin-top:0;">📋 System History</h2>
             <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-                <button onclick="renderHistoryList('orders')" style="flex:1; padding:10px; cursor:pointer;">🛍️ Active Orders</button>
-                <button onclick="renderHistoryList('expenses')" style="flex:1; padding:10px; cursor:pointer;">💸 Active Expenses</button>
+                <button onclick="renderHistoryList('orders')" style="flex:1; padding:10px; cursor:pointer;">🛍️ Orders</button>
+                <button onclick="renderHistoryList('expenses')" style="flex:1; padding:10px; cursor:pointer;">💸 Expenses</button>
+                <button onclick="renderHistoryList('shifts')" style="flex:1; padding:10px; cursor:pointer; background:#8e44ad; color:white; border:none; border-radius:4px; font-weight:bold;">📊 Past Shifts</button>
             </div>
             <div class="history-list" id="history-container" style="max-height:400px; overflow-y:auto; background:#f9f9f9;"></div>
-            <button onclick="closeHistoryModal()" style="width:100%; padding:15px; margin-top:15px; background:#ecf0f1; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Close</button>
+            <button onclick="document.getElementById('history-modal').classList.add('hidden')" style="width:100%; padding:15px; margin-top:15px; background:#ecf0f1; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Close</button>
         </div>
     </div>
 
-    <div id="admin-void-modal" class="modal-overlay hidden">
-        <div class="modal-content" style="text-align:center;">
-            <h2 style="margin-top:0; color:#e74c3c;">⚠️ Admin Override</h2>
-            <p style="color:#7f8c8d; margin-bottom:20px;">Enter Admin PIN to instantly void, or send a request to the server.</p>
-            <input type="password" id="admin-void-pin" placeholder="****" inputmode="numeric" style="font-size:24px; text-align:center; margin-bottom:15px; width:100%; padding:10px; border:2px solid #bdc3c7; border-radius:8px;">
-            <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button onclick="closeAdminVoidModal()" style="flex:1; min-width:80px; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Cancel</button>
-                <button onclick="submitRemoteVoid()" style="flex:1; min-width:100px; padding:15px; background:#f39c12; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Send Request</button>
-                <button onclick="confirmAdminVoid()" style="flex:1; min-width:100px; padding:15px; background:#e74c3c; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Insta-Void</button>
-            </div>
-        </div>
-    </div>
+    <div id="admin-void-modal" class="modal-overlay hidden"><div class="modal-content" style="text-align:center;"><h2 style="margin-top:0; color:#e74c3c;">⚠️ Admin Override</h2><input type="password" id="admin-void-pin" placeholder="****" inputmode="numeric" style="font-size:24px; text-align:center; margin-bottom:15px; width:100%; padding:10px; border:2px solid #bdc3c7; border-radius:8px;"><div style="display:flex; gap:10px; flex-wrap:wrap;"><button onclick="document.getElementById('admin-void-modal').classList.add('hidden')" style="flex:1; min-width:80px; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold;">Cancel</button><button onclick="submitRemoteVoid()" style="flex:1; min-width:100px; padding:15px; background:#f39c12; color:white; border:none; border-radius:8px; font-weight:bold;">Request</button><button onclick="confirmAdminVoid()" style="flex:1; min-width:100px; padding:15px; background:#e74c3c; color:white; border:none; border-radius:8px; font-weight:bold;">Insta-Void</button></div></div></div>
 
-    <div id="cash-drop-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <h2 id="cash-drop-title">🏦 Store Money</h2>
-            <div id="live-drawer-display" style="font-size:24px; margin-bottom:15px;">Rp 0</div>
-            <input type="number" id="drop-admin" placeholder="To Admin" style="width:100%; margin-bottom:10px; padding:10px;">
-            <input type="number" id="drop-bank" placeholder="To Bank" style="width:100%; margin-bottom:10px; padding:10px;">
-            <input type="text" id="drop-notes" placeholder="Notes" style="width:100%; margin-bottom:10px; padding:10px;">
-            <div style="display:flex; gap:10px;">
-                <button id="btn-drop-cancel" onclick="document.getElementById('cash-drop-modal').classList.add('hidden')" style="flex:1; padding:15px;">Cancel</button>
-                <button id="btn-drop-confirm" onclick="submitCashDrop()" style="flex:1; padding:15px; background:#16a085; color:white; border:none;">Save Drop</button>
-            </div>
-        </div>
-    </div>
+    <div id="cash-drop-modal" class="modal-overlay hidden"><div class="modal-content"><h2 id="cash-drop-title">🏦 Store Money</h2><div id="live-drawer-display" style="font-size:24px; margin-bottom:15px;">Rp 0</div><input type="number" id="drop-admin" placeholder="To Admin" style="width:100%; margin-bottom:10px; padding:10px;"><input type="number" id="drop-bank" placeholder="To Bank" style="width:100%; margin-bottom:10px; padding:10px;"><input type="text" id="drop-notes" placeholder="Notes" style="width:100%; margin-bottom:10px; padding:10px;"><div style="display:flex; gap:10px;"><button onclick="document.getElementById('cash-drop-modal').classList.add('hidden')" style="flex:1; padding:15px;">Cancel</button><button onclick="submitCashDrop()" style="flex:1; padding:15px; background:#16a085; color:white; border:none;">Save Drop</button></div></div></div>
     
-    <div id="shift-report-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <h2>📊 Shift Report</h2>
-            <div id="shift-customers">0 Customers</div>
-            <div id="shift-omset">Rp 0 Omset</div>
-            <div id="shift-net" style="color:green; font-weight:bold;">Rp 0 Drawer</div>
-            <div style="display:flex; gap:10px; margin-top:15px;">
-                <button onclick="document.getElementById('shift-report-modal').classList.add('hidden')" style="flex:1; padding:15px;">Close</button>
-                <button onclick="initiateLogoutSequence()" style="flex:1; padding:15px; background:#c0392b; color:white; border:none;">End Shift</button>
-            </div>
-        </div>
-    </div>
+    <div id="shift-report-modal" class="modal-overlay hidden"><div class="modal-content"><h2>📊 Shift Report</h2><div id="shift-customers">0 Customers</div><div id="shift-omset">Rp 0 Omset</div><div id="shift-net" style="color:green; font-weight:bold;">Rp 0 Drawer</div><div style="display:flex; gap:10px; margin-top:15px;"><button onclick="document.getElementById('shift-report-modal').classList.add('hidden')" style="flex:1; padding:15px;">Close</button><button onclick="initiateLogoutSequence()" style="flex:1; padding:15px; background:#c0392b; color:white; border:none;">End Shift</button></div></div></div>
     
     <div id="printable-area"></div>
-
     <script src="app.js"></script>
 </body>
 </html>
