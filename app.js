@@ -55,7 +55,7 @@ function switchWorkspace(type) {
     }
 }
 
-// SYNC ENGINE (Updated to handle Login Screen feedback)
+// SYNC ENGINE (With Error Diagnostics)
 async function syncMasterData() {
     if (!navigator.onLine) {
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Offline Mode";
@@ -98,9 +98,13 @@ async function syncMasterData() {
                 loadMenuUI(); renderActiveTickets();
             }
         } else {
-            throw new Error("Server error");
+            // Throw the exact error Google sent us back
+            throw new Error(result.message || "Unknown Google Script Error");
         }
     } catch (e) { 
+        // THIS WILL POP UP THE EXACT REASON IT IS FAILING
+        alert("CRASH REPORT: " + e.message);
+        
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Sync Failed"; 
         if(document.getElementById("login-network-text")) document.getElementById("login-network-text").innerText = "Sync Failed ❌";
         if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c";
