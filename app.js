@@ -184,6 +184,8 @@ function finalizeOrder(shouldPrint) {
         };
     });
 
+    // Inside finalizeOrder(shouldPrint) function, replace the bottom lines with this:
+
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     
     if (requiresProcessing) {
@@ -191,7 +193,10 @@ function finalizeOrder(shouldPrint) {
         document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
     }
 
-    if (shouldPrint) window.print(); 
+    if (shouldPrint) {
+        await buildPrintableReceipt(orderPayload.orderId, orderPayload, deposit, remaining, payMethod);
+        window.print(); 
+    }
     
     clearCart(); closeReview(); renderProductGrid(); runBackgroundSync();
 }
@@ -381,3 +386,62 @@ async function runBackgroundSync() {
 }
 
 window.onload = async () => { await initDB(); window.setInterval(runBackgroundSync, 15000); };
+
+
+// ---------------------------------------------------------
+// DYNAMIC SETTINGS & RECEIPT PRINTING
+// ---------------------------------------------------------
+async function getDynamicSettings() {
+    return new Promise(res => {
+        let req = db.transaction(["settings"], "readonly").objectStore("settings").getAll();
+        req.onsuccess = e => { let s = {}; e.target.result.forEach(row => s[row.key] = row.value); res(s); };
+    });
+}
+
+async function buildPrintableReceipt(orderId, order, deposit, remaining, payMethod) {
+    const settings = await getDynamicSettings();
+    const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; 
+    const h2 = settings["Header_2"] || ""; 
+    const h3 = settings["Header_3"] || ""; 
+    const f1 = settings["Footer_1"] || "TERIMA KASIH"; 
+    const f2 = settings["Footer_2"] || ""; 
+    const f3 = settings["Footer_3"] || ""; 
+    
+    const printArea = document.getElementById("printable-area"); 
+    const dateStr = new Date().toLocaleString('id-ID');
+    
+    let itemsHtml = "";
+    order.items.forEach(item => {
+        const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
+        const lineTotal = item.qty * item.originalPrice;
+        itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 2px;"><span>${qtyDisplay}x ${item.name}</span><span>${lineTotal.toLocaleString('id-ID')}</span></div>`;
+    });
+
+    printArea.innerHTML = `
+        <div style="text-align:center; margin-bottom:10px;">
+            <h2 style="margin:0;">${h1}</h2>
+            ${h2 ? `<div style="font-size:10px;">${h2}</div>` : ''}
+            ${h3 ? `<div style="font-size:10px;">${h3}</div>` : ''}
+            <div style="font-size:10px; margin-top:5px;">${dateStr}</div>
+        </div>
+        <div style="border-top:1px dashed #000; border-bottom:1px dashed #000; padding:5px 0; margin-bottom:5px; font-size: 11px;">
+            <div>Order: ${orderId}</div>
+            <div>Customer: ${order.customerName}</div>
+            <div>Cashier: ${currentCashier}</div>
+        </div>
+        ${itemsHtml}
+        <div style="border-top:1px dashed #000; margin-top:10px; padding-top:5px;">
+            <div style="display:flex; justify-content:space-between; font-size:11px;"><span>Subtotal:</span><span>Rp ${order.subtotal.toLocaleString('id-ID')}</span></div>
+            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:14px; margin-top:5px; border-bottom: 1px solid #000; padding-bottom: 5px;"><span>TOTAL:</span><span>Rp ${order.grandTotal.toLocaleString('id-ID')}</span></div>
+        </div>
+        <div style="margin-top:5px; font-size:11px;">
+            <div style="display:flex; justify-content:space-between;"><span>Paid (${payMethod}):</span><span>Rp ${deposit.toLocaleString('id-ID')}</span></div>
+            ${remaining > 0 ? 
+                `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>SISA TAGIHAN:</span><span>Rp ${remaining.toLocaleString('id-ID')}</span></div>` : 
+                `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>STATUS:</span><span>LUNAS</span></div>`}
+        </div>
+        <div style="text-align:center; margin-top:15px; font-weight:bold; font-size: 12px;">${f1}</div>
+        ${f2 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f2}</div>` : ''}
+        ${f3 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f3}</div>` : ''}
+    `;
+}
