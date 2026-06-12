@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 2;
+const DB_VERSION = 2; // <-- Bumped to 2 to force the browser to build missing tables!
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -14,18 +14,18 @@ function initDB() {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
         request.onupgradeneeded = (event) => {
             db = event.target.result;
-            db.createObjectStore("staff", { keyPath: "pin" });
-            db.createObjectStore("menu", { keyPath: "itemId" });
-            db.createObjectStore("settings", { keyPath: "key" });
-            db.createObjectStore("orders", { keyPath: "orderId" });
-            db.createObjectStore("active_shifts", { keyPath: "pin" }); 
-            db.createObjectStore("cash_drops", { keyPath: "dropId" }); 
-            db.createObjectStore("shift_reports", { keyPath: "shiftId" }); 
+            // Added safety checks so it safely builds exactly what is missing
+            if (!db.objectStoreNames.contains("staff")) db.createObjectStore("staff", { keyPath: "pin" });
+            if (!db.objectStoreNames.contains("menu")) db.createObjectStore("menu", { keyPath: "itemId" });
+            if (!db.objectStoreNames.contains("settings")) db.createObjectStore("settings", { keyPath: "key" });
+            if (!db.objectStoreNames.contains("orders")) db.createObjectStore("orders", { keyPath: "orderId" });
+            if (!db.objectStoreNames.contains("active_shifts")) db.createObjectStore("active_shifts", { keyPath: "pin" }); 
+            if (!db.objectStoreNames.contains("cash_drops")) db.createObjectStore("cash_drops", { keyPath: "dropId" }); 
+            if (!db.objectStoreNames.contains("shift_reports")) db.createObjectStore("shift_reports", { keyPath: "shiftId" }); 
         };
         request.onsuccess = (e) => { db = e.target.result; resolve(db); };
     });
 }
-
 function attemptLogin() {
     const pin = document.getElementById("cashier-pin").value;
     db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = (e) => {
