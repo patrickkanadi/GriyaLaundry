@@ -462,4 +462,8 @@ async function runBackgroundSync() {
     }
 }
 
-window.onload = async () => { await initDB(); window.setInterval(runBackgroundSync, 15000); };
+window.onload = async () => { 
+    await initDB(); 
+    await syncMasterData(); // <-- I accidentally forgot this line earlier!
+    window.setInterval(runBackgroundSync, 15000); 
+};
