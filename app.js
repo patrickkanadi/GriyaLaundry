@@ -1,12 +1,13 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 2; // <-- Bumped to 2 to force the browser to build missing tables!
+const DB_VERSION = 3; // Bumped to 3 to add members and expenses tables
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
 let globalMenuData = []; let currentCategory = ""; let activeLaundryTickets = [];
 let currentCart = []; let activeNumpadItem = null; let numpadValue = "0";
 let activeSettlementTicket = null; window.masterDrawerBalance = 0; let isLoggingOut = false;
+let currentVoidTarget = { type: null, id: null };
 
 // INIT DB & LOGIN
 function initDB() {
@@ -14,7 +15,6 @@ function initDB() {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
         request.onupgradeneeded = (event) => {
             db = event.target.result;
-            // Added safety checks so it safely builds exactly what is missing
             if (!db.objectStoreNames.contains("staff")) db.createObjectStore("staff", { keyPath: "pin" });
             if (!db.objectStoreNames.contains("menu")) db.createObjectStore("menu", { keyPath: "itemId" });
             if (!db.objectStoreNames.contains("settings")) db.createObjectStore("settings", { keyPath: "key" });
@@ -22,10 +22,17 @@ function initDB() {
             if (!db.objectStoreNames.contains("active_shifts")) db.createObjectStore("active_shifts", { keyPath: "pin" }); 
             if (!db.objectStoreNames.contains("cash_drops")) db.createObjectStore("cash_drops", { keyPath: "dropId" }); 
             if (!db.objectStoreNames.contains("shift_reports")) db.createObjectStore("shift_reports", { keyPath: "shiftId" }); 
+            // New Tables
+            if (!db.objectStoreNames.contains("expenses")) db.createObjectStore("expenses", { keyPath: "expenseId" });
+            if (!db.objectStoreNames.contains("members")) db.createObjectStore("members", { keyPath: "phone" });
+            if (!db.objectStoreNames.contains("unsynced_members")) db.createObjectStore("unsynced_members", { keyPath: "phone" });
+            if (!db.objectStoreNames.contains("expense_categories")) db.createObjectStore("expense_categories", { keyPath: "name" });
+            if (!db.objectStoreNames.contains("void_requests")) db.createObjectStore("void_requests", { keyPath: "id" });
         };
         request.onsuccess = (e) => { db = e.target.result; resolve(db); };
     });
 }
+
 function attemptLogin() {
     const pin = document.getElementById("cashier-pin").value;
     db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = (e) => {
@@ -55,7 +62,7 @@ function switchWorkspace(type) {
     }
 }
 
-// SYNC ENGINE (With Error Diagnostics)
+// SYNC ENGINE
 async function syncMasterData() {
     if (!navigator.onLine) {
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Offline Mode";
@@ -76,14 +83,19 @@ async function syncMasterData() {
         if (result.status === "Success") {
             window.masterDrawerBalance = result.masterDrawerBalance || 0; 
             
-            const tx = db.transaction(["staff", "menu", "settings"], "readwrite");
+            const tx = db.transaction(["staff", "menu", "settings", "members", "expense_categories"], "readwrite");
             
             const staffStore = tx.objectStore("staff"); staffStore.clear(); result.data.staff.forEach(s => staffStore.add(s));
             const menuStore = tx.objectStore("menu"); menuStore.clear(); result.data.menu.forEach(m => menuStore.add(m));
+            const memStore = tx.objectStore("members"); memStore.clear(); result.data.members.forEach(m => memStore.add(m));
+            const expCatStore = tx.objectStore("expense_categories"); expCatStore.clear(); 
+            if(result.data.expenseCategories) result.data.expenseCategories.forEach(c => expCatStore.add({name: c}));
             
             const settingsStore = tx.objectStore("settings"); settingsStore.clear(); 
             for (const [key, value] of Object.entries(result.data.settings)) { settingsStore.add({ key: key, value: value }); }
             
+            if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
+
             globalMenuData = result.data.menu;
             activeLaundryTickets = result.data.activeLaundryOrders || [];
             
@@ -95,21 +107,42 @@ async function syncMasterData() {
             if(document.getElementById("login-network-dot")) document.getElementById("login-network-dot").style.backgroundColor = "#2ecc71";
             
             if (!document.getElementById("pos-screen").classList.contains("hidden")) {
-                loadMenuUI(); renderActiveTickets();
+                loadMenuUI(); renderActiveTickets(); populateMemberDatalist();
             }
         } else {
-            // Throw the exact error Google sent us back
-            throw new Error(result.message || "Unknown Google Script Error");
+            throw new Error(result.message || "Server error");
         }
     } catch (e) { 
-        // THIS WILL POP UP THE EXACT REASON IT IS FAILING
         alert("CRASH REPORT: " + e.message);
-        
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Sync Failed"; 
         if(document.getElementById("login-network-text")) document.getElementById("login-network-text").innerText = "Sync Failed ❌";
         if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c";
         if(document.getElementById("login-network-dot")) document.getElementById("login-network-dot").style.backgroundColor = "#e74c3c";
     }
+}
+
+// AUTO-COMPLETE MEMBERS
+function populateMemberDatalist() {
+    const list = document.getElementById("member-list"); list.innerHTML = "";
+    db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (e) => {
+        e.target.result.forEach(member => { const opt = document.createElement("option"); opt.value = member.phone; opt.innerText = member.name; list.appendChild(opt); });
+    };
+}
+
+document.getElementById("cust-phone").addEventListener("input", (e) => {
+    const phone = e.target.value.trim();
+    if(phone.length > 4) {
+        db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (res) => {
+            if(res.target.result) document.getElementById("cust-name").value = res.target.result.name;
+        };
+    }
+});
+
+function saveMemberToDB(phone, name) {
+    if(!phone) return;
+    const memberData = { phone: phone, name: name };
+    db.transaction(["members"], "readwrite").objectStore("members").put(memberData);
+    db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(memberData);
 }
 
 // MENU & NUMPAD LOGIC
@@ -143,11 +176,7 @@ function numpadPress(val) {
     else { numpadValue = numpadValue === "0" ? String(val) : numpadValue + val; }
     document.getElementById("numpad-display").innerText = numpadValue;
 }
-function confirmNumpad() {
-    let qty = parseFloat(numpadValue);
-    if (qty > 0) addToCart(activeNumpadItem, qty);
-    closeNumpad();
-}
+function confirmNumpad() { let qty = parseFloat(numpadValue); if (qty > 0) addToCart(activeNumpadItem, qty); closeNumpad(); }
 
 // CART LOGIC
 function addToCart(item, qty) {
@@ -191,6 +220,10 @@ async function finalizeOrder(shouldPrint) {
     const payMethod = document.querySelector('input[name="pay-method"]:checked').value;
     const remaining = window.cartGrandTotal - deposit;
     
+    const custPhone = document.getElementById("cust-phone").value.trim();
+    const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
+    if(custPhone) saveMemberToDB(custPhone, custName);
+
     const requiresProcessing = currentCart.some(i => i.workflow === "TICKET");
     let status = "Completed";
     if (requiresProcessing) status = "Processing"; 
@@ -198,7 +231,7 @@ async function finalizeOrder(shouldPrint) {
 
     const orderPayload = {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
-        customerName: document.getElementById("cust-name").value || "Walk-in", customerPhone: document.getElementById("cust-phone").value || "-",
+        customerName: custName, customerPhone: custPhone || "-",
         orderStatus: status, items: currentCart, subtotal: window.cartGrandTotal, discounts: 0, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: payMethod === 'Cash' ? deposit : 0, qrisAmount: payMethod === 'QRIS' ? deposit : 0,
         syncStatus: "Pending"
@@ -243,15 +276,9 @@ async function getDynamicSettings() {
 
 async function buildPrintableReceipt(orderId, order, deposit, remaining, payMethod) {
     const settings = await getDynamicSettings();
-    const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; 
-    const h2 = settings["Header_2"] || ""; 
-    const h3 = settings["Header_3"] || ""; 
-    const f1 = settings["Footer_1"] || "TERIMA KASIH"; 
-    const f2 = settings["Footer_2"] || ""; 
-    const f3 = settings["Footer_3"] || ""; 
-    
-    const printArea = document.getElementById("printable-area"); 
-    const dateStr = new Date().toLocaleString('id-ID');
+    const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; const h2 = settings["Header_2"] || ""; const h3 = settings["Header_3"] || ""; 
+    const f1 = settings["Footer_1"] || "TERIMA KASIH"; const f2 = settings["Footer_2"] || ""; const f3 = settings["Footer_3"] || ""; 
+    const printArea = document.getElementById("printable-area"); const dateStr = new Date().toLocaleString('id-ID');
     
     let itemsHtml = "";
     order.items.forEach(item => {
@@ -261,17 +288,8 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
     });
 
     printArea.innerHTML = `
-        <div style="text-align:center; margin-bottom:10px;">
-            <h2 style="margin:0;">${h1}</h2>
-            ${h2 ? `<div style="font-size:10px;">${h2}</div>` : ''}
-            ${h3 ? `<div style="font-size:10px;">${h3}</div>` : ''}
-            <div style="font-size:10px; margin-top:5px;">${dateStr}</div>
-        </div>
-        <div style="border-top:1px dashed #000; border-bottom:1px dashed #000; padding:5px 0; margin-bottom:5px; font-size: 11px;">
-            <div>Order: ${orderId}</div>
-            <div>Customer: ${order.customerName}</div>
-            <div>Cashier: ${currentCashier}</div>
-        </div>
+        <div style="text-align:center; margin-bottom:10px;"><h2 style="margin:0;">${h1}</h2>${h2 ? `<div style="font-size:10px;">${h2}</div>` : ''}${h3 ? `<div style="font-size:10px;">${h3}</div>` : ''}<div style="font-size:10px; margin-top:5px;">${dateStr}</div></div>
+        <div style="border-top:1px dashed #000; border-bottom:1px dashed #000; padding:5px 0; margin-bottom:5px; font-size: 11px;"><div>Order: ${orderId}</div><div>Customer: ${order.customerName}</div><div>Cashier: ${currentCashier}</div></div>
         ${itemsHtml}
         <div style="border-top:1px dashed #000; margin-top:10px; padding-top:5px;">
             <div style="display:flex; justify-content:space-between; font-size:11px;"><span>Subtotal:</span><span>Rp ${order.subtotal.toLocaleString('id-ID')}</span></div>
@@ -279,38 +297,29 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
         </div>
         <div style="margin-top:5px; font-size:11px;">
             <div style="display:flex; justify-content:space-between;"><span>Paid (${payMethod}):</span><span>Rp ${deposit.toLocaleString('id-ID')}</span></div>
-            ${remaining > 0 ? 
-                `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>SISA TAGIHAN:</span><span>Rp ${remaining.toLocaleString('id-ID')}</span></div>` : 
-                `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>STATUS:</span><span>LUNAS</span></div>`}
+            ${remaining > 0 ? `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>SISA TAGIHAN:</span><span>Rp ${remaining.toLocaleString('id-ID')}</span></div>` : `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>STATUS:</span><span>LUNAS</span></div>`}
         </div>
-        <div style="text-align:center; margin-top:15px; font-weight:bold; font-size: 12px;">${f1}</div>
-        ${f2 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f2}</div>` : ''}
-        ${f3 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f3}</div>` : ''}
+        <div style="text-align:center; margin-top:15px; font-weight:bold; font-size: 12px;">${f1}</div>${f2 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f2}</div>` : ''}${f3 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f3}</div>` : ''}
     `;
 }
 
 // KANBAN / ACTIVE TICKETS LOGIC
 function renderActiveTickets() {
     const grid = document.getElementById("ticket-grid-container"); grid.innerHTML = "";
-    activeLaundryTickets.forEach((ticket, index) => {
+    activeLaundryTickets.forEach((ticket) => {
         const isReady = ticket.orderStatus === "Ready for Pickup";
         const totalPaid = (ticket.cashAmount || 0) + (ticket.qrisAmount || 0);
         const remaining = ticket.grandTotal - totalPaid;
 
         let receiptText = ticket.readableReceipt || "";
-        if (!receiptText && ticket.items) {
-            receiptText = ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n');
-        }
+        if (!receiptText && ticket.items) receiptText = ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n');
 
         grid.innerHTML += `
             <div class="ticket-card ${isReady ? 'ready' : ''}">
                 <div class="ticket-header"><span>${ticket.customerName}</span> <span style="color:#7f8c8d; font-size:12px;">${ticket.orderId}</span></div>
                 <div style="font-size:14px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>
-                <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:10px; border-top:1px dashed #ddd; padding-top:5px;">
-                    <span>Remaining Due:</span> <strong style="color:#e74c3c;">Rp ${remaining.toLocaleString('id-ID')}</strong>
-                </div>
-                ${!isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="markTicketReady('${ticket.orderId}')">Mark Ready</button>` 
-                           : `<button class="ticket-btn" style="background:#2ecc71;" onclick="openSettlement('${ticket.orderId}', ${remaining})">Pick Up & Settle</button>`}
+                <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:10px; border-top:1px dashed #ddd; padding-top:5px;"><span>Remaining Due:</span> <strong style="color:#e74c3c;">Rp ${remaining.toLocaleString('id-ID')}</strong></div>
+                ${!isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="markTicketReady('${ticket.orderId}')">Mark Ready</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="openSettlement('${ticket.orderId}', ${remaining})">Pick Up & Settle</button>`}
             </div>
         `;
     });
@@ -319,8 +328,7 @@ function renderActiveTickets() {
 function markTicketReady(orderId) {
     const ticket = activeLaundryTickets.find(t => t.orderId === orderId);
     if (ticket) {
-        ticket.orderStatus = "Ready for Pickup";
-        ticket.syncStatus = "Pending";
+        ticket.orderStatus = "Ready for Pickup"; ticket.syncStatus = "Pending";
         db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
         renderActiveTickets(); runBackgroundSync();
     }
@@ -338,30 +346,181 @@ function confirmSettlement() {
     const totalPaidBefore = (activeSettlementTicket.cashAmount || 0) + (activeSettlementTicket.qrisAmount || 0);
     const remaining = activeSettlementTicket.grandTotal - totalPaidBefore;
 
-    if (method === 'Cash') activeSettlementTicket.cashAmount += remaining;
-    else activeSettlementTicket.qrisAmount += remaining;
-    
-    activeSettlementTicket.orderStatus = "Completed";
-    activeSettlementTicket.syncStatus = "Pending";
-    
+    if (method === 'Cash') activeSettlementTicket.cashAmount += remaining; else activeSettlementTicket.qrisAmount += remaining;
+    activeSettlementTicket.orderStatus = "Completed"; activeSettlementTicket.syncStatus = "Pending";
     db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
     
     activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
     document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
-    
-    document.getElementById("settlement-modal").classList.add("hidden");
-    renderActiveTickets(); runBackgroundSync();
+    document.getElementById("settlement-modal").classList.add("hidden"); renderActiveTickets(); runBackgroundSync();
 }
 
+// ---------------------------------------------------------
+// EXPENSES
+// ---------------------------------------------------------
+function openExpenseModal() {
+    document.getElementById("expense-modal").classList.remove("hidden");
+    const list = document.getElementById("expense-category-list"); list.innerHTML = "";
+    db.transaction(["expense_categories"], "readonly").objectStore("expense_categories").getAll().onsuccess = (e) => { e.target.result.forEach(cat => { const opt = document.createElement("option"); opt.value = cat.name; list.appendChild(opt); }); };
+}
+function closeExpenseModal() { document.getElementById("expense-modal").classList.add("hidden"); }
+function saveExpense() {
+    const amount = Number(document.getElementById("exp-amount").value);
+    const category = document.getElementById("exp-category").value.trim();
+    if (amount <= 0 || !category) return alert("Please enter a valid amount and category.");
+    db.transaction(["expense_categories"], "readwrite").objectStore("expense_categories").put({ name: category });
+
+    const payload = { expenseId: "EXP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, category: category, description: document.getElementById("exp-desc").value || "-", amount: amount, status: "Active", syncStatus: "Pending" };
+    db.transaction(["expenses"], "readwrite").objectStore("expenses").add(payload);
+    closeExpenseModal(); document.getElementById("exp-amount").value = ""; document.getElementById("exp-category").value = ""; document.getElementById("exp-desc").value = ""; alert("Expense Recorded!"); runBackgroundSync();
+}
+
+// ---------------------------------------------------------
+// HISTORY & VOIDS
+// ---------------------------------------------------------
+function openHistoryModal() { document.getElementById("history-modal").classList.remove("hidden"); renderHistoryList('orders'); }
+function closeHistoryModal() { document.getElementById("history-modal").classList.add("hidden"); }
+
+function renderHistoryList(type) {
+    const container = document.getElementById("history-container"); container.innerHTML = "";
+    if (type === 'orders') {
+        db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
+            const shiftOrders = e.target.result.filter(o => o.shiftId === currentShiftId).reverse(); 
+            if(shiftOrders.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">No orders logged inside the current shift.</div>`;
+            shiftOrders.forEach(o => {
+                let badge = o.orderStatus === "Voided" ? `<span class="status-badge status-voided">Voided</span>` : o.orderStatus === "Void Pending" ? `<span class="status-badge status-pending">Waiting for Admin</span>` : `<span class="status-badge status-paid">${o.orderStatus}</span>`; 
+                let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Void</button>` : '';
+                container.innerHTML += `<div class="history-row"><div><strong>${o.customerName}</strong><br><small style="color:#7f8c8d;">${new Date(o.timestamp).toLocaleTimeString()} | Rp ${o.grandTotal.toLocaleString('id-ID')}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
+            });
+        };
+    } else if (type === 'expenses') {
+        db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = (e) => {
+            const shiftExpenses = e.target.result.filter(exp => exp.shiftId === currentShiftId).reverse();
+            if(shiftExpenses.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">No expenses logged.</div>`;
+            shiftExpenses.forEach(exp => {
+                let badge = exp.status === "Voided" ? `<span class="status-badge status-voided">Voided</span>` : exp.status === "Void Pending" ? `<span class="status-badge status-pending">Waiting for Admin</span>` : `<span class="status-badge status-paid">Active</span>`;
+                let btn = (exp.status !== "Voided" && exp.status !== "Void Pending") ? `<button onclick="requestVoid('expenses', '${exp.expenseId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Void</button>` : '';
+                container.innerHTML += `<div class="history-row"><div><strong>${exp.category}</strong><br><small style="color:#7f8c8d;">${new Date(exp.timestamp).toLocaleTimeString()} | Rp ${exp.amount.toLocaleString('id-ID')}</small><br><small>${exp.description}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
+            });
+        };
+    }
+}
+
+function requestVoid(type, id) { currentVoidTarget = { type, id }; document.getElementById("admin-void-pin").value = ""; document.getElementById("admin-void-modal").classList.remove("hidden"); }
+function closeAdminVoidModal() { document.getElementById("admin-void-modal").classList.add("hidden"); }
+
+function submitRemoteVoid() {
+    const type = currentVoidTarget.type; const id = currentVoidTarget.id; const storeName = type === 'orders' ? "orders" : "expenses";
+    db.transaction([storeName], "readwrite").objectStore(storeName).get(id).onsuccess = (e) => {
+        const item = e.target.result;
+        if (type === 'orders') item.orderStatus = "Void Pending"; else item.status = "Void Pending";
+        db.transaction([storeName], "readwrite").objectStore(storeName).put(item); renderHistoryList(type); 
+    };
+    db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add({ id: id, type: type, status: "Void Pending", authName: "Waiting" });
+    closeAdminVoidModal(); runBackgroundSync();
+}
+
+async function confirmAdminVoid() {
+    const pin = document.getElementById("admin-void-pin").value; if (!pin) return alert("Please enter a PIN.");
+    const settings = await getDynamicSettings(); const masterPin = String(settings["Master_PIN"]); const isMaster = (pin === masterPin);
+    
+    db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = (e) => {
+        const staff = e.target.result; const isAdmin = (staff && staff.role.toLowerCase() === 'admin');
+
+        if (isMaster || isAdmin) {
+            const authName = isMaster ? "Master Admin" : staff.name;
+            const type = currentVoidTarget.type; const id = currentVoidTarget.id; const storeName = type === 'orders' ? "orders" : "expenses";
+            
+            db.transaction([storeName], "readwrite").objectStore(storeName).get(id).onsuccess = (ev) => {
+                const item = ev.target.result;
+                if (type === 'orders') { 
+                    item.orderStatus = "Voided"; item.voidAuth = authName; 
+                    if(item.items) item.items.forEach(i => i.qty = Number(i.qty)); // Fix for aftermath execution
+                    applyVoidAftermath(item); 
+                } else { item.status = "Voided"; item.voidAuth = authName; }
+                item.syncStatus = "Pending"; db.transaction([storeName], "readwrite").objectStore(storeName).put(item); renderHistoryList(type);
+            };
+            db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add({ id: id, type: type, status: "Voided", authName: authName });
+            closeAdminVoidModal(); runBackgroundSync(); alert("Transaction instantly voided by: " + authName);
+        } else { alert("Invalid PIN or no Admin privileges."); }
+    };
+}
+
+function processVoidApprovals(authStatuses) {
+    const tx = db.transaction(["orders", "expenses"], "readwrite");
+    const ordStore = tx.objectStore("orders"); const expStore = tx.objectStore("expenses");
+    let uiNeedsRefresh = false;
+
+    ordStore.getAll().onsuccess = (e) => {
+        e.target.result.forEach(order => {
+            const remote = authStatuses.orders[order.orderId];
+            if (remote) {
+                if (remote.status === "Voided" && order.orderStatus !== "Voided") {
+                    order.orderStatus = "Voided"; ordStore.put(order); uiNeedsRefresh = true; applyVoidAftermath(order); 
+                } else if (remote.status !== "Void Pending" && remote.status !== "Voided" && order.orderStatus === "Void Pending") {
+                    order.orderStatus = remote.status; ordStore.put(order); uiNeedsRefresh = true;
+                }
+            }
+        });
+        if (uiNeedsRefresh && !document.getElementById("history-modal").classList.contains("hidden")) renderHistoryList('orders');
+    };
+
+    expStore.getAll().onsuccess = (e) => {
+        e.target.result.forEach(exp => {
+            const remote = authStatuses.expenses[exp.expenseId];
+            if (remote) {
+                if (remote.status === "Voided" && exp.status !== "Voided") {
+                    exp.status = "Voided"; expStore.put(exp); uiNeedsRefresh = true;
+                } else if (remote.status !== "Void Pending" && remote.status !== "Voided" && exp.status === "Void Pending") {
+                    exp.status = remote.status; expStore.put(exp); uiNeedsRefresh = true;
+                }
+            }
+        });
+        if (uiNeedsRefresh && !document.getElementById("history-modal").classList.contains("hidden")) renderHistoryList('expenses');
+    };
+}
+
+function applyVoidAftermath(order) {
+    let itemsToReturn = [];
+    if(order.items) order.items.forEach(i => itemsToReturn.push({ name: i.name, qty: i.qty }));
+    
+    const tx = db.transaction(["menu", "members"], "readwrite");
+    const menuStore = tx.objectStore("menu"); const memberStore = tx.objectStore("members");
+
+    itemsToReturn.forEach(item => {
+        menuStore.openCursor().onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) {
+                if (cursor.value.name === item.name && cursor.value.trackStock) { const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); }
+                cursor.continue();
+            }
+        };
+    });
+    tx.oncomplete = () => { renderProductGrid(); };
+
+    if (order.customerPhone && order.customerPhone !== "Walk-in" && order.customerPhone !== "-") {
+        memberStore.get(order.customerPhone).onsuccess = (e) => {
+            const mem = e.target.result;
+            if (mem) { mem.spent = Math.max(0, (mem.spent || 0) - order.grandTotal); memberStore.put(mem); }
+        };
+    }
+
+    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn } }) });
+}
+
+// ---------------------------------------------------------
 // UTILITIES: DRAWER, SHIFT REPORT & SYNC
+// ---------------------------------------------------------
 function calculateLiveDrawer(callback) {
     let liveDrawer = window.masterDrawerBalance || 0; 
-    let tx = db.transaction(["orders", "cash_drops"], "readonly");
+    let tx = db.transaction(["orders", "cash_drops", "expenses"], "readonly");
     let ordersReq = tx.objectStore("orders").getAll();
     let dropReq = tx.objectStore("cash_drops").getAll();
+    let expReq = tx.objectStore("expenses").getAll();
     tx.oncomplete = () => {
-        ordersReq.result.forEach(o => { if (o.syncStatus === "Pending" && o.orderStatus !== "Voided") liveDrawer += (o.cashAmount || 0); });
+        ordersReq.result.forEach(o => { if (o.syncStatus === "Pending" && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") liveDrawer += (o.cashAmount || 0); });
         dropReq.result.forEach(d => { if (d.syncStatus === "Pending") liveDrawer -= (d.toAdmin + d.toBank); });
+        expReq.result.forEach(e => { if (e.syncStatus === "Pending" && e.status === "Active") liveDrawer -= (e.amount || 0); });
         callback(liveDrawer);
     };
 }
@@ -396,7 +555,7 @@ function submitCashDrop() {
 function openShiftReport() {
     let totalCustomers = 0; let totalOmset = 0; let totalCash = 0; let totalQris = 0; let foodSummary = {};
     db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
-        const validOrders = e.target.result.filter(o => o.shiftId === currentShiftId);
+        const validOrders = e.target.result.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
         validOrders.forEach(o => {
             totalCustomers++; totalOmset += o.grandTotal;
             totalCash += (o.cashAmount || 0); totalQris += (o.qrisAmount || 0);
@@ -438,7 +597,8 @@ function lockScreen() { window.location.reload(); }
 
 async function runBackgroundSync() {
     if (!navigator.onLine) return;
-    let tx = db.transaction(["orders", "cash_drops", "shift_reports"], "readonly");
+    let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members"], "readonly");
+    
     let orders = await new Promise(res => tx.objectStore("orders").getAll().onsuccess = e => res(e.target.result));
     for (const order of orders) {
         if (order.syncStatus === "Pending") {
@@ -448,22 +608,40 @@ async function runBackgroundSync() {
             } catch(e) {}
         }
     }
+    
     let drops = await new Promise(res => tx.objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
     for (const drop of drops) {
         if (drop.syncStatus === "Pending") {
             try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncCashDrop", data: drop }) }); if ((await r.json()).status === "Success") { drop.syncStatus = "Synced"; db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").put(drop); } } catch(e) {}
         }
     }
+    
     let reports = await new Promise(res => tx.objectStore("shift_reports").getAll().onsuccess = e => res(e.target.result));
     for (const report of reports) {
         if (report.syncStatus === "Pending") {
             try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncShiftReport", data: report }) }); if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId); } } catch(e) {}
         }
     }
+
+    let expenses = await new Promise(res => tx.objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
+    for (const exp of expenses) {
+        if (exp.syncStatus === "Pending") {
+            try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncExpense", data: exp }) }); if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); } } catch(e) {}
+        }
+    }
+
+    let voids = await new Promise(res => tx.objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
+    for (const req of voids) {
+        try {
+            const actionType = req.type === 'orders' ? "requestOrderVoid" : "requestExpenseVoid"; const payload = req.type === 'orders' ? { orderId: req.id, status: req.status, authName: req.authName } : { expenseId: req.id, status: req.status, authName: req.authName };
+            let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: actionType, ...payload }) }); if ((await r.json()).status === "Success") { db.transaction(["void_requests"], "readwrite").objectStore("void_requests").delete(req.id); }
+        } catch(e) {}
+    }
+
+    let members = await new Promise(res => tx.objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
+    for (const mem of members) {
+        try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncMember", data: mem }) }); if ((await r.json()).status === "Success") { db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone); } } catch(e) {}
+    }
 }
 
-window.onload = async () => { 
-    await initDB(); 
-    await syncMasterData(); // <-- I accidentally forgot this line earlier!
-    window.setInterval(runBackgroundSync, 15000); 
-};
+window.onload = async () => { await initDB(); await syncMasterData(); window.setInterval(runBackgroundSync, 15000); };
