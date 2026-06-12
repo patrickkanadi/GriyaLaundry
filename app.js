@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
