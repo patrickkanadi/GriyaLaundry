@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 16; 
+const DB_VERSION = 17; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -313,10 +313,7 @@ window.calculateRemaining = function() {
 
 function closeReview() { document.getElementById("review-modal").classList.add("hidden"); }
 
-// HELPER: Format No WA ke format internasional 628...
-function formatWAPhone(p) { let n = normalizePhone(p); if (n.startsWith('0')) n = '62' + n.substring(1); return n; }
-
-async function finalizeOrder(shouldPrint, shouldWA) {
+async function finalizeOrder(shouldPrint) {
     const cash = Number(document.getElementById("pay-cash").value) || 0; const qris = Number(document.getElementById("pay-qris").value) || 0;
     const transfer = Number(document.getElementById("pay-transfer").value) || 0; const hotelPiutang = Number(document.getElementById("pay-hotel-piutang").value) || 0;
     const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
@@ -339,7 +336,6 @@ async function finalizeOrder(shouldPrint, shouldWA) {
     if (totalPiutang > 0 && !requiresProcessing) return alert("⚠️ PEMBAYARAN DITOLAK:\nPiutang HANYA berlaku untuk Tiket Drop-off.");
     if (totalPiutang > 0 && !hasHotelItem) return alert("⚠️ PEMBAYARAN DITOLAK:\nPiutang HANYA berlaku untuk item dalam kategori Hotel.");
     if (totalPiutang > 0 && (!custPhone || custPhone === "-")) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda WAJIB memasukkan nomor WhatsApp pelanggan untuk mencatat Piutang.");
-    if (shouldWA && (!custPhoneRaw || custPhoneRaw.length < 9)) return alert("⚠️ WA DITOLAK:\nNomor WA tidak valid.");
 
     let payMethods = [];
     if(cash > 0) payMethods.push("Tunai"); if(qris > 0) payMethods.push("QRIS"); if(transfer > 0) payMethods.push("Trf.Bank"); if(hotelPiutang > 0) payMethods.push("Piutang(B2B)"); if(tamuPiutang > 0) payMethods.push("Piutang(Tamu)"); if(free > 0) payMethods.push("Gratis");
@@ -395,15 +391,6 @@ async function finalizeOrder(shouldPrint, shouldWA) {
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     if (requiresProcessing) { activeLaundryTickets.unshift(orderPayload); document.getElementById("ticket-count").innerText = activeLaundryTickets.length; }
     
-    // WHATSAPP SENDING LOGIC (NEW ORDER)
-    if (shouldWA && custPhone !== "-") {
-        let targetWa = formatWAPhone(custPhone);
-        let msg = `Halo Bpk/Ibu ${custName},\n\nTerima kasih telah mempercayakan cucian di *Griya Laundry*.\n\nNomor Nota: ${orderPayload.orderId}\nTotal Tagihan: Rp ${window.cartGrandTotal.toLocaleString('id-ID')}\n`;
-        if (totalPiutang > 0) msg += `Sisa Piutang: Rp ${totalPiutang.toLocaleString('id-ID')}\n`;
-        msg += `\nPoin Koin Anda Saat Ini: ${newPoints}/10\nKoin Gratis Tersedia: ${newFree}`;
-        window.open(`https://wa.me/${targetWa}?text=${encodeURIComponent(msg)}`, '_blank');
-    }
-
     if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + free + totalPiutang), 0, payString, newPoints, newFree); window.print(); }
     closeReview(); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
@@ -444,21 +431,6 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
     `;
 }
 
-// WHATSAPP SENDING LOGIC (PICKUP)
-window.notifyWA = function(orderId) {
-    const ticket = activeLaundryTickets.find(t => t.orderId === orderId);
-    if (!ticket || !ticket.customerPhone || ticket.customerPhone === "-") return alert("Tidak ada nomor WhatsApp yang tercatat untuk pelanggan ini.");
-    
-    const totalPaid = (ticket.cashAmount||0) + (ticket.qrisAmount||0) + (ticket.transferAmount||0) + (ticket.freeAmount||0);
-    const remaining = ticket.grandTotal - totalPaid;
-    let targetWa = formatWAPhone(ticket.customerPhone);
-    let msg = `Halo Bpk/Ibu ${ticket.customerName},\n\nCucian Anda dengan nomor nota *${ticket.orderId}* sudah selesai dan siap diambil di Griya Laundry.\n`;
-    if (remaining > 0) msg += `\nSisa Tagihan: Rp ${remaining.toLocaleString('id-ID')}\n`;
-    msg += `\nTerima kasih!`;
-    
-    window.open(`https://wa.me/${targetWa}?text=${encodeURIComponent(msg)}`, '_blank');
-}
-
 function renderActiveTickets() {
     const grid = document.getElementById("ticket-grid-container"); grid.innerHTML = "";
     activeLaundryTickets.forEach((ticket) => {
@@ -473,11 +445,7 @@ function renderActiveTickets() {
         if (!isReady) {
             buttonsHtml = `<button class="ticket-btn" style="background:#f39c12;" onclick="markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>`;
         } else {
-            buttonsHtml = `
-            <div style="display:flex; gap:10px; margin-top:10px;">
-                <button class="ticket-btn" style="background:#25D366; flex:1; margin-top:0;" onclick="notifyWA('${ticket.orderId}')">🔔 WA</button>
-                <button class="ticket-btn" style="background:#2ecc71; flex:2; margin-top:0;" onclick="openSettlement('${ticket.orderId}', ${remaining})">Ambil & Bayar</button>
-            </div>`;
+            buttonsHtml = `<button class="ticket-btn" style="background:#2ecc71;" onclick="openSettlement('${ticket.orderId}', ${remaining})">Ambil Cucian & Bayar</button>`;
         }
 
         grid.innerHTML += `
@@ -559,7 +527,7 @@ function saveExpense() {
     if (amount <= 0 || !category) return alert("Harap masukkan jumlah dan kategori yang benar.");
     db.transaction(["expense_categories"], "readwrite").objectStore("expense_categories").put({ name: category });
 
-    const payload = { expenseId: "EXP-" + Date.now(), timestamp: new DatetoISOString(), cashier: currentCashier, shiftId: currentShiftId, category: category, description: document.getElementById("exp-desc").value || "-", amount: amount, status: "Active", syncStatus: "Pending" };
+    const payload = { expenseId: "EXP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, category: category, description: document.getElementById("exp-desc").value || "-", amount: amount, status: "Active", syncStatus: "Pending" };
     db.transaction(["expenses"], "readwrite").objectStore("expenses").add(payload);
     document.getElementById("expense-modal").classList.add("hidden"); document.getElementById("exp-amount").value = ""; document.getElementById("exp-category").value = ""; document.getElementById("exp-desc").value = ""; alert("Pengeluaran Berhasil Dicatat!"); runBackgroundSync();
 }
@@ -747,7 +715,9 @@ function openCashDrop(forLogout = false) {
 
 function submitCashDrop() {
     const pullAmount = Number(document.getElementById("drop-amount").value) || 0;
-    if (pullAmount <= 0) return alert("⚠️ ERROR: Harap masukkan nominal uang yang diambil dari laci.");
+    if (pullAmount < 0) return alert("⚠️ ERROR: Nominal uang tidak valid.");
+    if (pullAmount === 0 && !isLoggingOut) return alert("⚠️ ERROR: Harap masukkan nominal uang yang diambil dari laci.");
+    
     const destination = document.getElementById("drop-destination").value; const customNotes = document.getElementById("drop-notes").value || (isLoggingOut ? "Tutup Shift" : "Tarik Uang Tengah Shift");
     let adminAmt = 0; let bankAmt = 0; if (destination === "Bank") bankAmt = pullAmount; else adminAmt = pullAmount;
     const finalNotes = `[Ke ${destination}] ${customNotes}`;
