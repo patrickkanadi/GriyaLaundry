@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 13; 
+const DB_VERSION = 14; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -141,15 +141,26 @@ async function syncMasterData() {
     }
 }
 
+// ----------------------------------------------------
+// UPDATED AUTOCOMPLETE ENGINE (TOP SPENDERS SORTING)
+// ----------------------------------------------------
 function handleAutocomplete(e) {
     const val = e.target.value.toLowerCase().trim(); const resBox = document.getElementById("autocomplete-results");
     activeCustomerProfile = null; document.getElementById("promo-indicator").classList.add("hidden");
-    if (val.length < 1) { resBox.classList.add("hidden"); return; } 
 
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
-        const members = ev.target.result; const matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val)).slice(0, 10);
+        const members = ev.target.result; 
+        let matches = members;
+        
+        if (val.length > 0) {
+            matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
+        }
+        
+        matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
+        matches = matches.slice(0, 15);
+
         if (matches.length > 0) {
-            resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}', '${m.name.replace(/'/g, "\\'")}', ${m.points}, ${m.freeCoins})"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name}</div></div>`).join("");
+            resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}', '${m.name.replace(/'/g, "\\'")}', ${m.points || 0}, ${m.freeCoins || 0})"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name} <span style="color:#27ae60; font-weight:normal; font-size:12px;">(Total Belanja: Rp ${(m.spent || 0).toLocaleString('id-ID')})</span></div></div>`).join("");
             resBox.classList.remove("hidden");
         } else { resBox.classList.add("hidden"); }
     };
@@ -161,7 +172,11 @@ document.getElementById("cust-name").addEventListener("click", handleAutocomplet
 document.getElementById("cust-phone").addEventListener("focus", handleAutocomplete);
 document.getElementById("cust-name").addEventListener("focus", handleAutocomplete);
 
-document.addEventListener('click', (e) => { if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') document.getElementById('autocomplete-results').classList.add('hidden'); });
+document.addEventListener('click', (e) => { 
+    if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') {
+        document.getElementById('autocomplete-results').classList.add('hidden'); 
+    }
+});
 
 window.selectMember = function(phone, name, points, freeCoins) {
     document.getElementById("cust-phone").value = phone; document.getElementById("cust-name").value = name; document.getElementById("autocomplete-results").classList.add("hidden");
@@ -177,7 +192,7 @@ window.selectMember = function(phone, name, points, freeCoins) {
 function saveMemberToDB(phone, name) {
     if(!phone || phone === "-") return; 
     db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
-        let mem = e.target.result || { phone: phone, name: name, points: 0, freeCoins: 0 }; mem.name = name;
+        let mem = e.target.result || { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0 }; mem.name = name;
         db.transaction(["members"], "readwrite").objectStore("members").put(mem);
         db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(mem);
     };
@@ -250,7 +265,11 @@ function reviewOrder() {
     document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-transfer").value = 0;
     document.getElementById("pay-hotel-piutang").value = 0; document.getElementById("pay-tamu-piutang").value = 0; document.getElementById("pay-free").value = 0;
     
+    let internalCoinBox = document.getElementById("internal-coins");
+    if(internalCoinBox) internalCoinBox.value = 0;
+    
     window.cartGrandTotal = window.cartSubtotal;
+    document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
     
     applyPromo(); document.getElementById("review-modal").classList.remove("hidden");
 }
@@ -290,6 +309,9 @@ async function finalizeOrder(shouldPrint) {
     const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
     const redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
     
+    let internalCoinBox = document.getElementById("internal-coins");
+    const internalCoins = internalCoinBox ? (Number(internalCoinBox.value) || 0) : 0;
+    
     const totalPiutang = hotelPiutang + tamuPiutang;
     const totalAccounted = cash + qris + transfer + free + totalPiutang; 
     const remaining = window.cartGrandTotal - totalAccounted;
@@ -326,7 +348,6 @@ async function finalizeOrder(shouldPrint) {
         };
     }
 
-    // HITUNG ESTIMASI KOIN TIKET (BERDASARKAN MOQ CHUNK)
     let expectedCoinsTotal = currentCart.reduce((sum, item) => {
         let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1;
         let multiplier = Math.ceil(item.qty / divisor);
@@ -337,7 +358,7 @@ async function finalizeOrder(shouldPrint) {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone || "-", orderStatus: status, items: currentCart, subtotal: window.cartSubtotal, discounts: (redeemCount * activeCoinPrice), grandTotal: window.cartGrandTotal,
         paymentMethod: payString, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: coinsEarned, coinsRedeemed: redeemCount, expectedCoins: expectedCoinsTotal, syncStatus: "Pending" 
+        coinsEarned: coinsEarned, coinsRedeemed: redeemCount, expectedCoins: expectedCoinsTotal, internalCoinsUsed: internalCoins, syncStatus: "Pending" 
     };
 
     const txMenu = db.transaction(["menu"], "readwrite"); const storeMenu = txMenu.objectStore("menu");
@@ -347,6 +368,13 @@ async function finalizeOrder(shouldPrint) {
             if (menuItem && menuItem.trackStock) { menuItem.currentStock = Math.max(0, menuItem.currentStock - cartItem.qty); storeMenu.put(menuItem); }
         };
     });
+
+    if (internalCoins > 0) {
+        storeMenu.openCursor().onsuccess = (ev) => {
+            const cursor = ev.target.result;
+            if (cursor) { if (String(cursor.value.name).toLowerCase() === "koin_fisik") { const updated = cursor.value; updated.currentStock = Math.max(0, updated.currentStock - internalCoins); cursor.update(updated); } cursor.continue(); }
+        };
+    }
 
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     if (requiresProcessing) { activeLaundryTickets.unshift(orderPayload); document.getElementById("ticket-count").innerText = activeLaundryTickets.length; }
