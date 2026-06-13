@@ -33,7 +33,6 @@
         .input-group { flex: 1; display: flex; gap: 10px; }
         .input-group input { flex: 1; padding: 12px; font-size: 16px; border: 2px solid #bdc3c7; border-radius: 8px; }
         
-        /* UPDATED AUTOCOMPLETE STYLING (BIGGER TEXT) */
         .autocomplete-wrapper { position: relative; flex: 1; }
         #autocomplete-results { position: absolute; top: 100%; left: 15px; width: calc(100% - 30px); max-width: 500px; background: white; border: 2px solid #bdc3c7; border-top: none; border-radius: 0 0 8px 8px; max-height: 250px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .autocomplete-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
@@ -112,17 +111,10 @@
     <div id="login-screen">
         <div class="login-box">
             <h2 style="margin-top:0;">Griya Laundry POS</h2>
-            
             <div style="margin-bottom: 20px; font-size: 14px; color: #7f8c8d; display: flex; flex-direction: column; align-items: center; gap: 10px; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="dot-online" id="login-network-dot" style="background-color: #f39c12;"></span> 
-                    <strong id="login-network-text">Mengecek koneksi...</strong>
-                </div>
-                <button onclick="syncMasterData()" style="background: #3498db; color: white; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; width: 100%; font-weight: bold;">
-                    🔄 Sinkronisasi Paksa
-                </button>
+                <div style="display: flex; align-items: center; gap: 8px;"><span class="dot-online" id="login-network-dot" style="background-color: #f39c12;"></span> <strong id="login-network-text">Mengecek koneksi...</strong></div>
+                <button onclick="syncMasterData()" style="background: #3498db; color: white; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; width: 100%; font-weight: bold;">🔄 Sinkronisasi Paksa</button>
             </div>
-
             <p>Masukkan PIN Kasir</p>
             <input type="password" id="cashier-pin" placeholder="****" inputmode="numeric">
             <button onclick="attemptLogin()">Masuk / Buka Shift</button>
@@ -136,7 +128,7 @@
                 <span class="dot-online" id="network-dot"></span><span id="network-text" style="margin-right: 10px;">Memuat...</span>
                 <button class="btn-top hidden" id="btn-install" style="background:#2980b9; border-color:#2980b9;" onclick="installPWA()">📲 Install App</button>
                 <button class="btn-top" style="background:#34495e; border-color:#34495e;" onclick="manualPushSync()">🔄 Sinkron</button>
-                <button class="btn-top" style="background:#f1c40f; border-color:#f1c40f; color:#856404;" onclick="openCoinRestock()">🪙 Koin</button>
+                <button class="btn-top" style="background:#f1c40f; border-color:#f1c40f; color:#856404;" onclick="openCoinManagement()">🪙 Koin</button>
                 <button class="btn-top" style="background:#16a085; border-color:#16a085;" onclick="openCashDrop(false)">🏦 Laci Uang</button>
                 <button class="btn-top" style="background:#8e44ad; border-color:#8e44ad;" onclick="openHistoryModal()">📋 Riwayat</button>
                 <button class="btn-top" style="background:#e67e22; border-color:#e67e22;" onclick="openExpenseModal()">💸 Pengeluaran</button>
@@ -155,12 +147,12 @@
                 <div id="command-bar">
                     <div class="input-group">
                         <div class="autocomplete-wrapper" style="flex:1;">
-                            <input type="text" id="cust-phone" placeholder="Ketik WA atau Nama..." autocomplete="off" style="width:100%;">
+                            <input type="text" id="cust-phone" placeholder="Cari No WA atau Nama..." autocomplete="off" style="width:100%;">
                             <div id="autocomplete-results" class="hidden"></div>
                         </div>
                         <input type="text" id="cust-name" placeholder="Nama Pelanggan" autocomplete="off" style="flex:1;">
                     </div>
-                    <button onclick="unlockMenu(false)" style="background:#27ae60; color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:bold; cursor:pointer;">Mulai Order</button>
+                    <button onclick="unlockMenu(false)" style="background:#27ae60; color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:bold; cursor:pointer;">Buka Menu Kasir</button>
                     <button onclick="unlockMenu(true)" style="background:#95a5a6; color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:bold; cursor:pointer;">Tamu / Walk-in</button>
                 </div>
                 
@@ -170,7 +162,7 @@
                 <div id="glass-overlay">
                     <h1 style="color:#2c3e50; font-size:48px; margin:0;">🔒</h1>
                     <h2 style="color:#2c3e50;">Pelanggan Dahulu</h2>
-                    <p style="color:#7f8c8d; max-width:350px; margin:0 auto;">Ketik pelanggan di atas, atau klik Tamu / Walk-in untuk membuka menu kasir.</p>
+                    <p style="color:#7f8c8d; max-width:350px; margin:0 auto;">Ketik nomor WA atau Nama Pelanggan di atas, klik <strong>Buka Menu Kasir</strong>. Atau klik Tamu/Walk-in.</p>
                 </div>
             </div>
             
@@ -179,7 +171,7 @@
                 <div id="cart-items"></div>
                 <div id="checkout-panel">
                     <div class="grand-total"><span>Total Akhir:</span> <span id="cart-total">Rp 0</span></div>
-                    <button class="btn-pay" onclick="reviewOrder()">Cek & Bayar</button>
+                    <button class="btn-pay" onclick="reviewOrder()">Bayar Order (Checkout)</button>
                     <button class="btn-pay" style="background:#e74c3c; margin-top:10px;" onclick="clearCart()">🗑️ Batalkan Order</button>
                 </div>
             </div>
@@ -208,17 +200,27 @@
         </div>
     </div>
 
-    <div id="coin-restock-modal" class="modal-overlay hidden">
+    <div id="coin-management-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:400px; text-align:center;">
-            <h2 style="margin-top:0; color:#856404;">🪙 Daur Ulang Koin Fisik</h2>
-            <p style="color:#7f8c8d; font-size:14px; margin-bottom: 20px;">Hitung koin fisik dari mesin. Request akan dikirim ke Admin untuk dimasukkan kembali ke stok sistem.</p>
+            <h2 style="margin-top:0; color:#856404;">🪙 Manajemen Koin Fisik</h2>
             <div class="form-box" style="text-align:left;">
-                <label>Jumlah Koin Didapat</label>
-                <input type="number" id="restock-coin-qty" placeholder="Misal: 50" style="font-size:24px; font-weight:bold; text-align:center; color:#27ae60;">
+                <label>Jenis Tindakan</label>
+                <select id="coin-action-type">
+                    <option value="recycle">♻️ Daur Ulang (Ambil dari Mesin ke Laci)</option>
+                    <option value="jammed">⚠️ Koin Macet / Rusak di Mesin</option>
+                </select>
+            </div>
+            <div class="form-box" style="text-align:left;">
+                <label>Jumlah Koin</label>
+                <input type="number" id="manage-coin-qty" placeholder="Misal: 50" style="font-size:24px; font-weight:bold; text-align:center; color:#27ae60;">
+            </div>
+            <div class="form-box" id="coin-note-container" style="text-align:left; display:none;">
+                <label>Catatan (Wajib jika Koin Macet)</label>
+                <input type="text" id="manage-coin-note" placeholder="Misal: Tertelan di Mesin Cuci No. 3">
             </div>
             <div style="display:flex; gap:10px; margin-top:20px;">
-                <button onclick="document.getElementById('coin-restock-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#ecf0f1;">Batal</button>
-                <button onclick="submitCoinRestock()" style="flex:2; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#f1c40f; color:#856404;">Kirim Request</button>
+                <button onclick="document.getElementById('coin-management-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#ecf0f1;">Batal</button>
+                <button onclick="submitCoinManagement()" style="flex:2; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#f1c40f; color:#856404;">Proses Koin</button>
             </div>
         </div>
     </div>
@@ -244,8 +246,15 @@
                 <div class="form-box" style="margin-bottom:0; background:#f8d7da; padding:5px; border-radius:6px;"><label style="color:#721c24;">Piutang: B2B Hotel (Rp)</label><input type="number" id="pay-hotel-piutang" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
                 <div class="form-box" style="margin-bottom:0; background:#f8d7da; padding:5px; border-radius:6px;"><label style="color:#721c24;">Piutang: Tamu Kamar (Rp)</label><input type="number" id="pay-tamu-piutang" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
             </div>
-            
             <div style="display:flex; justify-content:space-between; font-size:18px; color:#c0392b; font-weight:bold; margin-bottom: 20px; padding:10px; background:#fdf2e9; border-radius:8px;"><span>Sisa Kurang Bayar:</span> <span id="review-remaining">Rp 0</span></div>
+
+            <div style="background:#e8f4f8; padding:15px; border-radius:8px; margin-bottom:15px;">
+                <label style="font-weight:bold; color:#2980b9;">⚙️ Koin Fisik Dipakai (Layanan Hotel / Full Service)</label>
+                <div style="display:flex; gap:10px; margin-top:5px;">
+                    <input type="number" id="internal-coins" value="0" min="0" style="width:100%; padding:10px; font-weight:bold; font-size:16px; border:2px solid #bdc3c7; border-radius:6px;">
+                </div>
+                <small style="color:#7f8c8d;">Isi jika Anda memasukkan koin fisik ke dalam mesin untuk menyelesaikan order ini. (Sistem akan otomatis memotong master stok koin tanpa menambah tagihan pelanggan).</small>
+            </div>
             
             <div style="display: flex; gap: 10px; flex-wrap:wrap;">
                 <button onclick="closeReview()" style="flex:1; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold;">Kembali</button>
