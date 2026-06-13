@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 11; 
+const DB_VERSION = 12; // Bumped for new Ticket Coin flow
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -47,6 +47,7 @@ function initDB() {
             if (!db.objectStoreNames.contains("void_requests")) db.createObjectStore("void_requests", { keyPath: "id" });
             if (!db.objectStoreNames.contains("local_shift_history")) db.createObjectStore("local_shift_history", { keyPath: "shiftId" });
             if (!db.objectStoreNames.contains("coin_retrievals")) db.createObjectStore("coin_retrievals", { keyPath: "retrievalId" });
+            if (!db.objectStoreNames.contains("ticket_coins")) db.createObjectStore("ticket_coins", { keyPath: "logId" });
         };
         request.onsuccess = (e) => { db = e.target.result; resolve(db); };
     });
@@ -140,24 +141,15 @@ async function syncMasterData() {
     }
 }
 
-// ----------------------------------------------------
-// NEW AUTOCOMPLETE ENGINE (TRIGGERS ON CLICK & FOCUS)
-// ----------------------------------------------------
 function handleAutocomplete(e) {
     const val = e.target.value.toLowerCase().trim(); const resBox = document.getElementById("autocomplete-results");
     activeCustomerProfile = null; document.getElementById("promo-indicator").classList.add("hidden");
+    if (val.length < 1) { resBox.classList.add("hidden"); return; } 
 
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
-        const members = ev.target.result; 
-        let matches = members;
-        
-        if (val.length > 0) {
-            matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
-        }
-        matches = matches.slice(0, 15); // Show top 15 results even if empty
-
+        const members = ev.target.result; const matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val)).slice(0, 10);
         if (matches.length > 0) {
-            resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}', '${m.name.replace(/'/g, "\\'")}', ${m.points || 0}, ${m.freeCoins || 0})"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name}</div></div>`).join("");
+            resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}', '${m.name.replace(/'/g, "\\'")}', ${m.points}, ${m.freeCoins})"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name}</div></div>`).join("");
             resBox.classList.remove("hidden");
         } else { resBox.classList.add("hidden"); }
     };
@@ -169,11 +161,7 @@ document.getElementById("cust-name").addEventListener("click", handleAutocomplet
 document.getElementById("cust-phone").addEventListener("focus", handleAutocomplete);
 document.getElementById("cust-name").addEventListener("focus", handleAutocomplete);
 
-document.addEventListener('click', (e) => { 
-    if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') {
-        document.getElementById('autocomplete-results').classList.add('hidden'); 
-    }
-});
+document.addEventListener('click', (e) => { if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') document.getElementById('autocomplete-results').classList.add('hidden'); });
 
 window.selectMember = function(phone, name, points, freeCoins) {
     document.getElementById("cust-phone").value = phone; document.getElementById("cust-name").value = name; document.getElementById("autocomplete-results").classList.add("hidden");
@@ -226,7 +214,7 @@ function confirmNumpad() { let qty = parseFloat(numpadValue); if (qty > 0) addTo
 
 function addToCart(item, qty) {
     const existing = currentCart.find(i => i.itemId === item.itemId);
-    if (existing) existing.qty += qty; else currentCart.push({ ...item, qty: qty, originalPrice: item.price });
+    if (existing) existing.qty += qty; else currentCart.push({ ...item, qty: qty, originalPrice: item.price, expectedCoins: item.expectedCoins });
     renderCart();
 }
 
@@ -253,12 +241,8 @@ function reviewOrder() {
     document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-transfer").value = 0;
     document.getElementById("pay-hotel-piutang").value = 0; document.getElementById("pay-tamu-piutang").value = 0; document.getElementById("pay-free").value = 0;
     
-    // SAFETY CHECK FOR MISSING HTML ELEMENT
-    let internalCoinBox = document.getElementById("internal-coins");
-    if(internalCoinBox) internalCoinBox.value = 0;
-    
     window.cartGrandTotal = window.cartSubtotal;
-    document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
+    // THIS LINE CAUSED THE BUG (Missing Subtotal HTML Element) - Removed to fix crash.
     document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
     
     applyPromo(); document.getElementById("review-modal").classList.remove("hidden");
@@ -299,9 +283,6 @@ async function finalizeOrder(shouldPrint) {
     const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
     const redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
     
-    let internalCoinBox = document.getElementById("internal-coins");
-    const internalCoins = internalCoinBox ? (Number(internalCoinBox.value) || 0) : 0;
-    
     const totalPiutang = hotelPiutang + tamuPiutang;
     const totalAccounted = cash + qris + transfer + free + totalPiutang; 
     const remaining = window.cartGrandTotal - totalAccounted;
@@ -321,7 +302,7 @@ async function finalizeOrder(shouldPrint) {
 
     if(custPhone) saveMemberToDB(custPhone, custName);
 
-    let status = "Completed"; if (totalPiutang > 0) status = "Pending Debt"; 
+    let status = "Completed"; if (totalPiutang > 0) status = "Pending Debt"; else if (requiresProcessing) status = "Processing";
 
     let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
     let coinsEarned = Math.max(0, totalCoinsInCart - redeemCount);
@@ -338,11 +319,14 @@ async function finalizeOrder(shouldPrint) {
         };
     }
 
+    // Hitung Estimasi Koin (Hanya untuk Ticket)
+    let expectedCoinsTotal = currentCart.reduce((sum, item) => sum + ((item.expectedCoins || 0) * item.qty), 0);
+
     const orderPayload = {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone || "-", orderStatus: status, items: currentCart, subtotal: window.cartSubtotal, discounts: (redeemCount * activeCoinPrice), grandTotal: window.cartGrandTotal,
         paymentMethod: payString, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: coinsEarned, coinsRedeemed: redeemCount, internalCoinsUsed: internalCoins, syncStatus: "Pending" 
+        coinsEarned: coinsEarned, coinsRedeemed: redeemCount, expectedCoins: expectedCoinsTotal, syncStatus: "Pending" 
     };
 
     const txMenu = db.transaction(["menu"], "readwrite"); const storeMenu = txMenu.objectStore("menu");
@@ -353,17 +337,10 @@ async function finalizeOrder(shouldPrint) {
         };
     });
 
-    if (internalCoins > 0) {
-        storeMenu.openCursor().onsuccess = (ev) => {
-            const cursor = ev.target.result;
-            if (cursor) { if (String(cursor.value.name).toLowerCase() === "koin_fisik") { const updated = cursor.value; updated.currentStock = Math.max(0, updated.currentStock - internalCoins); cursor.update(updated); } cursor.continue(); }
-        };
-    }
-
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     if (requiresProcessing) { activeLaundryTickets.unshift(orderPayload); document.getElementById("ticket-count").innerText = activeLaundryTickets.length; }
     
-    if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + free), 0, payString, newPoints, newFree); window.print(); }
+    if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + free + totalPiutang), 0, payString, newPoints, newFree); window.print(); }
     closeReview(); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
 
@@ -418,15 +395,54 @@ function renderActiveTickets() {
                 <div class="ticket-header"><span>${ticket.customerName}</span> <span style="color:#7f8c8d; font-size:12px;">${ticket.orderId}</span></div>
                 <div style="font-size:14px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>
                 <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:10px; border-top:1px dashed #ddd; padding-top:5px;"><span>Piutang / Sisa:</span> <strong style="color:#e74c3c;">Rp ${remaining.toLocaleString('id-ID')}</strong></div>
-                ${!isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="markTicketReady('${ticket.orderId}')">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="openSettlement('${ticket.orderId}', ${remaining})">Ambil Cucian & Bayar</button>`}
+                ${!isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="openSettlement('${ticket.orderId}', ${remaining})">Ambil Cucian & Bayar</button>`}
             </div>
         `;
     });
 }
 
-function markTicketReady(orderId) {
-    const ticket = activeLaundryTickets.find(t => t.orderId === orderId);
-    if (ticket) { ticket.orderStatus = "Ready for Pickup"; ticket.syncStatus = "Pending"; db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket); renderActiveTickets(); runBackgroundSync(); }
+// ----------------------------------------------------
+// NEW TICKET DONE / COIN USAGE AUDIT ENGINE
+// ----------------------------------------------------
+let activeDoneOrderId = null;
+window.markTicketReady = function(orderId, expectedCoins) {
+    activeDoneOrderId = orderId;
+    document.getElementById("done-expected-coins").innerText = expectedCoins;
+    document.getElementById("done-actual-coins").value = expectedCoins;
+    document.getElementById("ticket-done-modal").classList.remove("hidden");
+}
+
+window.submitTicketDone = function() {
+    let actual = Number(document.getElementById("done-actual-coins").value) || 0;
+    let expected = Number(document.getElementById("done-expected-coins").innerText) || 0;
+
+    if (actual < 0) return alert("Jumlah koin tidak valid.");
+
+    const ticket = activeLaundryTickets.find(t => t.orderId === activeDoneOrderId);
+    if (ticket) {
+        ticket.orderStatus = "Ready for Pickup";
+        ticket.syncStatus = "Pending";
+        db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
+
+        if (actual > 0) {
+            let overuse = Math.max(0, actual - expected);
+            let baseUsage = Math.min(expected, actual);
+
+            const payload = {
+                retrievalId: "TKC-" + Date.now(), // Use same table as coin retrieval
+                orderId: activeDoneOrderId,
+                timestamp: new Date().toISOString(),
+                cashier: currentCashier,
+                expected: baseUsage,
+                overuse: overuse,
+                syncStatus: "Pending"
+            };
+            db.transaction(["ticket_coins"], "readwrite").objectStore("ticket_coins").add(payload);
+        }
+
+        renderActiveTickets(); runBackgroundSync();
+    }
+    document.getElementById("ticket-done-modal").classList.add("hidden");
 }
 
 function openSettlement(orderId, remainingDue) {
@@ -598,8 +614,11 @@ function applyVoidAftermath(order) {
         menuStore.openCursor().onsuccess = (e) => {
             const cursor = e.target.result;
             if (cursor) { 
-                if (isCoin && String(cursor.value.name).toLowerCase() === "koin_fisik") { const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); } 
-                else if (cursor.value.name === item.name && cursor.value.trackStock) { const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); } 
+                if (isCoin && String(cursor.value.name).toLowerCase() === "koin_fisik") {
+                    const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated);
+                } else if (cursor.value.name === item.name && cursor.value.trackStock) { 
+                    const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); 
+                } 
                 cursor.continue(); 
             }
         };
@@ -619,7 +638,7 @@ function applyVoidAftermath(order) {
         };
     }
     tx.oncomplete = () => { renderProductGrid(); };
-    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed, internalCoinsUsed: order.internalCoinsUsed } }) });
+    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed } }) });
 }
 
 function calculateLiveDrawer(callback) {
@@ -651,123 +670,4 @@ function submitCashDrop() {
     
     calculateLiveDrawer((liveAmount) => {
         const leftInDrawer = liveAmount - pullAmount;
-        const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, toAdmin: adminAmt, toBank: bankAmt, leftInDrawer: leftInDrawer, notes: finalNotes, syncStatus: "Pending" };
-        db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").add(payload);
-        document.getElementById("cash-drop-modal").classList.add("hidden"); runBackgroundSync();
-        if (isLoggingOut) { executeFinalLogout(leftInDrawer); } else { alert(`Setor Uang Berhasil!\nTujuan: ${destination}\nSisa Tunai di Laci: Rp ${leftInDrawer.toLocaleString('id-ID')}`); }
-    });
-}
-
-function openShiftReport() {
-    let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0; let tTransfer = 0; let hPiu = 0; let tPiu = 0; let tFree = 0; let tExpense = 0; let foodSummary = {};
-    document.getElementById("meter-token").value = ""; document.getElementById("meter-pasca").value = "";
-    
-    db.transaction(["orders", "expenses"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
-        const validOrders = e.target.result.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
-        validOrders.forEach(o => {
-            tOrders++; if(o.customerPhone && o.customerPhone !== "-") tCust++; tOmset += o.grandTotal;
-            tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tTransfer += (o.transferAmount || 0); 
-            hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0); 
-            if (o.items) o.items.forEach(i => { if(!foodSummary[i.name]) foodSummary[i.name] = 0; foodSummary[i.name] += i.qty; });
-        });
-        
-        db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = (ex) => {
-            const shiftExpenses = ex.target.result.filter(exp => exp.shiftId === currentShiftId && exp.status === "Active"); shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
-            
-            calculateLiveDrawer((liveDrawer) => {
-                document.getElementById("sr-orders").innerText = tOrders; document.getElementById("sr-customers").innerText = tCust; document.getElementById("sr-omset").innerText = `Rp ${tOmset.toLocaleString('id-ID')}`;
-                document.getElementById("sr-cash").innerText = `Rp ${tCash.toLocaleString('id-ID')}`; document.getElementById("sr-qris").innerText = `Rp ${tQris.toLocaleString('id-ID')}`; document.getElementById("sr-transfer").innerText = `Rp ${tTransfer.toLocaleString('id-ID')}`;
-                document.getElementById("sr-hotel-piutang").innerText = `Rp ${hPiu.toLocaleString('id-ID')}`; document.getElementById("sr-tamu-piutang").innerText = `Rp ${tPiu.toLocaleString('id-ID')}`; document.getElementById("sr-free").innerText = `Rp ${tFree.toLocaleString('id-ID')}`;
-                if(document.getElementById("sr-expense")) document.getElementById("sr-expense").innerText = `Rp ${tExpense.toLocaleString('id-ID')}`;
-                document.getElementById("sr-net").innerText = `Rp ${liveDrawer.toLocaleString('id-ID')}`; document.getElementById("shift-report-modal").classList.remove("hidden");
-                
-                window.currentShiftData = { totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer, totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, net: liveDrawer, foodSummary };
-            });
-        };
-    };
-}
-
-function initiateLogoutSequence() { 
-    const meterT = document.getElementById("meter-token").value; const meterP = document.getElementById("meter-pasca").value;
-    if (meterT === "" || meterP === "") return alert("⚠️ ERROR: Wajib mengisi kedua Meteran Listrik sebelum mengakhiri Shift.");
-    window.currentShiftData.meterToken = Number(meterT); window.currentShiftData.meterPasca = Number(meterP);
-    document.getElementById("shift-report-modal").classList.add("hidden"); openCashDrop(true); 
-}
-
-async function executeFinalLogout(netCash) { 
-    const data = window.currentShiftData;
-    const shiftPayload = {
-        shiftId: currentShiftId, timestamp: new Date().toISOString(), cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), 
-        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalTransfer: data.totalTransfer, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree,
-        totalExpenses: data.totalExpenses, netCash: netCash, foodSummary: data.foodSummary, meterToken: data.meterToken, meterPasca: data.meterPasca, syncStatus: "Pending"
-    };
-
-    db.transaction(["local_shift_history"], "readwrite").objectStore("local_shift_history").add(shiftPayload);
-    db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").add(shiftPayload);
-    db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").delete(currentPin); 
-    
-    if (navigator.onLine) {
-        if(document.getElementById("network-text")) document.getElementById("network-text").innerText = `Mengirim Laporan Shift...`;
-        try {
-            let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncShiftReport", data: shiftPayload }) });
-            if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(shiftPayload.shiftId); }
-        } catch(e) {}
-    }
-    window.location.reload(); 
-}
-
-function lockScreen() { window.location.reload(); }
-
-async function runBackgroundSync() {
-    if (!navigator.onLine || isSyncing) return;
-    isSyncing = true; 
-    try {
-        let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members", "coin_retrievals"], "readonly");
-        
-        let orders = await new Promise(res => tx.objectStore("orders").getAll().onsuccess = e => res(e.target.result));
-        for (const order of orders) {
-            if (order.syncStatus === "Pending") {
-                order.syncStatus = "Syncing"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order);
-                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncOrder", data: order }) }); if ((await r.json()).status === "Success") { order.syncStatus = "Synced"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); } else { order.syncStatus = "Pending"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); } } catch(e) { order.syncStatus = "Pending"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); }
-            }
-        }
-        
-        let drops = await new Promise(res => tx.objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
-        for (const drop of drops) {
-            if (drop.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncCashDrop", data: drop }) }); if ((await r.json()).status === "Success") { drop.syncStatus = "Synced"; db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").put(drop); } } catch(e) {} }
-        }
-        
-        let reports = await new Promise(res => tx.objectStore("shift_reports").getAll().onsuccess = e => res(e.target.result));
-        for (const report of reports) {
-            if (report.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncShiftReport", data: report }) }); if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId); } } catch(e) {} }
-        }
-
-        let expenses = await new Promise(res => tx.objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
-        for (const exp of expenses) {
-            if (exp.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncExpense", data: exp }) }); if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); } } catch(e) {} }
-        }
-
-        let voids = await new Promise(res => tx.objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
-        for (const req of voids) {
-            try {
-                const actionType = req.type === 'orders' ? "requestOrderVoid" : "requestExpenseVoid"; const payload = req.type === 'orders' ? { orderId: req.id, status: req.status, authName: req.authName } : { expenseId: req.id, status: req.status, authName: req.authName };
-                let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: actionType, ...payload }) }); if ((await r.json()).status === "Success") { db.transaction(["void_requests"], "readwrite").objectStore("void_requests").delete(req.id); }
-            } catch(e) {}
-        }
-
-        let members = await new Promise(res => tx.objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
-        for (const mem of members) {
-            try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncMember", data: mem }) }); if ((await r.json()).status === "Success") { db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone); } } catch(e) {}
-        }
-        
-        let coinRets = await new Promise(res => tx.objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
-        for (const ret of coinRets) {
-            if (ret.syncStatus === "Pending") {
-                let actionCode = ret.notes && ret.notes.includes("Macet") ? "syncCoinJammed" : "syncCoinRetrieval";
-                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: actionCode, data: ret }) }); if ((await r.json()).status === "Success") { ret.syncStatus = "Synced"; db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").put(ret); } } catch(e) {} 
-            }
-        }
-    } finally { isSyncing = false; }
-}
-
-window.onload = async () => { await initDB(); await syncMasterData(); window.setInterval(runBackgroundSync, 15000); };
+        const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, to
