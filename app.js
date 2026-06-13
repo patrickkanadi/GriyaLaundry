@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 14; 
+const DB_VERSION = 15; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -142,7 +142,7 @@ async function syncMasterData() {
 }
 
 // ----------------------------------------------------
-// UPDATED AUTOCOMPLETE ENGINE (TOP SPENDERS SORTING)
+// UPDATED AUTOCOMPLETE ENGINE: NO LIMIT, NO SPENT TEXT
 // ----------------------------------------------------
 function handleAutocomplete(e) {
     const val = e.target.value.toLowerCase().trim(); const resBox = document.getElementById("autocomplete-results");
@@ -156,11 +156,12 @@ function handleAutocomplete(e) {
             matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
         }
         
+        // Urutkan berdasarkan total belanja tertinggi
         matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
-        matches = matches.slice(0, 15);
 
         if (matches.length > 0) {
-            resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}', '${m.name.replace(/'/g, "\\'")}', ${m.points || 0}, ${m.freeCoins || 0})"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name} <span style="color:#27ae60; font-weight:normal; font-size:12px;">(Total Belanja: Rp ${(m.spent || 0).toLocaleString('id-ID')})</span></div></div>`).join("");
+            // Hilangkan span total belanja dari hasil HTML agar bersih
+            resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}', '${m.name.replace(/'/g, "\\'")}', ${m.points || 0}, ${m.freeCoins || 0})"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name}</div></div>`).join("");
             resBox.classList.remove("hidden");
         } else { resBox.classList.add("hidden"); }
     };
@@ -237,7 +238,7 @@ function addToCart(item, qty) {
     }
 
     if (existing) { existing.qty += finalQty; } 
-    else { currentCart.push({ ...item, qty: finalQty, originalPrice: item.price }); }
+    else { currentCart.push({ ...item, qty: finalQty, originalPrice: item.price, expectedCoins: item.expectedCoins, hasMoq: item.hasMoq, moqQty: item.moqQty }); }
     
     renderCart();
 }
