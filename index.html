@@ -147,7 +147,7 @@
                 <div id="command-bar">
                     <div class="input-group">
                         <div class="autocomplete-wrapper" style="flex:1;">
-                            <input type="text" id="cust-phone" placeholder="Cari No WA atau Nama..." autocomplete="off" style="width:100%;">
+                            <input type="text" id="cust-phone" placeholder="Ketik WA atau Nama..." autocomplete="off" style="width:100%;">
                             <div id="autocomplete-results" class="hidden"></div>
                         </div>
                         <input type="text" id="cust-name" placeholder="Nama Pelanggan" autocomplete="off" style="flex:1;">
@@ -180,6 +180,28 @@
         <div id="active-tickets-workspace" class="hidden">
             <h2 style="margin-top:0;">Cucian Dalam Proses (SPK)</h2>
             <div class="ticket-grid" id="ticket-grid-container"></div>
+        </div>
+    </div>
+
+    <div id="ticket-done-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width:400px; text-align:center;">
+            <h2 style="margin-top:0; color:#2980b9;">✅ Selesai Cuci</h2>
+            <p style="color:#7f8c8d; font-size:14px;">Masukkan jumlah koin fisik yang dipakai untuk order ini.</p>
+            
+            <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px;">
+                <div style="font-size:14px; color:#7f8c8d;">Estimasi Sistem (Dari Menu)</div>
+                <div id="done-expected-coins" style="font-size:24px; font-weight:bold; color:#2c3e50;">0</div>
+            </div>
+
+            <div class="form-box" style="text-align:left;">
+                <label>Koin Fisik Dipakai (Aktual)</label>
+                <input type="number" id="done-actual-coins" style="font-size:24px; font-weight:bold; text-align:center; color:#e67e22;">
+            </div>
+            
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button onclick="document.getElementById('ticket-done-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#ecf0f1;">Batal</button>
+                <button onclick="submitTicketDone()" style="flex:2; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#27ae60; color:white;">Simpan & Selesai</button>
+            </div>
         </div>
     </div>
 
@@ -248,14 +270,6 @@
             </div>
             <div style="display:flex; justify-content:space-between; font-size:18px; color:#c0392b; font-weight:bold; margin-bottom: 20px; padding:10px; background:#fdf2e9; border-radius:8px;"><span>Sisa Kurang Bayar:</span> <span id="review-remaining">Rp 0</span></div>
 
-            <div style="background:#e8f4f8; padding:15px; border-radius:8px; margin-bottom:15px;">
-                <label style="font-weight:bold; color:#2980b9;">⚙️ Koin Fisik Dipakai (Layanan Hotel / Full Service)</label>
-                <div style="display:flex; gap:10px; margin-top:5px;">
-                    <input type="number" id="internal-coins" value="0" min="0" style="width:100%; padding:10px; font-weight:bold; font-size:16px; border:2px solid #bdc3c7; border-radius:6px;">
-                </div>
-                <small style="color:#7f8c8d;">Isi jika Anda memasukkan koin fisik ke dalam mesin untuk menyelesaikan order ini. (Sistem akan memotong stok fisik tanpa menagih pelanggan).</small>
-            </div>
-            
             <div style="display: flex; gap: 10px; flex-wrap:wrap;">
                 <button onclick="closeReview()" style="flex:1; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold;">Kembali</button>
                 <button onclick="finalizeOrder(false)" style="flex:1; padding:15px; background:#f39c12; color:white; border:none; border-radius:8px; font-weight:bold;">Simpan (Tanpa Struk)</button>
