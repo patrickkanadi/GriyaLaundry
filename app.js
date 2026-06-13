@@ -456,41 +456,43 @@ function calculateLiveDrawer(callback) {
 }
 
 function openCashDrop(forLogout = false) {
-    isLoggingOut = forLogout; document.getElementById("cash-drop-title").innerText = isLoggingOut ? "🔒 End of Shift Cash Log" : "🏦 Store Money";
+    isLoggingOut = forLogout; document.getElementById("cash-drop-title").innerText = isLoggingOut ? "🔒 End of Shift Cash Log" : "🏦 Store / Pull Money";
     document.getElementById("btn-drop-cancel").innerText = isLoggingOut ? "Cancel Logout" : "Cancel"; document.getElementById("btn-drop-confirm").innerText = isLoggingOut ? "Confirm & Logout" : "Save Record";
-    document.getElementById("drop-admin").value = 0; document.getElementById("drop-bank").value = 0; document.getElementById("drop-notes").value = "";
+    document.getElementById("drop-amount").value = ""; document.getElementById("drop-destination").value = "Admin"; document.getElementById("drop-notes").value = "";
     
     calculateLiveDrawer((liveAmount) => { document.getElementById("live-drawer-display").innerText = `Rp ${liveAmount.toLocaleString('id-ID')}`; document.getElementById("cash-drop-modal").classList.remove("hidden"); });
 }
 
 function submitCashDrop() {
-    const adminAmt = Number(document.getElementById("drop-admin").value) || 0; const bankAmt = Number(document.getElementById("drop-bank").value) || 0;
-    const notes = document.getElementById("drop-notes").value || (isLoggingOut ? "Shift End" : "Mid-shift Drop");
+    const pullAmount = Number(document.getElementById("drop-amount").value) || 0;
+    if (pullAmount <= 0) return alert("⚠️ ERROR: Please enter a valid amount to pull from the drawer.");
+    
+    const destination = document.getElementById("drop-destination").value;
+    const customNotes = document.getElementById("drop-notes").value || (isLoggingOut ? "Shift End" : "Mid-shift Drop");
+    
+    let adminAmt = 0; let bankAmt = 0;
+    if (destination === "Bank") bankAmt = pullAmount; else adminAmt = pullAmount;
+    
+    const finalNotes = `[To ${destination}] ${customNotes}`;
     
     calculateLiveDrawer((liveAmount) => {
-        const leftInDrawer = liveAmount - adminAmt - bankAmt;
-        const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, toAdmin: adminAmt, toBank: bankAmt, leftInDrawer: leftInDrawer, notes: notes, syncStatus: "Pending" };
+        const leftInDrawer = liveAmount - pullAmount;
+        const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, toAdmin: adminAmt, toBank: bankAmt, leftInDrawer: leftInDrawer, notes: finalNotes, syncStatus: "Pending" };
         db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").add(payload);
         document.getElementById("cash-drop-modal").classList.add("hidden"); runBackgroundSync();
-        if (isLoggingOut) executeFinalLogout(leftInDrawer); else alert(`Cash Drop Logged!\nLeft in Drawer: Rp ${leftInDrawer.toLocaleString('id-ID')}`);
+        if (isLoggingOut) { executeFinalLogout(leftInDrawer); } else { alert(`Cash Drop Logged!\nDestination: ${destination}\nLeft in Drawer: Rp ${leftInDrawer.toLocaleString('id-ID')}`); }
     });
 }
 
 function openShiftReport() {
-    let tCust = 0; let tOrders = 0; let tOmset = 0; 
-    let tCash = 0; let tQris = 0; let tHotel = 0; let tFree = 0; let tPiutang = 0; let tExpense = 0; 
-    let foodSummary = {};
-    
+    let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0; let tHotel = 0; let tFree = 0; let tPiutang = 0; let tExpense = 0; let foodSummary = {};
     document.getElementById("meter-token").value = ""; document.getElementById("meter-pasca").value = "";
     
     db.transaction(["orders", "expenses"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
         const validOrders = e.target.result.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
         validOrders.forEach(o => {
-            tOrders++; if(o.customerPhone && o.customerPhone !== "-") tCust++;
-            tOmset += o.grandTotal;
-            tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); 
-            tHotel += (o.hotelAmount || 0); tFree += (o.freeAmount || 0);
-            tPiutang += (o.remainingDue || 0);
+            tOrders++; if(o.customerPhone && o.customerPhone !== "-") tCust++; tOmset += o.grandTotal;
+            tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tHotel += (o.hotelAmount || 0); tFree += (o.freeAmount || 0); tPiutang += (o.remainingDue || 0);
             if (o.items) o.items.forEach(i => { if(!foodSummary[i.name]) foodSummary[i.name] = 0; foodSummary[i.name] += i.qty; });
         });
         
@@ -499,23 +501,13 @@ function openShiftReport() {
             shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
             
             calculateLiveDrawer((liveDrawer) => {
-                document.getElementById("sr-orders").innerText = tOrders; document.getElementById("sr-customers").innerText = tCust;
-                document.getElementById("sr-omset").innerText = `Rp ${tOmset.toLocaleString('id-ID')}`;
-                document.getElementById("sr-cash").innerText = `Rp ${tCash.toLocaleString('id-ID')}`;
-                document.getElementById("sr-qris").innerText = `Rp ${tQris.toLocaleString('id-ID')}`;
-                document.getElementById("sr-hotel").innerText = `Rp ${tHotel.toLocaleString('id-ID')}`;
-                document.getElementById("sr-free").innerText = `Rp ${tFree.toLocaleString('id-ID')}`;
-                document.getElementById("sr-piutang").innerText = `Rp ${tPiutang.toLocaleString('id-ID')}`;
+                document.getElementById("sr-orders").innerText = tOrders; document.getElementById("sr-customers").innerText = tCust; document.getElementById("sr-omset").innerText = `Rp ${tOmset.toLocaleString('id-ID')}`;
+                document.getElementById("sr-cash").innerText = `Rp ${tCash.toLocaleString('id-ID')}`; document.getElementById("sr-qris").innerText = `Rp ${tQris.toLocaleString('id-ID')}`; document.getElementById("sr-hotel").innerText = `Rp ${tHotel.toLocaleString('id-ID')}`;
+                document.getElementById("sr-free").innerText = `Rp ${tFree.toLocaleString('id-ID')}`; document.getElementById("sr-piutang").innerText = `Rp ${tPiutang.toLocaleString('id-ID')}`;
                 if(document.getElementById("sr-expense")) document.getElementById("sr-expense").innerText = `Rp ${tExpense.toLocaleString('id-ID')}`;
+                document.getElementById("sr-net").innerText = `Rp ${liveDrawer.toLocaleString('id-ID')}`; document.getElementById("shift-report-modal").classList.remove("hidden");
                 
-                document.getElementById("sr-net").innerText = `Rp ${liveDrawer.toLocaleString('id-ID')}`;
-                document.getElementById("shift-report-modal").classList.remove("hidden");
-                
-                window.currentShiftData = { 
-                    totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, 
-                    totalCash: tCash, totalQris: tQris, totalHotel: tHotel, totalFree: tFree, 
-                    totalPiutang: tPiutang, totalExpenses: tExpense, net: liveDrawer, foodSummary 
-                };
+                window.currentShiftData = { totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalHotel: tHotel, totalFree: tFree, totalPiutang: tPiutang, totalExpenses: tExpense, net: liveDrawer, foodSummary };
             });
         };
     };
@@ -525,7 +517,6 @@ function initiateLogoutSequence() {
     const meterT = document.getElementById("meter-token").value; const meterP = document.getElementById("meter-pasca").value;
     if (meterT === "" || meterP === "") return alert("⚠️ ERROR: You must enter both Electricity Meter readings before ending your shift.");
     window.currentShiftData.meterToken = Number(meterT); window.currentShiftData.meterPasca = Number(meterP);
-
     document.getElementById("shift-report-modal").classList.add("hidden"); openCashDrop(true); 
 }
 
@@ -533,8 +524,7 @@ async function executeFinalLogout(netCash) {
     const data = window.currentShiftData;
     const shiftPayload = {
         shiftId: currentShiftId, timestamp: new Date().toISOString(), cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), 
-        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, 
-        totalCash: data.totalCash, totalQris: data.totalQris, totalHotel: data.totalHotel, totalFree: data.totalFree, totalPiutang: data.totalPiutang,
+        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalHotel: data.totalHotel, totalFree: data.totalFree, totalPiutang: data.totalPiutang,
         totalExpenses: data.totalExpenses, netCash: netCash, foodSummary: data.foodSummary, meterToken: data.meterToken, meterPasca: data.meterPasca, syncStatus: "Pending"
     };
 
@@ -602,9 +592,7 @@ async function runBackgroundSync() {
         for (const mem of members) {
             try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncMember", data: mem }) }); if ((await r.json()).status === "Success") { db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone); } } catch(e) {}
         }
-    } finally {
-        isSyncing = false; 
-    }
+    } finally { isSyncing = false; }
 }
 
 window.onload = async () => { await initDB(); await syncMasterData(); window.setInterval(runBackgroundSync, 15000); };
