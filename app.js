@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 9; // Bumped for new Piutang rules & PWA
+const DB_VERSION = 10; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -14,8 +14,7 @@ let activeCustomerProfile = null; let activeCoinPrice = 10000;
 // PWA INSTALLATION ENGINE
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
+    e.preventDefault(); deferredPrompt = e;
     const installBtn = document.getElementById('btn-install');
     if(installBtn) installBtn.classList.remove('hidden');
 });
@@ -24,9 +23,7 @@ function installPWA() {
     if (deferredPrompt) {
         deferredPrompt.prompt();
         deferredPrompt.userChoice.then((choiceResult) => {
-            if (choiceResult.outcome === 'accepted') {
-                document.getElementById('btn-install').classList.add('hidden');
-            }
+            if (choiceResult.outcome === 'accepted') document.getElementById('btn-install').classList.add('hidden');
             deferredPrompt = null;
         });
     }
@@ -94,7 +91,7 @@ function unlockMenu(isGuest) {
     if (isGuest) { document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; activeCustomerProfile = null; } 
     else {
         const phone = document.getElementById("cust-phone").value.trim();
-        if (phone.length < 5) return alert("Harap masukkan Nomor WhatsApp yang valid.");
+        if (phone.length < 5) return alert("Harap masukkan Nomor WhatsApp yang valid terlebih dahulu.");
     }
     isMenuLocked = false; document.getElementById("glass-overlay").style.opacity = "0"; setTimeout(() => { document.getElementById("glass-overlay").style.pointerEvents = "none"; }, 300);
 }
@@ -147,9 +144,7 @@ async function syncMasterData() {
 function handleAutocomplete(e) {
     const val = e.target.value.toLowerCase().trim(); const resBox = document.getElementById("autocomplete-results");
     activeCustomerProfile = null; document.getElementById("promo-indicator").classList.add("hidden");
-    
-    // START SEARCHING ON 1 CHARACTER
-    if (val.length < 1) { resBox.classList.add("hidden"); return; }
+    if (val.length < 1) { resBox.classList.add("hidden"); return; } // Triggers on 1 character
 
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
         const members = ev.target.result; const matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val)).slice(0, 10);
@@ -161,7 +156,6 @@ function handleAutocomplete(e) {
 }
 document.getElementById("cust-phone").addEventListener("input", handleAutocomplete);
 document.getElementById("cust-name").addEventListener("input", handleAutocomplete);
-
 document.addEventListener('click', (e) => { if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') document.getElementById('autocomplete-results').classList.add('hidden'); });
 
 window.selectMember = function(phone, name, points, freeCoins) {
@@ -169,11 +163,10 @@ window.selectMember = function(phone, name, points, freeCoins) {
     activeCustomerProfile = { phone, name, points, freeCoins };
     
     let promoText = "";
-    if (freeCoins > 0) promoText = `🎁 ${freeCoins} Koin Gratis! (Poin Sisa: ${points}/10)`;
-    else promoText = `🎁 Poin Koin: ${points}/10`;
+    if (freeCoins > 0) promoText = `🎁 ${freeCoins} Koin Gratis Tersedia! (Sisa Poin: ${points}/10)`;
+    else promoText = `🎁 Poin Koin Saat Ini: ${points}/10`;
     
-    document.getElementById("promo-indicator").innerText = promoText;
-    document.getElementById("promo-indicator").classList.remove("hidden");
+    document.getElementById("promo-indicator").innerText = promoText; document.getElementById("promo-indicator").classList.remove("hidden");
 };
 
 function saveMemberToDB(phone, name) {
@@ -231,7 +224,7 @@ function renderCart() {
 function clearCart() { lockMenu(); }
 
 function reviewOrder() {
-    if (currentCart.length === 0) return alert("Keranjang kosong!");
+    if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
     let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
     if (activeCustomerProfile && activeCustomerProfile.freeCoins > 0 && totalCoinsInCart > 0) {
@@ -242,17 +235,16 @@ function reviewOrder() {
 
     document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-transfer").value = 0;
     document.getElementById("pay-hotel-piutang").value = 0; document.getElementById("pay-tamu-piutang").value = 0; document.getElementById("pay-free").value = 0;
+    document.getElementById("internal-coins").value = 0;
     
-    // OPTION B: Grand Total = Subtotal
     window.cartGrandTotal = window.cartSubtotal;
     document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
     document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
     
-    applyPromo();
-    document.getElementById("review-modal").classList.remove("hidden");
+    applyPromo(); document.getElementById("review-modal").classList.remove("hidden");
 }
 
-function applyPromo() {
+window.applyPromo = function() {
     let redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
     let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
     
@@ -261,21 +253,16 @@ function applyPromo() {
     document.getElementById("redeem-coins").value = redeemCount;
 
     let freeValue = redeemCount * activeCoinPrice;
-    document.getElementById("pay-free").value = freeValue; // Auto-fill the free payment column
+    document.getElementById("pay-free").value = freeValue; 
 
-    // Auto adjust cash to balance the drawer
-    let q = Number(document.getElementById("pay-qris").value) || 0;
-    let t = Number(document.getElementById("pay-transfer").value) || 0;
-    let hp = Number(document.getElementById("pay-hotel-piutang").value) || 0;
-    let tp = Number(document.getElementById("pay-tamu-piutang").value) || 0;
+    let q = Number(document.getElementById("pay-qris").value) || 0; let t = Number(document.getElementById("pay-transfer").value) || 0;
+    let hp = Number(document.getElementById("pay-hotel-piutang").value) || 0; let tp = Number(document.getElementById("pay-tamu-piutang").value) || 0;
     
     let autoCash = window.cartGrandTotal - (q + t + hp + tp + freeValue);
-    document.getElementById("pay-cash").value = Math.max(0, autoCash);
-
-    calculateRemaining();
+    document.getElementById("pay-cash").value = Math.max(0, autoCash); calculateRemaining();
 }
 
-function calculateRemaining() {
+window.calculateRemaining = function() {
     const c = Number(document.getElementById("pay-cash").value) || 0; const q = Number(document.getElementById("pay-qris").value) || 0;
     const t = Number(document.getElementById("pay-transfer").value) || 0; const hp = Number(document.getElementById("pay-hotel-piutang").value) || 0;
     const tp = Number(document.getElementById("pay-tamu-piutang").value) || 0; const f = Number(document.getElementById("pay-free").value) || 0;
@@ -291,6 +278,7 @@ async function finalizeOrder(shouldPrint) {
     const transfer = Number(document.getElementById("pay-transfer").value) || 0; const hotelPiutang = Number(document.getElementById("pay-hotel-piutang").value) || 0;
     const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
     const redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
+    const internalCoins = Number(document.getElementById("internal-coins").value) || 0;
     
     const totalPiutang = hotelPiutang + tamuPiutang;
     const totalAccounted = cash + qris + transfer + free + totalPiutang; 
@@ -300,23 +288,22 @@ async function finalizeOrder(shouldPrint) {
     const custPhone = document.getElementById("cust-phone").value.trim(); const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
     const hasHotelItem = currentCart.some(i => String(i.category).toLowerCase().includes("hotel"));
 
-    if (remaining > 0) return alert("⚠️ PEMBAYARAN DITOLAK:\nSeluruh tagihan WAJIB dialokasikan. Sisa Kurang Bayar harus Rp 0.");
-    if (totalPiutang > 0 && !requiresProcessing) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda tidak bisa mencatat Piutang untuk layanan ini.\nPiutang HANYA berlaku untuk Tiket Drop-off.");
-    if (totalPiutang > 0 && !hasHotelItem) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda tidak bisa mencatat Piutang untuk layanan ini.\nPiutang HANYA berlaku untuk item dalam kategori Hotel.");
+    if (remaining > 0) return alert("⚠️ PEMBAYARAN DITOLAK:\nSisa Kurang Bayar harus Rp 0. Jika ada hutang, wajib dicatat di kolom Piutang B2B/Tamu.");
+    if (totalPiutang > 0 && !requiresProcessing) return alert("⚠️ PEMBAYARAN DITOLAK:\nPiutang HANYA berlaku untuk Tiket Drop-off.");
+    if (totalPiutang > 0 && !hasHotelItem) return alert("⚠️ PEMBAYARAN DITOLAK:\nPiutang HANYA berlaku untuk item dalam kategori Hotel.");
     if (totalPiutang > 0 && (!custPhone || custPhone === "-")) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda WAJIB memasukkan nomor WhatsApp pelanggan untuk mencatat Piutang.");
 
     let payMethods = [];
-    if(cash > 0) payMethods.push("Tunai"); if(qris > 0) payMethods.push("QRIS"); if(transfer > 0) payMethods.push("Trf.Bank"); if(hotelPiutang > 0) payMethods.push("Piutang(B2B)"); if(tamuPiutang > 0) payMethods.push("Piutang(Tamu)"); if(free > 0) payMethods.push("Free");
+    if(cash > 0) payMethods.push("Tunai"); if(qris > 0) payMethods.push("QRIS"); if(transfer > 0) payMethods.push("Trf.Bank"); if(hotelPiutang > 0) payMethods.push("Piutang(B2B)"); if(tamuPiutang > 0) payMethods.push("Piutang(Tamu)"); if(free > 0) payMethods.push("Gratis");
     const payString = payMethods.length > 0 ? payMethods.join("+") : "Belum Bayar";
 
     if(custPhone) saveMemberToDB(custPhone, custName);
 
-    let status = "Completed"; if (requiresProcessing) status = "Processing"; else if (totalPiutang > 0) status = "Pending Debt"; 
+    let status = "Completed"; if (totalPiutang > 0) status = "Pending Debt"; 
 
     let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
     let coinsEarned = Math.max(0, totalCoinsInCart - redeemCount);
 
-    // FAST LOCAL SYNC: Hitung poin instan untuk struk & IndexedDB
     let newPoints = 0; let newFree = 0;
     if (activeCustomerProfile) {
         let currentPoints = activeCustomerProfile.points || 0; let currentFree = activeCustomerProfile.freeCoins || 0;
@@ -324,10 +311,8 @@ async function finalizeOrder(shouldPrint) {
         let newlyEarnedFree = Math.floor(currentPoints / 10); currentPoints = currentPoints % 10; currentFree += newlyEarnedFree;
         newPoints = currentPoints; newFree = currentFree;
         
-        // Simpan langsung ke memori lokal agar order berikutnya tidak usah menunggu Google 15 detik
         db.transaction(["members"], "readwrite").objectStore("members").get(activeCustomerProfile.phone).onsuccess = (e) => {
-            let mem = e.target.result;
-            if (mem) { mem.points = newPoints; mem.freeCoins = newFree; db.transaction(["members"], "readwrite").objectStore("members").put(mem); }
+            let mem = e.target.result; if (mem) { mem.points = newPoints; mem.freeCoins = newFree; db.transaction(["members"], "readwrite").objectStore("members").put(mem); }
         };
     }
 
@@ -335,7 +320,7 @@ async function finalizeOrder(shouldPrint) {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone || "-", orderStatus: status, items: currentCart, subtotal: window.cartSubtotal, discounts: (redeemCount * activeCoinPrice), grandTotal: window.cartGrandTotal,
         paymentMethod: payString, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: coinsEarned, coinsRedeemed: redeemCount, syncStatus: "Pending" 
+        coinsEarned: coinsEarned, coinsRedeemed: redeemCount, internalCoinsUsed: internalCoins, syncStatus: "Pending" 
     };
 
     const txMenu = db.transaction(["menu"], "readwrite"); const storeMenu = txMenu.objectStore("menu");
@@ -346,11 +331,17 @@ async function finalizeOrder(shouldPrint) {
         };
     });
 
+    if (internalCoins > 0) {
+        storeMenu.openCursor().onsuccess = (ev) => {
+            const cursor = ev.target.result;
+            if (cursor) { if (String(cursor.value.name).toLowerCase() === "koin_fisik") { const updated = cursor.value; updated.currentStock = Math.max(0, updated.currentStock - internalCoins); cursor.update(updated); } cursor.continue(); }
+        };
+    }
+
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     if (requiresProcessing) { activeLaundryTickets.unshift(orderPayload); document.getElementById("ticket-count").innerText = activeLaundryTickets.length; }
     
-    if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, totalAccounted, 0, payString, newPoints, newFree); window.print(); }
-    
+    if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + free), 0, payString, newPoints, newFree); window.print(); }
     closeReview(); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
 
@@ -367,11 +358,10 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
         const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty; const lineTotal = item.qty * item.originalPrice;
         itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 2px;"><span>${qtyDisplay}x ${item.name}</span><span>${lineTotal.toLocaleString('id-ID')}</span></div>`;
     });
-
-    // Poin Section
+    
     let poinHtml = "";
     if (order.customerPhone && order.customerPhone !== "-") {
-        poinHtml = `<div style="margin-top:10px; padding-top:5px; border-top:1px dashed #000; font-size:11px; text-align:center;"><strong>-- INFO POIN LAUNDRY --</strong><br>Poin Saat Ini: ${newPoints}/10<br>Koin Gratis Tersedia: ${newFree}</div>`;
+        poinHtml = `<div style="margin-top:10px; padding-top:5px; border-top:1px dashed #000; font-size:11px; text-align:center;"><strong>-- INFO POIN LAUNDRY --</strong><br>Sisa Poin: ${newPoints}/10<br>Koin Gratis Tersedia: ${newFree}</div>`;
     }
 
     printArea.innerHTML = `
@@ -484,18 +474,43 @@ function renderHistoryList(type) {
     }
 }
 
-function openCoinRestock() {
-    document.getElementById("restock-coin-qty").value = "";
-    document.getElementById("coin-restock-modal").classList.remove("hidden");
+document.getElementById("coin-action-type").addEventListener("change", function() {
+    const noteCont = document.getElementById("coin-note-container");
+    if(this.value === "jammed") noteCont.style.display = "block"; else noteCont.style.display = "none";
+});
+
+function openCoinManagement() {
+    document.getElementById("manage-coin-qty").value = "";
+    document.getElementById("manage-coin-note").value = "";
+    document.getElementById("coin-management-modal").classList.remove("hidden");
 }
 
-function submitCoinRestock() {
-    const qty = Number(document.getElementById("restock-coin-qty").value);
+function submitCoinManagement() {
+    const qty = Number(document.getElementById("manage-coin-qty").value);
+    const actionType = document.getElementById("coin-action-type").value;
+    const note = document.getElementById("manage-coin-note").value || "Tidak ada catatan";
+    
     if (qty <= 0) return alert("Harap masukkan jumlah koin yang benar.");
-    const payload = { retrievalId: "COIN-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, coinName: "Koin_Fisik", qty: qty, syncStatus: "Pending" };
-    db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
-    document.getElementById("coin-restock-modal").classList.add("hidden"); runBackgroundSync(); 
-    alert(`Request pengembalian ${qty} Koin telah dikirim ke Admin untuk di-Approve!`);
+    if (actionType === "jammed" && document.getElementById("manage-coin-note").value.trim() === "") return alert("Untuk koin macet, Keterangan Mesin WAJIB diisi!");
+
+    if (actionType === "recycle") {
+        const payload = { retrievalId: "COIN-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, qty: qty, syncStatus: "Pending" };
+        db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
+        alert(`Request isi ulang ${qty} Koin telah dikirim ke Admin untuk di-Approve!`);
+    } else if (actionType === "jammed") {
+        const payload = { logId: "JAM-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, qty: qty, notes: note, syncStatus: "Pending" };
+        
+        const txMenu = db.transaction(["menu"], "readwrite");
+        txMenu.objectStore("menu").openCursor().onsuccess = (e) => {
+            const cursor = e.target.result;
+            if(cursor) { if(String(cursor.value.name).toLowerCase() === "koin_fisik") { const updated = cursor.value; updated.currentStock = Math.max(0, updated.currentStock - qty); cursor.update(updated); } cursor.continue(); }
+        };
+        
+        db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload); // Reusing table for queue
+        alert(`${qty} Koin Macet/Rusak berhasil dicatat dan stok fisik telah dipotong.`);
+    }
+
+    document.getElementById("coin-management-modal").classList.add("hidden"); runBackgroundSync(); 
 }
 
 function requestVoid(type, id) { currentVoidTarget = { type, id }; document.getElementById("admin-void-pin").value = ""; document.getElementById("admin-void-modal").classList.remove("hidden"); }
@@ -587,7 +602,7 @@ function applyVoidAftermath(order) {
         };
     }
     tx.oncomplete = () => { renderProductGrid(); };
-    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed } }) });
+    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed, internalCoinsUsed: order.internalCoinsUsed } }) });
 }
 
 function calculateLiveDrawer(callback) {
@@ -730,7 +745,10 @@ async function runBackgroundSync() {
         
         let coinRets = await new Promise(res => tx.objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
         for (const ret of coinRets) {
-            if (ret.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncCoinRetrieval", data: ret }) }); if ((await r.json()).status === "Success") { ret.syncStatus = "Synced"; db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").put(ret); } } catch(e) {} }
+            if (ret.syncStatus === "Pending") {
+                let actionCode = ret.notes && ret.notes.includes("Macet") ? "syncCoinJammed" : "syncCoinRetrieval";
+                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: actionCode, data: ret }) }); if ((await r.json()).status === "Success") { ret.syncStatus = "Synced"; db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").put(ret); } } catch(e) {} 
+            }
         }
     } finally { isSyncing = false; }
 }
