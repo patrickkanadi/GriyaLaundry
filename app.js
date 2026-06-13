@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 4; 
+const DB_VERSION = 5; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -9,6 +9,7 @@ let currentCart = []; let activeNumpadItem = null; let numpadValue = "0";
 let activeSettlementTicket = null; window.masterDrawerBalance = 0; let isLoggingOut = false;
 let currentVoidTarget = { type: null, id: null };
 let isMenuLocked = true; let isSyncing = false; 
+let activeCustomerProfile = null; let activeCoinPrice = 10000;
 
 function initDB() {
     return new Promise((resolve, reject) => {
@@ -62,12 +63,13 @@ function switchWorkspace(type) {
 }
 
 function lockMenu() {
-    isMenuLocked = true; document.getElementById("glass-overlay").style.opacity = "1"; document.getElementById("glass-overlay").style.pointerEvents = "auto";
+    isMenuLocked = true; activeCustomerProfile = null; document.getElementById("glass-overlay").style.opacity = "1"; document.getElementById("glass-overlay").style.pointerEvents = "auto";
     document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = ""; currentCart = []; renderCart();
+    document.getElementById("promo-indicator").classList.add("hidden");
 }
 
 function unlockMenu(isGuest) {
-    if (isGuest) { document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; } 
+    if (isGuest) { document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; activeCustomerProfile = null; } 
     else {
         const phone = document.getElementById("cust-phone").value.trim();
         if (phone.length < 5) return alert("Please enter a valid WhatsApp number.");
@@ -105,6 +107,10 @@ async function syncMasterData() {
             if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
 
             globalMenuData = result.data.menu; activeLaundryTickets = result.data.activeLaundryOrders || [];
+            
+            let cItem = globalMenuData.find(i => String(i.category).toLowerCase().includes("coin") || String(i.name).toLowerCase().includes("koin"));
+            if(cItem) activeCoinPrice = cItem.price;
+
             if(document.getElementById("ticket-count")) document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
             if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Online & Synced";
             if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#2ecc71";
@@ -122,14 +128,27 @@ function populateMemberDatalist() {
 }
 
 document.getElementById("cust-phone").addEventListener("input", (e) => {
-    const phone = e.target.value.trim();
-    if(phone.length > 4) { db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (res) => { if(res.target.result) document.getElementById("cust-name").value = res.target.result.name; }; }
+    const phone = e.target.value.trim(); activeCustomerProfile = null; document.getElementById("promo-indicator").classList.add("hidden");
+    if(phone.length > 4) { 
+        db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (res) => { 
+            if(res.target.result) {
+                activeCustomerProfile = res.target.result; document.getElementById("cust-name").value = activeCustomerProfile.name; 
+                if (activeCustomerProfile.freeCoins > 0) {
+                    document.getElementById("promo-indicator").innerText = `🎁 ${activeCustomerProfile.freeCoins} Promo Coins!`;
+                    document.getElementById("promo-indicator").classList.remove("hidden");
+                }
+            }
+        }; 
+    }
 });
 
 function saveMemberToDB(phone, name) {
-    if(!phone) return; const memberData = { phone: phone, name: name };
-    db.transaction(["members"], "readwrite").objectStore("members").put(memberData);
-    db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(memberData);
+    if(!phone) return; 
+    db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
+        let mem = e.target.result || { phone: phone, name: name, koinBalance: 0, freeCoins: 0 }; mem.name = name;
+        db.transaction(["members"], "readwrite").objectStore("members").put(mem);
+        db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(mem);
+    };
 }
 
 function loadMenuUI() {
@@ -173,23 +192,56 @@ function renderCart() {
         const lineTotal = item.qty * item.price; total += lineTotal; const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
         container.innerHTML += `<div class="cart-item"><div><span class="cart-qty">${qtyDisplay}</span> ${item.name}</div><strong>Rp ${lineTotal.toLocaleString('id-ID')}</strong></div>`;
     });
-    document.getElementById("cart-total").innerText = `Rp ${total.toLocaleString('id-ID')}`; window.cartGrandTotal = total;
+    document.getElementById("cart-total").innerText = `Rp ${total.toLocaleString('id-ID')}`; window.cartSubtotal = total; window.cartGrandTotal = total;
 }
 function clearCart() { lockMenu(); }
 
 function reviewOrder() {
     if (currentCart.length === 0) return alert("Cart is empty");
-    document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
+    
+    let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
+    
+    if (activeCustomerProfile && activeCustomerProfile.freeCoins > 0 && totalCoinsInCart > 0) {
+        document.getElementById("promo-section").classList.remove("hidden");
+        document.getElementById("promo-text").innerText = `You have ${activeCustomerProfile.freeCoins} available. Max to use now: ${Math.min(activeCustomerProfile.freeCoins, totalCoinsInCart)}`;
+        document.getElementById("redeem-coins").max = Math.min(activeCustomerProfile.freeCoins, totalCoinsInCart);
+        document.getElementById("redeem-coins").value = 0;
+    } else {
+        document.getElementById("promo-section").classList.add("hidden"); document.getElementById("redeem-coins").value = 0;
+    }
+
+    document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-hotel").value = 0;
+    document.getElementById("pay-tamu-paid").value = 0; document.getElementById("pay-tamu-piutang").value = 0; document.getElementById("pay-free").value = 0;
+    
+    calculateRemaining(); 
+    
+    // Auto-fill cash with the final grand total
     document.getElementById("pay-cash").value = window.cartGrandTotal;
-    document.getElementById("pay-qris").value = 0; document.getElementById("pay-hotel").value = 0; document.getElementById("pay-free").value = 0;
-    calculateRemaining(); document.getElementById("review-modal").classList.remove("hidden");
+    calculateRemaining();
+    
+    document.getElementById("review-modal").classList.remove("hidden");
 }
 
 function calculateRemaining() {
+    let redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
+    let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
+    
+    if (redeemCount > totalCoinsInCart) { redeemCount = totalCoinsInCart; document.getElementById("redeem-coins").value = redeemCount; }
+    if (activeCustomerProfile && redeemCount > activeCustomerProfile.freeCoins) { redeemCount = activeCustomerProfile.freeCoins; document.getElementById("redeem-coins").value = redeemCount; }
+
+    window.cartDiscount = redeemCount * activeCoinPrice;
+    window.cartGrandTotal = Math.max(0, window.cartSubtotal - window.cartDiscount);
+
+    document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
+    document.getElementById("review-discount").innerText = `- Rp ${window.cartDiscount.toLocaleString('id-ID')}`;
+    document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
+
     const c = Number(document.getElementById("pay-cash").value) || 0; const q = Number(document.getElementById("pay-qris").value) || 0;
-    const h = Number(document.getElementById("pay-hotel").value) || 0; const f = Number(document.getElementById("pay-free").value) || 0;
-    const totalPaid = c + q + h + f;
-    const remaining = Math.max(0, window.cartGrandTotal - totalPaid);
+    const h = Number(document.getElementById("pay-hotel").value) || 0; const tp = Number(document.getElementById("pay-tamu-paid").value) || 0;
+    const tu = Number(document.getElementById("pay-tamu-piutang").value) || 0; const f = Number(document.getElementById("pay-free").value) || 0;
+    
+    const totalAccounted = c + q + h + tp + tu + f;
+    const remaining = Math.max(0, window.cartGrandTotal - totalAccounted);
     document.getElementById("review-remaining").innerText = `Rp ${remaining.toLocaleString('id-ID')}`;
 }
 
@@ -197,25 +249,30 @@ function closeReview() { document.getElementById("review-modal").classList.add("
 
 async function finalizeOrder(shouldPrint) {
     const cash = Number(document.getElementById("pay-cash").value) || 0; const qris = Number(document.getElementById("pay-qris").value) || 0;
-    const hotel = Number(document.getElementById("pay-hotel").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
-    const totalPaid = cash + qris + hotel + free; const remaining = window.cartGrandTotal - totalPaid;
+    const hotel = Number(document.getElementById("pay-hotel").value) || 0; const tp = Number(document.getElementById("pay-tamu-paid").value) || 0;
+    const tu = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
+    const redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
+    
+    const totalAccounted = cash + qris + hotel + tp + tu + free; const remaining = window.cartGrandTotal - totalAccounted;
     
     let payMethods = [];
-    if(cash > 0) payMethods.push("Cash"); if(qris > 0) payMethods.push("QRIS"); if(hotel > 0) payMethods.push("Hotel"); if(free > 0) payMethods.push("Free");
+    if(cash > 0) payMethods.push("Cash"); if(qris > 0) payMethods.push("QRIS"); if(hotel > 0) payMethods.push("Hotel"); if(tp > 0) payMethods.push("Tamu(Lunas)"); if(tu > 0) payMethods.push("Tamu(Kamar)"); if(free > 0) payMethods.push("Free");
     const payString = payMethods.length > 0 ? payMethods.join("+") : "Unpaid";
 
     const custPhone = document.getElementById("cust-phone").value.trim(); const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
     if(custPhone) saveMemberToDB(custPhone, custName);
 
     const requiresProcessing = currentCart.some(i => i.workflow === "TICKET");
-    let status = "Completed"; if (requiresProcessing) status = "Processing"; else if (remaining > 0) status = "Pending Debt"; 
+    let status = "Completed"; if (requiresProcessing) status = "Processing"; else if (remaining > 0 || tu > 0) status = "Pending Debt"; 
+
+    let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
+    let coinsEarned = Math.max(0, totalCoinsInCart - redeemCount);
 
     const orderPayload = {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
-        customerName: custName, customerPhone: custPhone || "-",
-        orderStatus: status, items: currentCart, subtotal: window.cartGrandTotal, discounts: 0, grandTotal: window.cartGrandTotal,
-        paymentMethod: payString, cashAmount: cash, qrisAmount: qris, hotelAmount: hotel, freeAmount: free, remainingDue: remaining,
-        syncStatus: "Pending" 
+        customerName: custName, customerPhone: custPhone || "-", orderStatus: status, items: currentCart, subtotal: window.cartSubtotal, discounts: window.cartDiscount, grandTotal: window.cartGrandTotal,
+        paymentMethod: payString, cashAmount: cash, qrisAmount: qris, hotelAmount: hotel, tamuPaidAmount: tp, tamuPiutangAmount: tu, freeAmount: free, remainingDue: remaining,
+        coinsEarned: coinsEarned, coinsRedeemed: redeemCount, syncStatus: "Pending" 
     };
 
     const txMenu = db.transaction(["menu"], "readwrite"); const storeMenu = txMenu.objectStore("menu");
@@ -232,13 +289,11 @@ async function finalizeOrder(shouldPrint) {
         activeLaundryTickets.unshift(orderPayload); document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
     }
 
-    if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, totalPaid, remaining, payString); window.print(); }
+    if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, totalAccounted, remaining, payString); window.print(); }
     closeReview(); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
 
-async function getDynamicSettings() {
-    return new Promise(res => { let req = db.transaction(["settings"], "readonly").objectStore("settings").getAll(); req.onsuccess = e => { let s = {}; e.target.result.forEach(row => s[row.key] = row.value); res(s); }; });
-}
+async function getDynamicSettings() { return new Promise(res => { let req = db.transaction(["settings"], "readonly").objectStore("settings").getAll(); req.onsuccess = e => { let s = {}; e.target.result.forEach(row => s[row.key] = row.value); res(s); }; }); }
 
 async function buildPrintableReceipt(orderId, order, deposit, remaining, payMethod) {
     const settings = await getDynamicSettings();
@@ -251,6 +306,7 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
         const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty; const lineTotal = item.qty * item.originalPrice;
         itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 2px;"><span>${qtyDisplay}x ${item.name}</span><span>${lineTotal.toLocaleString('id-ID')}</span></div>`;
     });
+    if (order.discounts > 0) itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 2px; color:#e74c3c;"><span>[PROMO] Free Coin</span><span>- ${order.discounts.toLocaleString('id-ID')}</span></div>`;
 
     printArea.innerHTML = `
         <div style="text-align:center; margin-bottom:10px;"><h2 style="margin:0;">${h1}</h2>${h2 ? `<div style="font-size:10px;">${h2}</div>` : ''}${h3 ? `<div style="font-size:10px;">${h3}</div>` : ''}<div style="font-size:10px; margin-top:5px;">${dateStr}</div></div>
@@ -261,8 +317,8 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
             <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:14px; margin-top:5px; border-bottom: 1px solid #000; padding-bottom: 5px;"><span>TOTAL:</span><span>Rp ${order.grandTotal.toLocaleString('id-ID')}</span></div>
         </div>
         <div style="margin-top:5px; font-size:11px;">
-            <div style="display:flex; justify-content:space-between;"><span>Paid (${payMethod}):</span><span>Rp ${deposit.toLocaleString('id-ID')}</span></div>
-            ${remaining > 0 ? `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>SISA TAGIHAN:</span><span>Rp ${remaining.toLocaleString('id-ID')}</span></div>` : `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>STATUS:</span><span>LUNAS</span></div>`}
+            <div style="display:flex; justify-content:space-between;"><span>Accounted (${payMethod}):</span><span>Rp ${deposit.toLocaleString('id-ID')}</span></div>
+            ${remaining > 0 || order.tamuPiutangAmount > 0 ? `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>PIUTANG/SISA:</span><span>Rp ${(remaining + order.tamuPiutangAmount).toLocaleString('id-ID')}</span></div>` : `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>STATUS:</span><span>LUNAS</span></div>`}
         </div>
         <div style="text-align:center; margin-top:15px; font-weight:bold; font-size: 12px;">${f1}</div>${f2 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f2}</div>` : ''}${f3 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f3}</div>` : ''}
     `;
@@ -272,7 +328,7 @@ function renderActiveTickets() {
     const grid = document.getElementById("ticket-grid-container"); grid.innerHTML = "";
     activeLaundryTickets.forEach((ticket) => {
         const isReady = ticket.orderStatus === "Ready for Pickup";
-        const totalPaid = (ticket.cashAmount || 0) + (ticket.qrisAmount || 0) + (ticket.hotelAmount || 0) + (ticket.freeAmount || 0);
+        const totalPaid = (ticket.cashAmount||0) + (ticket.qrisAmount||0) + (ticket.hotelAmount||0) + (ticket.tamuPaidAmount||0) + (ticket.tamuPiutangAmount||0) + (ticket.freeAmount||0);
         const remaining = ticket.grandTotal - totalPaid;
 
         let receiptText = ticket.readableReceipt || "";
@@ -297,21 +353,17 @@ function markTicketReady(orderId) {
 function openSettlement(orderId, remainingDue) {
     activeSettlementTicket = activeLaundryTickets.find(t => t.orderId === orderId);
     document.getElementById("settle-amount").innerText = `Rp ${remainingDue.toLocaleString('id-ID')}`;
-    document.getElementById("settle-cash").value = remainingDue; document.getElementById("settle-qris").value = 0;
-    document.getElementById("settlement-modal").classList.remove("hidden");
+    document.getElementById("settle-cash").value = remainingDue; document.getElementById("settle-qris").value = 0; document.getElementById("settlement-modal").classList.remove("hidden");
 }
 
 function confirmSettlement() {
     if (!activeSettlementTicket) return;
     const c = Number(document.getElementById("settle-cash").value) || 0; const q = Number(document.getElementById("settle-qris").value) || 0;
     activeSettlementTicket.cashAmount += c; activeSettlementTicket.qrisAmount += q;
-    
     activeSettlementTicket.orderStatus = "Completed"; activeSettlementTicket.syncStatus = "Pending";
     db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
-    
     activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
-    document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
-    document.getElementById("settlement-modal").classList.add("hidden"); renderActiveTickets(); runBackgroundSync();
+    document.getElementById("ticket-count").innerText = activeLaundryTickets.length; document.getElementById("settlement-modal").classList.add("hidden"); renderActiveTickets(); runBackgroundSync();
 }
 
 function openExpenseModal() {
@@ -398,10 +450,7 @@ async function confirmAdminVoid() {
 }
 
 function processVoidApprovals(authStatuses) {
-    const tx = db.transaction(["orders", "expenses"], "readwrite");
-    const ordStore = tx.objectStore("orders"); const expStore = tx.objectStore("expenses");
-    let uiNeedsRefresh = false;
-
+    const tx = db.transaction(["orders", "expenses"], "readwrite"); const ordStore = tx.objectStore("orders"); const expStore = tx.objectStore("expenses"); let uiNeedsRefresh = false;
     ordStore.getAll().onsuccess = (e) => {
         e.target.result.forEach(order => {
             const remote = authStatuses.orders[order.orderId];
@@ -412,7 +461,6 @@ function processVoidApprovals(authStatuses) {
         });
         if (uiNeedsRefresh && !document.getElementById("history-modal").classList.contains("hidden")) renderHistoryList('orders');
     };
-
     expStore.getAll().onsuccess = (e) => {
         e.target.result.forEach(exp => {
             const remote = authStatuses.expenses[exp.expenseId];
@@ -427,8 +475,7 @@ function processVoidApprovals(authStatuses) {
 
 function applyVoidAftermath(order) {
     let itemsToReturn = []; if(order.items) order.items.forEach(i => itemsToReturn.push({ name: i.name, qty: i.qty }));
-    const tx = db.transaction(["menu", "members"], "readwrite"); const menuStore = tx.objectStore("menu"); const memberStore = tx.objectStore("members");
-
+    const tx = db.transaction(["menu"], "readwrite"); const menuStore = tx.objectStore("menu");
     itemsToReturn.forEach(item => {
         menuStore.openCursor().onsuccess = (e) => {
             const cursor = e.target.result;
@@ -436,10 +483,6 @@ function applyVoidAftermath(order) {
         };
     });
     tx.oncomplete = () => { renderProductGrid(); };
-
-    if (order.customerPhone && order.customerPhone !== "Walk-in" && order.customerPhone !== "-") {
-        memberStore.get(order.customerPhone).onsuccess = (e) => { const mem = e.target.result; if (mem) { mem.spent = Math.max(0, (mem.spent || 0) - order.grandTotal); memberStore.put(mem); } };
-    }
     if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn } }) });
 }
 
@@ -466,13 +509,8 @@ function openCashDrop(forLogout = false) {
 function submitCashDrop() {
     const pullAmount = Number(document.getElementById("drop-amount").value) || 0;
     if (pullAmount <= 0) return alert("⚠️ ERROR: Please enter a valid amount to pull from the drawer.");
-    
-    const destination = document.getElementById("drop-destination").value;
-    const customNotes = document.getElementById("drop-notes").value || (isLoggingOut ? "Shift End" : "Mid-shift Drop");
-    
-    let adminAmt = 0; let bankAmt = 0;
-    if (destination === "Bank") bankAmt = pullAmount; else adminAmt = pullAmount;
-    
+    const destination = document.getElementById("drop-destination").value; const customNotes = document.getElementById("drop-notes").value || (isLoggingOut ? "Shift End" : "Mid-shift Drop");
+    let adminAmt = 0; let bankAmt = 0; if (destination === "Bank") bankAmt = pullAmount; else adminAmt = pullAmount;
     const finalNotes = `[To ${destination}] ${customNotes}`;
     
     calculateLiveDrawer((liveAmount) => {
@@ -485,29 +523,28 @@ function submitCashDrop() {
 }
 
 function openShiftReport() {
-    let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0; let tHotel = 0; let tFree = 0; let tPiutang = 0; let tExpense = 0; let foodSummary = {};
+    let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0; let tHotel = 0; let tp = 0; let tu = 0; let tFree = 0; let tPiutang = 0; let tExpense = 0; let foodSummary = {};
     document.getElementById("meter-token").value = ""; document.getElementById("meter-pasca").value = "";
     
     db.transaction(["orders", "expenses"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
         const validOrders = e.target.result.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
         validOrders.forEach(o => {
             tOrders++; if(o.customerPhone && o.customerPhone !== "-") tCust++; tOmset += o.grandTotal;
-            tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tHotel += (o.hotelAmount || 0); tFree += (o.freeAmount || 0); tPiutang += (o.remainingDue || 0);
+            tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tHotel += (o.hotelAmount || 0); tp += (o.tamuPaidAmount || 0); tu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0); tPiutang += (o.remainingDue || 0);
             if (o.items) o.items.forEach(i => { if(!foodSummary[i.name]) foodSummary[i.name] = 0; foodSummary[i.name] += i.qty; });
         });
         
         db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = (ex) => {
-            const shiftExpenses = ex.target.result.filter(exp => exp.shiftId === currentShiftId && exp.status === "Active");
-            shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
+            const shiftExpenses = ex.target.result.filter(exp => exp.shiftId === currentShiftId && exp.status === "Active"); shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
             
             calculateLiveDrawer((liveDrawer) => {
                 document.getElementById("sr-orders").innerText = tOrders; document.getElementById("sr-customers").innerText = tCust; document.getElementById("sr-omset").innerText = `Rp ${tOmset.toLocaleString('id-ID')}`;
                 document.getElementById("sr-cash").innerText = `Rp ${tCash.toLocaleString('id-ID')}`; document.getElementById("sr-qris").innerText = `Rp ${tQris.toLocaleString('id-ID')}`; document.getElementById("sr-hotel").innerText = `Rp ${tHotel.toLocaleString('id-ID')}`;
-                document.getElementById("sr-free").innerText = `Rp ${tFree.toLocaleString('id-ID')}`; document.getElementById("sr-piutang").innerText = `Rp ${tPiutang.toLocaleString('id-ID')}`;
+                document.getElementById("sr-tamupaid").innerText = `Rp ${tp.toLocaleString('id-ID')}`; document.getElementById("sr-tamupiutang").innerText = `Rp ${tu.toLocaleString('id-ID')}`; document.getElementById("sr-free").innerText = `Rp ${tFree.toLocaleString('id-ID')}`; document.getElementById("sr-piutang").innerText = `Rp ${tPiutang.toLocaleString('id-ID')}`;
                 if(document.getElementById("sr-expense")) document.getElementById("sr-expense").innerText = `Rp ${tExpense.toLocaleString('id-ID')}`;
                 document.getElementById("sr-net").innerText = `Rp ${liveDrawer.toLocaleString('id-ID')}`; document.getElementById("shift-report-modal").classList.remove("hidden");
                 
-                window.currentShiftData = { totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalHotel: tHotel, totalFree: tFree, totalPiutang: tPiutang, totalExpenses: tExpense, net: liveDrawer, foodSummary };
+                window.currentShiftData = { totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalHotel: tHotel, totalTamuPaid: tp, totalTamuPiutang: tu, totalFree: tFree, totalPiutang: tPiutang, totalExpenses: tExpense, net: liveDrawer, foodSummary };
             });
         };
     };
@@ -524,7 +561,7 @@ async function executeFinalLogout(netCash) {
     const data = window.currentShiftData;
     const shiftPayload = {
         shiftId: currentShiftId, timestamp: new Date().toISOString(), cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), 
-        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalHotel: data.totalHotel, totalFree: data.totalFree, totalPiutang: data.totalPiutang,
+        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalHotel: data.totalHotel, totalTamuPaid: data.totalTamuPaid, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree, totalPiutang: data.totalPiutang,
         totalExpenses: data.totalExpenses, netCash: netCash, foodSummary: data.foodSummary, meterToken: data.meterToken, meterPasca: data.meterPasca, syncStatus: "Pending"
     };
 
@@ -547,7 +584,6 @@ function lockScreen() { window.location.reload(); }
 async function runBackgroundSync() {
     if (!navigator.onLine || isSyncing) return;
     isSyncing = true; 
-    
     try {
         let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members"], "readonly");
         
@@ -561,23 +597,17 @@ async function runBackgroundSync() {
         
         let drops = await new Promise(res => tx.objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
         for (const drop of drops) {
-            if (drop.syncStatus === "Pending") {
-                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncCashDrop", data: drop }) }); if ((await r.json()).status === "Success") { drop.syncStatus = "Synced"; db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").put(drop); } } catch(e) {}
-            }
+            if (drop.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncCashDrop", data: drop }) }); if ((await r.json()).status === "Success") { drop.syncStatus = "Synced"; db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").put(drop); } } catch(e) {} }
         }
         
         let reports = await new Promise(res => tx.objectStore("shift_reports").getAll().onsuccess = e => res(e.target.result));
         for (const report of reports) {
-            if (report.syncStatus === "Pending") {
-                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncShiftReport", data: report }) }); if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId); } } catch(e) {}
-            }
+            if (report.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncShiftReport", data: report }) }); if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId); } } catch(e) {} }
         }
 
         let expenses = await new Promise(res => tx.objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
         for (const exp of expenses) {
-            if (exp.syncStatus === "Pending") {
-                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncExpense", data: exp }) }); if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); } } catch(e) {}
-            }
+            if (exp.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncExpense", data: exp }) }); if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); } } catch(e) {} }
         }
 
         let voids = await new Promise(res => tx.objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
