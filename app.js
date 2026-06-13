@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 4; // Bumped to 4 to add local_shift_history
+const DB_VERSION = 4; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -8,9 +8,8 @@ let globalMenuData = []; let currentCategory = ""; let activeLaundryTickets = []
 let currentCart = []; let activeNumpadItem = null; let numpadValue = "0";
 let activeSettlementTicket = null; window.masterDrawerBalance = 0; let isLoggingOut = false;
 let currentVoidTarget = { type: null, id: null };
-let isMenuLocked = true; // Gatekeeper lock state
+let isMenuLocked = true; let isSyncing = false; // Prevents double orders
 
-// INIT DB & LOGIN
 function initDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -28,7 +27,6 @@ function initDB() {
             if (!db.objectStoreNames.contains("unsynced_members")) db.createObjectStore("unsynced_members", { keyPath: "phone" });
             if (!db.objectStoreNames.contains("expense_categories")) db.createObjectStore("expense_categories", { keyPath: "name" });
             if (!db.objectStoreNames.contains("void_requests")) db.createObjectStore("void_requests", { keyPath: "id" });
-            // NEW: Permanent Local Shift History
             if (!db.objectStoreNames.contains("local_shift_history")) db.createObjectStore("local_shift_history", { keyPath: "shiftId" });
         };
         request.onsuccess = (e) => { db = e.target.result; resolve(db); };
@@ -40,82 +38,62 @@ function attemptLogin() {
     db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = (e) => {
         const staff = e.target.result;
         if (staff) {
-            currentCashier = staff.name; currentPin = staff.pin; currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString();
-            document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden");
-            document.getElementById("display-cashier").innerText = currentCashier;
-            syncMasterData();
-            lockMenu(); // Engage gatekeeper on login
+            // Check if they have an active shift to prevent disappearing orders
+            db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(pin).onsuccess = (shiftReq) => {
+                const activeShift = shiftReq.target.result;
+                currentCashier = staff.name; currentPin = staff.pin;
+                if (activeShift) { currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime; } 
+                else {
+                    currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString();
+                    db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: pin, shiftId: currentShiftId, loginTime: currentLoginTime});
+                }
+                document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden");
+                document.getElementById("display-cashier").innerText = currentCashier;
+                syncMasterData(); lockMenu(); 
+            };
         } else { alert("Invalid PIN"); }
     };
 }
 
-// UI NAVIGATION & GATEKEEPER
 function switchWorkspace(type) {
     document.querySelectorAll('.ws-tab').forEach(b => b.classList.remove('active'));
-    document.getElementById("main-workspace").classList.add("hidden");
-    document.getElementById("active-tickets-workspace").classList.add("hidden");
-    
-    if (type === 'new') {
-        document.getElementById("tab-new-order").classList.add("active");
-        document.getElementById("main-workspace").classList.remove("hidden");
-    } else {
-        document.getElementById("tab-active-tickets").classList.add("active");
-        document.getElementById("active-tickets-workspace").classList.remove("hidden");
-        renderActiveTickets();
-    }
+    document.getElementById("main-workspace").classList.add("hidden"); document.getElementById("active-tickets-workspace").classList.add("hidden");
+    if (type === 'new') { document.getElementById("tab-new-order").classList.add("active"); document.getElementById("main-workspace").classList.remove("hidden"); } 
+    else { document.getElementById("tab-active-tickets").classList.add("active"); document.getElementById("active-tickets-workspace").classList.remove("hidden"); renderActiveTickets(); }
 }
 
 function lockMenu() {
-    isMenuLocked = true;
-    document.getElementById("glass-overlay").style.opacity = "1";
-    document.getElementById("glass-overlay").style.pointerEvents = "auto";
-    document.getElementById("cust-phone").value = "";
-    document.getElementById("cust-name").value = "";
-    currentCart = []; renderCart();
+    isMenuLocked = true; document.getElementById("glass-overlay").style.opacity = "1"; document.getElementById("glass-overlay").style.pointerEvents = "auto";
+    document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = ""; currentCart = []; renderCart();
 }
 
 function unlockMenu(isGuest) {
-    if (isGuest) {
-        document.getElementById("cust-phone").value = "";
-        document.getElementById("cust-name").value = "Walk-in";
-    } else {
+    if (isGuest) { document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; } 
+    else {
         const phone = document.getElementById("cust-phone").value.trim();
         if (phone.length < 5) return alert("Please enter a valid WhatsApp number.");
     }
-    isMenuLocked = false;
-    document.getElementById("glass-overlay").style.opacity = "0";
-    setTimeout(() => { document.getElementById("glass-overlay").style.pointerEvents = "none"; }, 300);
+    isMenuLocked = false; document.getElementById("glass-overlay").style.opacity = "0"; setTimeout(() => { document.getElementById("glass-overlay").style.pointerEvents = "none"; }, 300);
 }
 
-// MANUAL SYNC OVERRIDE
 async function manualPushSync() {
     if (!navigator.onLine) return alert("You are offline!");
-    document.getElementById("network-text").innerText = "Pushing Data...";
-    document.getElementById("network-dot").style.backgroundColor = "#f39c12";
-    await runBackgroundSync(); 
-    document.getElementById("network-text").innerText = "Pulling Data...";
-    await syncMasterData(); 
-    alert("Database Synced Successfully!");
+    document.getElementById("network-text").innerText = "Pushing Data..."; document.getElementById("network-dot").style.backgroundColor = "#f39c12";
+    await runBackgroundSync(); document.getElementById("network-text").innerText = "Pulling Data..."; await syncMasterData(); alert("Database Synced!");
 }
 
-// SYNC ENGINE
 async function syncMasterData() {
     if (!navigator.onLine) {
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Offline Mode";
-        if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c";
-        return;
+        if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c"; return;
     }
-    
     if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Syncing...";
     if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#f39c12";
 
     try {
-        const response = await fetch(API_URL); 
-        const result = await response.json();
-        
+        const response = await fetch(API_URL); const result = await response.json();
         if (result.status === "Success") {
             window.masterDrawerBalance = result.masterDrawerBalance || 0; 
-            
             const tx = db.transaction(["staff", "menu", "settings", "members", "expense_categories"], "readwrite");
             
             const staffStore = tx.objectStore("staff"); staffStore.clear(); result.data.staff.forEach(s => staffStore.add(s));
@@ -123,58 +101,40 @@ async function syncMasterData() {
             const memStore = tx.objectStore("members"); memStore.clear(); result.data.members.forEach(m => memStore.add(m));
             const expCatStore = tx.objectStore("expense_categories"); expCatStore.clear(); 
             if(result.data.expenseCategories) result.data.expenseCategories.forEach(c => expCatStore.add({name: c}));
-            
             const settingsStore = tx.objectStore("settings"); settingsStore.clear(); 
             for (const [key, value] of Object.entries(result.data.settings)) { settingsStore.add({ key: key, value: value }); }
-            
             if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
 
-            globalMenuData = result.data.menu;
-            activeLaundryTickets = result.data.activeLaundryOrders || [];
-            
+            globalMenuData = result.data.menu; activeLaundryTickets = result.data.activeLaundryOrders || [];
             if(document.getElementById("ticket-count")) document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
-            
             if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Online & Synced";
             if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#2ecc71";
-            
-            if (!document.getElementById("pos-screen").classList.contains("hidden")) {
-                loadMenuUI(); renderActiveTickets(); populateMemberDatalist();
-            }
-        } else { throw new Error(result.message || "Server error"); }
+            if (!document.getElementById("pos-screen").classList.contains("hidden")) { loadMenuUI(); renderActiveTickets(); populateMemberDatalist(); }
+        } else { throw new Error(result.message); }
     } catch (e) { 
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Sync Failed"; 
         if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c";
     }
 }
 
-// AUTO-COMPLETE MEMBERS
 function populateMemberDatalist() {
     const list = document.getElementById("member-list"); list.innerHTML = "";
-    db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (e) => {
-        e.target.result.forEach(member => { const opt = document.createElement("option"); opt.value = member.phone; opt.innerText = member.name; list.appendChild(opt); });
-    };
+    db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (e) => { e.target.result.forEach(member => { const opt = document.createElement("option"); opt.value = member.phone; opt.innerText = member.name; list.appendChild(opt); }); };
 }
 
 document.getElementById("cust-phone").addEventListener("input", (e) => {
     const phone = e.target.value.trim();
-    if(phone.length > 4) {
-        db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (res) => {
-            if(res.target.result) document.getElementById("cust-name").value = res.target.result.name;
-        };
-    }
+    if(phone.length > 4) { db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (res) => { if(res.target.result) document.getElementById("cust-name").value = res.target.result.name; }; }
 });
 
 function saveMemberToDB(phone, name) {
-    if(!phone) return;
-    const memberData = { phone: phone, name: name };
+    if(!phone) return; const memberData = { phone: phone, name: name };
     db.transaction(["members"], "readwrite").objectStore("members").put(memberData);
     db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(memberData);
 }
 
-// MENU & NUMPAD LOGIC
 function loadMenuUI() {
-    const categories = [...new Set(globalMenuData.map(i => i.category))];
-    currentCategory = categories[0];
+    const categories = [...new Set(globalMenuData.map(i => i.category))]; currentCategory = categories[0];
     const catContainer = document.getElementById("category-container"); catContainer.innerHTML = "";
     categories.forEach(cat => {
         const btn = document.createElement("button"); btn.className = `cat-btn ${cat === currentCategory ? "active" : ""}`; btn.innerText = cat;
@@ -189,10 +149,7 @@ function renderProductGrid() {
     globalMenuData.filter(i => i.category === currentCategory).forEach(item => {
         const card = document.createElement("div"); card.className = "product-card";
         card.innerHTML = `<div><h4 style="margin-top:0;">${item.name}</h4></div> <div class="price-badge">Rp ${item.price.toLocaleString('id-ID')}</div>`;
-        card.onclick = () => { 
-            if(isMenuLocked) return; // Prevent clicking if locked
-            if (item.inputMode === "DECIMAL") openNumpad(item); else addToCart(item, 1); 
-        };
+        card.onclick = () => { if(isMenuLocked) return; if (item.inputMode === "DECIMAL") openNumpad(item); else addToCart(item, 1); };
         grid.appendChild(card);
     });
 }
@@ -200,14 +157,11 @@ function renderProductGrid() {
 function openNumpad(item) { activeNumpadItem = item; numpadValue = "0"; document.getElementById("numpad-display").innerText = "0"; document.getElementById("numpad-modal").classList.remove("hidden"); }
 function closeNumpad() { document.getElementById("numpad-modal").classList.add("hidden"); activeNumpadItem = null; }
 function numpadPress(val) {
-    if (val === 'DEL') { numpadValue = numpadValue.slice(0, -1) || "0"; }
-    else if (val === '.') { if (!numpadValue.includes('.')) numpadValue += '.'; }
-    else { numpadValue = numpadValue === "0" ? String(val) : numpadValue + val; }
+    if (val === 'DEL') { numpadValue = numpadValue.slice(0, -1) || "0"; } else if (val === '.') { if (!numpadValue.includes('.')) numpadValue += '.'; } else { numpadValue = numpadValue === "0" ? String(val) : numpadValue + val; }
     document.getElementById("numpad-display").innerText = numpadValue;
 }
 function confirmNumpad() { let qty = parseFloat(numpadValue); if (qty > 0) addToCart(activeNumpadItem, qty); closeNumpad(); }
 
-// CART LOGIC
 function addToCart(item, qty) {
     const existing = currentCart.find(i => i.itemId === item.itemId);
     if (existing) existing.qty += qty; else currentCart.push({ ...item, qty: qty, originalPrice: item.price });
@@ -215,55 +169,58 @@ function addToCart(item, qty) {
 }
 
 function renderCart() {
-    const container = document.getElementById("cart-items"); container.innerHTML = "";
-    let total = 0;
+    const container = document.getElementById("cart-items"); container.innerHTML = ""; let total = 0;
     currentCart.forEach(item => {
-        const lineTotal = item.qty * item.price; total += lineTotal;
-        const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
+        const lineTotal = item.qty * item.price; total += lineTotal; const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
         container.innerHTML += `<div class="cart-item"><div><span class="cart-qty">${qtyDisplay}</span> ${item.name}</div><strong>Rp ${lineTotal.toLocaleString('id-ID')}</strong></div>`;
     });
-    document.getElementById("cart-total").innerText = `Rp ${total.toLocaleString('id-ID')}`;
-    window.cartGrandTotal = total;
+    document.getElementById("cart-total").innerText = `Rp ${total.toLocaleString('id-ID')}`; window.cartGrandTotal = total;
 }
 function clearCart() { lockMenu(); }
 
-// CHECKOUT LOGIC
 function reviewOrder() {
     if (currentCart.length === 0) return alert("Cart is empty");
     document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
-    document.getElementById("pay-deposit").value = window.cartGrandTotal; 
-    calculateRemaining();
-    document.getElementById("review-modal").classList.remove("hidden");
+    
+    // Auto-fill cash with grand total by default
+    document.getElementById("pay-cash").value = window.cartGrandTotal;
+    document.getElementById("pay-qris").value = 0; document.getElementById("pay-hotel").value = 0; document.getElementById("pay-free").value = 0;
+    
+    calculateRemaining(); document.getElementById("review-modal").classList.remove("hidden");
 }
 
 function calculateRemaining() {
-    const deposit = Number(document.getElementById("pay-deposit").value) || 0;
-    const remaining = Math.max(0, window.cartGrandTotal - deposit);
+    const c = Number(document.getElementById("pay-cash").value) || 0; const q = Number(document.getElementById("pay-qris").value) || 0;
+    const h = Number(document.getElementById("pay-hotel").value) || 0; const f = Number(document.getElementById("pay-free").value) || 0;
+    const totalPaid = c + q + h + f;
+    const remaining = Math.max(0, window.cartGrandTotal - totalPaid);
     document.getElementById("review-remaining").innerText = `Rp ${remaining.toLocaleString('id-ID')}`;
 }
 
 function closeReview() { document.getElementById("review-modal").classList.add("hidden"); }
 
 async function finalizeOrder(shouldPrint) {
-    const deposit = Number(document.getElementById("pay-deposit").value) || 0;
-    const payMethod = document.querySelector('input[name="pay-method"]:checked').value;
-    const remaining = window.cartGrandTotal - deposit;
+    const cash = Number(document.getElementById("pay-cash").value) || 0; const qris = Number(document.getElementById("pay-qris").value) || 0;
+    const hotel = Number(document.getElementById("pay-hotel").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
+    const totalPaid = cash + qris + hotel + free;
+    const remaining = window.cartGrandTotal - totalPaid;
     
-    const custPhone = document.getElementById("cust-phone").value.trim();
-    const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
+    let payMethods = [];
+    if(cash > 0) payMethods.push("Cash"); if(qris > 0) payMethods.push("QRIS"); if(hotel > 0) payMethods.push("Hotel"); if(free > 0) payMethods.push("Free");
+    const payString = payMethods.length > 0 ? payMethods.join("+") : "Unpaid";
+
+    const custPhone = document.getElementById("cust-phone").value.trim(); const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
     if(custPhone) saveMemberToDB(custPhone, custName);
 
     const requiresProcessing = currentCart.some(i => i.workflow === "TICKET");
-    let status = "Completed";
-    if (requiresProcessing) status = "Processing"; 
-    else if (remaining > 0) status = "Pending Debt"; 
+    let status = "Completed"; if (requiresProcessing) status = "Processing"; else if (remaining > 0) status = "Pending Debt"; 
 
     const orderPayload = {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone || "-",
         orderStatus: status, items: currentCart, subtotal: window.cartGrandTotal, discounts: 0, grandTotal: window.cartGrandTotal,
-        paymentMethod: payMethod, cashAmount: payMethod === 'Cash' ? deposit : 0, qrisAmount: payMethod === 'QRIS' ? deposit : 0,
-        syncStatus: "Pending"
+        paymentMethod: payString, cashAmount: cash, qrisAmount: qris, hotelAmount: hotel, freeAmount: free, remainingDue: remaining,
+        syncStatus: "Pending" // Flag for sync engine
     };
 
     const txMenu = db.transaction(["menu"], "readwrite");
@@ -271,36 +228,22 @@ async function finalizeOrder(shouldPrint) {
     currentCart.forEach(cartItem => {
         storeMenu.get(cartItem.itemId).onsuccess = (ev) => {
             const menuItem = ev.target.result;
-            if (menuItem && menuItem.trackStock) {
-                menuItem.currentStock = Math.max(0, menuItem.currentStock - cartItem.qty);
-                storeMenu.put(menuItem);
-            }
+            if (menuItem && menuItem.trackStock) { menuItem.currentStock = Math.max(0, menuItem.currentStock - cartItem.qty); storeMenu.put(menuItem); }
         };
     });
 
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     
     if (requiresProcessing) {
-        activeLaundryTickets.unshift(orderPayload); 
-        document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
+        activeLaundryTickets.unshift(orderPayload); document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
     }
 
-    if (shouldPrint) {
-        await buildPrintableReceipt(orderPayload.orderId, orderPayload, deposit, remaining, payMethod);
-        window.print(); 
-    }
-    
+    if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, totalPaid, remaining, payString); window.print(); }
     closeReview(); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
 
-// ---------------------------------------------------------
-// DYNAMIC SETTINGS & RECEIPT PRINTING
-// ---------------------------------------------------------
 async function getDynamicSettings() {
-    return new Promise(res => {
-        let req = db.transaction(["settings"], "readonly").objectStore("settings").getAll();
-        req.onsuccess = e => { let s = {}; e.target.result.forEach(row => s[row.key] = row.value); res(s); };
-    });
+    return new Promise(res => { let req = db.transaction(["settings"], "readonly").objectStore("settings").getAll(); req.onsuccess = e => { let s = {}; e.target.result.forEach(row => s[row.key] = row.value); res(s); }; });
 }
 
 async function buildPrintableReceipt(orderId, order, deposit, remaining, payMethod) {
@@ -311,8 +254,7 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
     
     let itemsHtml = "";
     order.items.forEach(item => {
-        const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
-        const lineTotal = item.qty * item.originalPrice;
+        const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty; const lineTotal = item.qty * item.originalPrice;
         itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 2px;"><span>${qtyDisplay}x ${item.name}</span><span>${lineTotal.toLocaleString('id-ID')}</span></div>`;
     });
 
@@ -332,12 +274,11 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
     `;
 }
 
-// KANBAN / ACTIVE TICKETS LOGIC
 function renderActiveTickets() {
     const grid = document.getElementById("ticket-grid-container"); grid.innerHTML = "";
     activeLaundryTickets.forEach((ticket) => {
         const isReady = ticket.orderStatus === "Ready for Pickup";
-        const totalPaid = (ticket.cashAmount || 0) + (ticket.qrisAmount || 0);
+        const totalPaid = (ticket.cashAmount || 0) + (ticket.qrisAmount || 0) + (ticket.hotelAmount || 0) + (ticket.freeAmount || 0);
         const remaining = ticket.grandTotal - totalPaid;
 
         let receiptText = ticket.readableReceipt || "";
@@ -356,26 +297,21 @@ function renderActiveTickets() {
 
 function markTicketReady(orderId) {
     const ticket = activeLaundryTickets.find(t => t.orderId === orderId);
-    if (ticket) {
-        ticket.orderStatus = "Ready for Pickup"; ticket.syncStatus = "Pending";
-        db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
-        renderActiveTickets(); runBackgroundSync();
-    }
+    if (ticket) { ticket.orderStatus = "Ready for Pickup"; ticket.syncStatus = "Pending"; db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket); renderActiveTickets(); runBackgroundSync(); }
 }
 
 function openSettlement(orderId, remainingDue) {
     activeSettlementTicket = activeLaundryTickets.find(t => t.orderId === orderId);
     document.getElementById("settle-amount").innerText = `Rp ${remainingDue.toLocaleString('id-ID')}`;
+    document.getElementById("settle-cash").value = remainingDue; document.getElementById("settle-qris").value = 0;
     document.getElementById("settlement-modal").classList.remove("hidden");
 }
 
 function confirmSettlement() {
     if (!activeSettlementTicket) return;
-    const method = document.querySelector('input[name="settle-method"]:checked').value;
-    const totalPaidBefore = (activeSettlementTicket.cashAmount || 0) + (activeSettlementTicket.qrisAmount || 0);
-    const remaining = activeSettlementTicket.grandTotal - totalPaidBefore;
-
-    if (method === 'Cash') activeSettlementTicket.cashAmount += remaining; else activeSettlementTicket.qrisAmount += remaining;
+    const c = Number(document.getElementById("settle-cash").value) || 0; const q = Number(document.getElementById("settle-qris").value) || 0;
+    activeSettlementTicket.cashAmount += c; activeSettlementTicket.qrisAmount += q;
+    
     activeSettlementTicket.orderStatus = "Completed"; activeSettlementTicket.syncStatus = "Pending";
     db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
     
@@ -384,17 +320,14 @@ function confirmSettlement() {
     document.getElementById("settlement-modal").classList.add("hidden"); renderActiveTickets(); runBackgroundSync();
 }
 
-// ---------------------------------------------------------
-// EXPENSES
-// ---------------------------------------------------------
 function openExpenseModal() {
     document.getElementById("expense-modal").classList.remove("hidden");
     const list = document.getElementById("expense-category-list"); list.innerHTML = "";
     db.transaction(["expense_categories"], "readonly").objectStore("expense_categories").getAll().onsuccess = (e) => { e.target.result.forEach(cat => { const opt = document.createElement("option"); opt.value = cat.name; list.appendChild(opt); }); };
 }
+
 function saveExpense() {
-    const amount = Number(document.getElementById("exp-amount").value);
-    const category = document.getElementById("exp-category").value.trim();
+    const amount = Number(document.getElementById("exp-amount").value); const category = document.getElementById("exp-category").value.trim();
     if (amount <= 0 || !category) return alert("Please enter a valid amount and category.");
     db.transaction(["expense_categories"], "readwrite").objectStore("expense_categories").put({ name: category });
 
@@ -403,9 +336,6 @@ function saveExpense() {
     document.getElementById("expense-modal").classList.add("hidden"); document.getElementById("exp-amount").value = ""; document.getElementById("exp-category").value = ""; document.getElementById("exp-desc").value = ""; alert("Expense Recorded!"); runBackgroundSync();
 }
 
-// ---------------------------------------------------------
-// HISTORY & VOIDS
-// ---------------------------------------------------------
 function openHistoryModal() { document.getElementById("history-modal").classList.remove("hidden"); renderHistoryList('orders'); }
 
 function renderHistoryList(type) {
@@ -446,8 +376,7 @@ function requestVoid(type, id) { currentVoidTarget = { type, id }; document.getE
 function submitRemoteVoid() {
     const type = currentVoidTarget.type; const id = currentVoidTarget.id; const storeName = type === 'orders' ? "orders" : "expenses";
     db.transaction([storeName], "readwrite").objectStore(storeName).get(id).onsuccess = (e) => {
-        const item = e.target.result;
-        if (type === 'orders') item.orderStatus = "Void Pending"; else item.status = "Void Pending";
+        const item = e.target.result; if (type === 'orders') item.orderStatus = "Void Pending"; else item.status = "Void Pending";
         db.transaction([storeName], "readwrite").objectStore(storeName).put(item); renderHistoryList(type); 
     };
     db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add({ id: id, type: type, status: "Void Pending", authName: "Waiting" });
@@ -460,18 +389,12 @@ async function confirmAdminVoid() {
     
     db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = (e) => {
         const staff = e.target.result; const isAdmin = (staff && staff.role.toLowerCase() === 'admin');
-
         if (isMaster || isAdmin) {
-            const authName = isMaster ? "Master Admin" : staff.name;
-            const type = currentVoidTarget.type; const id = currentVoidTarget.id; const storeName = type === 'orders' ? "orders" : "expenses";
-            
+            const authName = isMaster ? "Master Admin" : staff.name; const type = currentVoidTarget.type; const id = currentVoidTarget.id; const storeName = type === 'orders' ? "orders" : "expenses";
             db.transaction([storeName], "readwrite").objectStore(storeName).get(id).onsuccess = (ev) => {
                 const item = ev.target.result;
-                if (type === 'orders') { 
-                    item.orderStatus = "Voided"; item.voidAuth = authName; 
-                    if(item.items) item.items.forEach(i => i.qty = Number(i.qty)); 
-                    applyVoidAftermath(item); 
-                } else { item.status = "Voided"; item.voidAuth = authName; }
+                if (type === 'orders') { item.orderStatus = "Voided"; item.voidAuth = authName; if(item.items) item.items.forEach(i => i.qty = Number(i.qty)); applyVoidAftermath(item); } 
+                else { item.status = "Voided"; item.voidAuth = authName; }
                 item.syncStatus = "Pending"; db.transaction([storeName], "readwrite").objectStore(storeName).put(item); renderHistoryList(type);
             };
             db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add({ id: id, type: type, status: "Voided", authName: authName });
@@ -489,11 +412,8 @@ function processVoidApprovals(authStatuses) {
         e.target.result.forEach(order => {
             const remote = authStatuses.orders[order.orderId];
             if (remote) {
-                if (remote.status === "Voided" && order.orderStatus !== "Voided") {
-                    order.orderStatus = "Voided"; ordStore.put(order); uiNeedsRefresh = true; applyVoidAftermath(order); 
-                } else if (remote.status !== "Void Pending" && remote.status !== "Voided" && order.orderStatus === "Void Pending") {
-                    order.orderStatus = remote.status; ordStore.put(order); uiNeedsRefresh = true;
-                }
+                if (remote.status === "Voided" && order.orderStatus !== "Voided") { order.orderStatus = "Voided"; ordStore.put(order); uiNeedsRefresh = true; applyVoidAftermath(order); } 
+                else if (remote.status !== "Void Pending" && remote.status !== "Voided" && order.orderStatus === "Void Pending") { order.orderStatus = remote.status; ordStore.put(order); uiNeedsRefresh = true; }
             }
         });
         if (uiNeedsRefresh && !document.getElementById("history-modal").classList.contains("hidden")) renderHistoryList('orders');
@@ -503,11 +423,8 @@ function processVoidApprovals(authStatuses) {
         e.target.result.forEach(exp => {
             const remote = authStatuses.expenses[exp.expenseId];
             if (remote) {
-                if (remote.status === "Voided" && exp.status !== "Voided") {
-                    exp.status = "Voided"; expStore.put(exp); uiNeedsRefresh = true;
-                } else if (remote.status !== "Void Pending" && remote.status !== "Voided" && exp.status === "Void Pending") {
-                    exp.status = remote.status; expStore.put(exp); uiNeedsRefresh = true;
-                }
+                if (remote.status === "Voided" && exp.status !== "Voided") { exp.status = "Voided"; expStore.put(exp); uiNeedsRefresh = true; } 
+                else if (remote.status !== "Void Pending" && remote.status !== "Voided" && exp.status === "Void Pending") { exp.status = remote.status; expStore.put(exp); uiNeedsRefresh = true; }
             }
         });
         if (uiNeedsRefresh && !document.getElementById("history-modal").classList.contains("hidden")) renderHistoryList('expenses');
@@ -515,43 +432,29 @@ function processVoidApprovals(authStatuses) {
 }
 
 function applyVoidAftermath(order) {
-    let itemsToReturn = [];
-    if(order.items) order.items.forEach(i => itemsToReturn.push({ name: i.name, qty: i.qty }));
-    
-    const tx = db.transaction(["menu", "members"], "readwrite");
-    const menuStore = tx.objectStore("menu"); const memberStore = tx.objectStore("members");
+    let itemsToReturn = []; if(order.items) order.items.forEach(i => itemsToReturn.push({ name: i.name, qty: i.qty }));
+    const tx = db.transaction(["menu", "members"], "readwrite"); const menuStore = tx.objectStore("menu"); const memberStore = tx.objectStore("members");
 
     itemsToReturn.forEach(item => {
         menuStore.openCursor().onsuccess = (e) => {
             const cursor = e.target.result;
-            if (cursor) {
-                if (cursor.value.name === item.name && cursor.value.trackStock) { const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); }
-                cursor.continue();
-            }
+            if (cursor) { if (cursor.value.name === item.name && cursor.value.trackStock) { const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); } cursor.continue(); }
         };
     });
     tx.oncomplete = () => { renderProductGrid(); };
 
     if (order.customerPhone && order.customerPhone !== "Walk-in" && order.customerPhone !== "-") {
-        memberStore.get(order.customerPhone).onsuccess = (e) => {
-            const mem = e.target.result;
-            if (mem) { mem.spent = Math.max(0, (mem.spent || 0) - order.grandTotal); memberStore.put(mem); }
-        };
+        memberStore.get(order.customerPhone).onsuccess = (e) => { const mem = e.target.result; if (mem) { mem.spent = Math.max(0, (mem.spent || 0) - order.grandTotal); memberStore.put(mem); } };
     }
-
     if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn } }) });
 }
 
-// ---------------------------------------------------------
-// UTILITIES: DRAWER, SHIFT REPORT & SYNC
-// ---------------------------------------------------------
 function calculateLiveDrawer(callback) {
     let liveDrawer = window.masterDrawerBalance || 0; 
     let tx = db.transaction(["orders", "cash_drops", "expenses"], "readonly");
-    let ordersReq = tx.objectStore("orders").getAll();
-    let dropReq = tx.objectStore("cash_drops").getAll();
-    let expReq = tx.objectStore("expenses").getAll();
+    let ordersReq = tx.objectStore("orders").getAll(); let dropReq = tx.objectStore("cash_drops").getAll(); let expReq = tx.objectStore("expenses").getAll();
     tx.oncomplete = () => {
+        // Only count CASH. Ignore QRIS/Hotel/Free.
         ordersReq.result.forEach(o => { if (o.syncStatus === "Pending" && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") liveDrawer += (o.cashAmount || 0); });
         dropReq.result.forEach(d => { if (d.syncStatus === "Pending") liveDrawer -= (d.toAdmin + d.toBank); });
         expReq.result.forEach(e => { if (e.syncStatus === "Pending" && e.status === "Active") liveDrawer -= (e.amount || 0); });
@@ -560,21 +463,15 @@ function calculateLiveDrawer(callback) {
 }
 
 function openCashDrop(forLogout = false) {
-    isLoggingOut = forLogout;
-    document.getElementById("cash-drop-title").innerText = isLoggingOut ? "🔒 End of Shift Cash Log" : "🏦 Store Money";
-    document.getElementById("btn-drop-cancel").innerText = isLoggingOut ? "Cancel Logout" : "Cancel";
-    document.getElementById("btn-drop-confirm").innerText = isLoggingOut ? "Confirm & Logout" : "Save Record";
+    isLoggingOut = forLogout; document.getElementById("cash-drop-title").innerText = isLoggingOut ? "🔒 End of Shift Cash Log" : "🏦 Store Money";
+    document.getElementById("btn-drop-cancel").innerText = isLoggingOut ? "Cancel Logout" : "Cancel"; document.getElementById("btn-drop-confirm").innerText = isLoggingOut ? "Confirm & Logout" : "Save Record";
     document.getElementById("drop-admin").value = 0; document.getElementById("drop-bank").value = 0; document.getElementById("drop-notes").value = "";
     
-    calculateLiveDrawer((liveAmount) => {
-        document.getElementById("live-drawer-display").innerText = `Rp ${liveAmount.toLocaleString('id-ID')}`;
-        document.getElementById("cash-drop-modal").classList.remove("hidden");
-    });
+    calculateLiveDrawer((liveAmount) => { document.getElementById("live-drawer-display").innerText = `Rp ${liveAmount.toLocaleString('id-ID')}`; document.getElementById("cash-drop-modal").classList.remove("hidden"); });
 }
 
 function submitCashDrop() {
-    const adminAmt = Number(document.getElementById("drop-admin").value) || 0;
-    const bankAmt = Number(document.getElementById("drop-bank").value) || 0;
+    const adminAmt = Number(document.getElementById("drop-admin").value) || 0; const bankAmt = Number(document.getElementById("drop-bank").value) || 0;
     const notes = document.getElementById("drop-notes").value || (isLoggingOut ? "Shift End" : "Mid-shift Drop");
     
     calculateLiveDrawer((liveAmount) => {
@@ -587,20 +484,31 @@ function submitCashDrop() {
 }
 
 function openShiftReport() {
-    let totalCustomers = 0; let totalOmset = 0; let totalCash = 0; let totalQris = 0; let foodSummary = {};
+    let tCust = 0; let tOrders = 0; let tOmset = 0; 
+    let tCash = 0; let tQris = 0; let tHotel = 0; let tFree = 0; let tPiutang = 0; 
+    let foodSummary = {};
+    
     db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
         const validOrders = e.target.result.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
         validOrders.forEach(o => {
-            totalCustomers++; totalOmset += o.grandTotal;
-            totalCash += (o.cashAmount || 0); totalQris += (o.qrisAmount || 0);
+            tOrders++; if(o.customerPhone && o.customerPhone !== "-") tCust++;
+            tOmset += o.grandTotal;
+            tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); 
+            tHotel += (o.hotelAmount || 0); tFree += (o.freeAmount || 0);
+            tPiutang += (o.remainingDue || 0);
             if (o.items) o.items.forEach(i => { if(!foodSummary[i.name]) foodSummary[i.name] = 0; foodSummary[i.name] += i.qty; });
         });
         calculateLiveDrawer((liveDrawer) => {
-            document.getElementById("shift-customers").innerText = totalCustomers + " Customers";
-            document.getElementById("shift-omset").innerText = `Rp ${totalOmset.toLocaleString('id-ID')} Omset`;
-            document.getElementById("shift-net").innerText = `Rp ${liveDrawer.toLocaleString('id-ID')} Drawer`;
+            document.getElementById("sr-orders").innerText = tOrders; document.getElementById("sr-customers").innerText = tCust;
+            document.getElementById("sr-omset").innerText = `Rp ${tOmset.toLocaleString('id-ID')}`;
+            document.getElementById("sr-cash").innerText = `Rp ${tCash.toLocaleString('id-ID')}`;
+            document.getElementById("sr-qris").innerText = `Rp ${tQris.toLocaleString('id-ID')}`;
+            document.getElementById("sr-hotel").innerText = `Rp ${tHotel.toLocaleString('id-ID')}`;
+            document.getElementById("sr-free").innerText = `Rp ${tFree.toLocaleString('id-ID')}`;
+            document.getElementById("sr-piutang").innerText = `Rp ${tPiutang.toLocaleString('id-ID')}`;
+            document.getElementById("sr-net").innerText = `Rp ${liveDrawer.toLocaleString('id-ID')}`;
             document.getElementById("shift-report-modal").classList.remove("hidden");
-            window.currentShiftData = { totalCustomers, totalOmset, totalCash, totalQris, net: liveDrawer, foodSummary };
+            window.currentShiftData = { totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalHotel: tHotel, totalFree: tFree, totalPiutang: tPiutang, net: liveDrawer, foodSummary };
         });
     };
 }
@@ -611,13 +519,12 @@ async function executeFinalLogout(netCash) {
     const data = window.currentShiftData;
     const shiftPayload = {
         shiftId: currentShiftId, timestamp: new Date().toISOString(), cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), 
-        totalCustomers: data.totalCustomers, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalExpenses: 0, netCash: netCash,
-        foodSummary: data.foodSummary, syncStatus: "Pending"
+        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, 
+        totalCash: data.totalCash, totalQris: data.totalQris, totalHotel: data.totalHotel, totalFree: data.totalFree, totalPiutang: data.totalPiutang,
+        totalExpenses: 0, netCash: netCash, foodSummary: data.foodSummary, syncStatus: "Pending"
     };
 
-    // Save a permanent copy to the new local history table before syncing
     db.transaction(["local_shift_history"], "readwrite").objectStore("local_shift_history").add(shiftPayload);
-    
     db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").add(shiftPayload);
     db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").delete(currentPin); 
     
@@ -634,51 +541,55 @@ async function executeFinalLogout(netCash) {
 function lockScreen() { window.location.reload(); }
 
 async function runBackgroundSync() {
-    if (!navigator.onLine) return;
-    let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members"], "readonly");
+    if (!navigator.onLine || isSyncing) return;
+    isSyncing = true; // Lock the sync process
     
-    let orders = await new Promise(res => tx.objectStore("orders").getAll().onsuccess = e => res(e.target.result));
-    for (const order of orders) {
-        if (order.syncStatus === "Pending") {
-            try { 
-                let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncOrder", data: order }) });
-                if ((await r.json()).status === "Success") { order.syncStatus = "Synced"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); } 
+    try {
+        let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members"], "readonly");
+        
+        let orders = await new Promise(res => tx.objectStore("orders").getAll().onsuccess = e => res(e.target.result));
+        for (const order of orders) {
+            if (order.syncStatus === "Pending") {
+                order.syncStatus = "Syncing"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order);
+                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncOrder", data: order }) }); if ((await r.json()).status === "Success") { order.syncStatus = "Synced"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); } else { order.syncStatus = "Pending"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); } } catch(e) { order.syncStatus = "Pending"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); }
+            }
+        }
+        
+        let drops = await new Promise(res => tx.objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
+        for (const drop of drops) {
+            if (drop.syncStatus === "Pending") {
+                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncCashDrop", data: drop }) }); if ((await r.json()).status === "Success") { drop.syncStatus = "Synced"; db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").put(drop); } } catch(e) {}
+            }
+        }
+        
+        let reports = await new Promise(res => tx.objectStore("shift_reports").getAll().onsuccess = e => res(e.target.result));
+        for (const report of reports) {
+            if (report.syncStatus === "Pending") {
+                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncShiftReport", data: report }) }); if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId); } } catch(e) {}
+            }
+        }
+
+        let expenses = await new Promise(res => tx.objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
+        for (const exp of expenses) {
+            if (exp.syncStatus === "Pending") {
+                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncExpense", data: exp }) }); if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); } } catch(e) {}
+            }
+        }
+
+        let voids = await new Promise(res => tx.objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
+        for (const req of voids) {
+            try {
+                const actionType = req.type === 'orders' ? "requestOrderVoid" : "requestExpenseVoid"; const payload = req.type === 'orders' ? { orderId: req.id, status: req.status, authName: req.authName } : { expenseId: req.id, status: req.status, authName: req.authName };
+                let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: actionType, ...payload }) }); if ((await r.json()).status === "Success") { db.transaction(["void_requests"], "readwrite").objectStore("void_requests").delete(req.id); }
             } catch(e) {}
         }
-    }
-    
-    let drops = await new Promise(res => tx.objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
-    for (const drop of drops) {
-        if (drop.syncStatus === "Pending") {
-            try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncCashDrop", data: drop }) }); if ((await r.json()).status === "Success") { drop.syncStatus = "Synced"; db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").put(drop); } } catch(e) {}
-        }
-    }
-    
-    let reports = await new Promise(res => tx.objectStore("shift_reports").getAll().onsuccess = e => res(e.target.result));
-    for (const report of reports) {
-        if (report.syncStatus === "Pending") {
-            try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncShiftReport", data: report }) }); if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId); } } catch(e) {}
-        }
-    }
 
-    let expenses = await new Promise(res => tx.objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
-    for (const exp of expenses) {
-        if (exp.syncStatus === "Pending") {
-            try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncExpense", data: exp }) }); if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); } } catch(e) {}
+        let members = await new Promise(res => tx.objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
+        for (const mem of members) {
+            try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncMember", data: mem }) }); if ((await r.json()).status === "Success") { db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone); } } catch(e) {}
         }
-    }
-
-    let voids = await new Promise(res => tx.objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
-    for (const req of voids) {
-        try {
-            const actionType = req.type === 'orders' ? "requestOrderVoid" : "requestExpenseVoid"; const payload = req.type === 'orders' ? { orderId: req.id, status: req.status, authName: req.authName } : { expenseId: req.id, status: req.status, authName: req.authName };
-            let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: actionType, ...payload }) }); if ((await r.json()).status === "Success") { db.transaction(["void_requests"], "readwrite").objectStore("void_requests").delete(req.id); }
-        } catch(e) {}
-    }
-
-    let members = await new Promise(res => tx.objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
-    for (const mem of members) {
-        try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncMember", data: mem }) }); if ((await r.json()).status === "Success") { db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone); } } catch(e) {}
+    } finally {
+        isSyncing = false; // Release the lock
     }
 }
 
