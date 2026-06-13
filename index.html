@@ -43,7 +43,8 @@
         .price-badge { background: #e8f4f8; color: #2980b9; font-weight: bold; padding: 6px 12px; border-radius: 20px; display: inline-block; margin-top: 10px;}
 
         #cart-section { flex: 4; display: flex; flex-direction: column; background: #fdfbf7; }
-        #cart-header { padding: 15px; background: #2c3e50; color: white; font-weight: bold; text-align: center; }
+        #cart-header { padding: 15px; background: #2c3e50; color: white; font-weight: bold; text-align: center; display: flex; justify-content: space-between;}
+        #promo-indicator { background: #f1c40f; color: #856404; font-size: 12px; padding: 2px 8px; border-radius: 12px; font-weight: bold; }
         #cart-items { flex: 1; padding: 15px; overflow-y: auto; }
         .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px dashed #ccc; font-size: 15px; }
         .cart-qty { font-weight: bold; background: #3498db; color: white; padding: 4px 8px; border-radius: 6px; margin-right: 10px; }
@@ -61,7 +62,7 @@
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 10px;}
         .modal-content { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 95vh; overflow-y: auto; width: 100%; max-width: 450px; }
-        .modal-large { max-width: 700px; }
+        .modal-large { max-width: 750px; }
         
         .numpad-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px; }
         .num-btn { padding: 15px; font-size: 20px; font-weight: bold; border: 1px solid #ddd; background: #f9f9f9; border-radius: 8px; cursor: pointer; }
@@ -80,14 +81,12 @@
         .status-pending { background: #fff3cd; color: #856404; }
         .status-voided { background: #f8d7da; color: #721c24; }
 
-        /* DASHBOARD SHIFT REPORT CSS */
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .stat-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 15px; text-align: center; }
         .stat-box .stat-label { font-size: 12px; color: #7f8c8d; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
         .stat-box .stat-value { font-size: 24px; font-weight: bold; color: #2c3e50; }
         .revenue-breakdown { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
         .revenue-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #eee; font-size: 15px; }
-        .revenue-row:last-child { border-bottom: none; }
 
         #printable-area { display: none; }
         @media print {
@@ -160,7 +159,7 @@
             </div>
             
             <div id="cart-section">
-                <div id="cart-header">Current Cart</div>
+                <div id="cart-header"><span>Current Cart</span> <span id="promo-indicator" class="hidden">🎁 Promo Available!</span></div>
                 <div id="cart-items"></div>
                 <div id="checkout-panel">
                     <div class="grand-total"><span>Total:</span> <span id="cart-total">Rp 0</span></div>
@@ -176,6 +175,7 @@
         </div>
     </div>
 
+    <!-- NUMPAD MODAL -->
     <div id="numpad-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:320px; text-align:center;">
             <h3 id="numpad-title" style="margin-top:0; color:#2980b9;">Enter Weight/Qty</h3>
@@ -193,26 +193,34 @@
         </div>
     </div>
 
+    <!-- CHECKOUT MODAL (PROMO + SPLIT PAYMENT) -->
     <div id="review-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <h2 style="margin-top:0; border-bottom:2px solid #eee; padding-bottom:10px;">🧾 Checkout & Payment</h2>
             
-            <div style="background:#f9f9f9; padding:15px; border-radius:8px; border:1px solid #eee; margin-bottom:15px;">
-                <div style="display:flex; justify-content:space-between; font-size:24px; color:#2c3e50; font-weight:bold;">
-                    <span>Grand Total:</span> <span id="review-grandtotal">Rp 0</span>
-                </div>
+            <div id="promo-section" class="hidden" style="background:#fff3cd; border:1px solid #ffeeba; padding:15px; border-radius:8px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+                <div><strong style="color:#856404; font-size:16px;">🎁 Redeem Free Coins</strong><br><small style="color:#856404;" id="promo-text">You have 0 free coins available.</small></div>
+                <div><input type="number" id="redeem-coins" value="0" min="0" oninput="calculateRemaining()" style="width:80px; padding:10px; font-weight:bold; font-size:18px; text-align:center; border:2px solid #f1c40f; border-radius:6px;"></div>
             </div>
 
-            <p style="font-weight:bold; color:#e67e22; margin-bottom:5px;">💵 Split Payment (Fill multiple if needed)</p>
+            <div style="background:#f9f9f9; padding:15px; border-radius:8px; border:1px solid #eee; margin-bottom:15px;">
+                <div style="display:flex; justify-content:space-between; font-size:16px; color:#7f8c8d; margin-bottom:5px;"><span>Subtotal:</span> <span id="review-subtotal">Rp 0</span></div>
+                <div style="display:flex; justify-content:space-between; font-size:16px; color:#e74c3c; margin-bottom:10px; border-bottom:1px solid #ddd; padding-bottom:10px;"><span>Promo Discount:</span> <span id="review-discount">- Rp 0</span></div>
+                <div style="display:flex; justify-content:space-between; font-size:24px; color:#2c3e50; font-weight:bold;"><span>Grand Total:</span> <span id="review-grandtotal">Rp 0</span></div>
+            </div>
+
+            <p style="font-weight:bold; color:#e67e22; margin-bottom:5px;">💵 Split Payment Grid</p>
             <div class="split-pay-grid">
                 <div class="form-box" style="margin-bottom:0;"><label>Cash (Rp)</label><input type="number" id="pay-cash" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
                 <div class="form-box" style="margin-bottom:0;"><label>QRIS (Rp)</label><input type="number" id="pay-qris" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
-                <div class="form-box" style="margin-bottom:0;"><label>Hotel / Transfer (Rp)</label><input type="number" id="pay-hotel" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
+                <div class="form-box" style="margin-bottom:0;"><label>Hotel / Bank Transfer (Rp)</label><input type="number" id="pay-hotel" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
+                <div class="form-box" style="margin-bottom:0;"><label>Tamu Hotel - LUNAS (Rp)</label><input type="number" id="pay-tamu-paid" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
+                <div class="form-box" style="margin-bottom:0; background:#f8d7da; padding:5px; border-radius:6px;"><label style="color:#721c24;">Tamu Hotel - KAMAR/PIUTANG (Rp)</label><input type="number" id="pay-tamu-piutang" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
                 <div class="form-box" style="margin-bottom:0;"><label>Free / Compliment (Rp)</label><input type="number" id="pay-free" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
             </div>
 
             <div style="display:flex; justify-content:space-between; font-size:18px; color:#c0392b; font-weight:bold; margin-bottom: 20px; padding:10px; background:#fdf2e9; border-radius:8px;">
-                <span>Piutang / Remaining Due:</span> <span id="review-remaining">Rp 0</span>
+                <span>General Piutang (Sisa Tagihan):</span> <span id="review-remaining">Rp 0</span>
             </div>
 
             <div style="display: flex; gap: 10px; flex-wrap:wrap;">
@@ -223,6 +231,7 @@
         </div>
     </div>
 
+    <!-- SETTLEMENT MODAL -->
     <div id="settlement-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">💳 Settle Pickup</h2>
@@ -238,6 +247,7 @@
         </div>
     </div>
 
+    <!-- EXPENSE MODAL -->
     <div id="expense-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">💸 Record Expense</h2>
@@ -251,6 +261,7 @@
         </div>
     </div>
 
+    <!-- HISTORY MODAL -->
     <div id="history-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <h2 style="margin-top:0;">📋 System History</h2>
@@ -264,8 +275,10 @@
         </div>
     </div>
 
+    <!-- ADMIN VOID MODAL -->
     <div id="admin-void-modal" class="modal-overlay hidden"><div class="modal-content" style="text-align:center;"><h2 style="margin-top:0; color:#e74c3c;">⚠️ Admin Override</h2><input type="password" id="admin-void-pin" placeholder="****" inputmode="numeric" style="font-size:24px; text-align:center; margin-bottom:15px; width:100%; padding:10px; border:2px solid #bdc3c7; border-radius:8px;"><div style="display:flex; gap:10px; flex-wrap:wrap;"><button onclick="document.getElementById('admin-void-modal').classList.add('hidden')" style="flex:1; min-width:80px; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold;">Cancel</button><button onclick="submitRemoteVoid()" style="flex:1; min-width:100px; padding:15px; background:#f39c12; color:white; border:none; border-radius:8px; font-weight:bold;">Request</button><button onclick="confirmAdminVoid()" style="flex:1; min-width:100px; padding:15px; background:#e74c3c; color:white; border:none; border-radius:8px; font-weight:bold;">Insta-Void</button></div></div></div>
 
+    <!-- DRAWER MODAL -->
     <div id="cash-drop-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 id="cash-drop-title" style="margin-top:0;">🏦 Store / Pull Money</h2>
@@ -290,6 +303,7 @@
         </div>
     </div>
     
+    <!-- EXPLICIT SHIFT REPORT MODAL -->
     <div id="shift-report-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <div style="text-align: center; margin-bottom: 20px;">
@@ -311,13 +325,15 @@
                     <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">💰 Revenue Split</div>
                     <div class="revenue-row"><span>Cash Paid</span> <strong id="sr-cash">Rp 0</strong></div>
                     <div class="revenue-row"><span>QRIS Paid</span> <strong id="sr-qris">Rp 0</strong></div>
-                    <div class="revenue-row"><span>Hotel Trans.</span> <strong id="sr-hotel">Rp 0</strong></div>
+                    <div class="revenue-row"><span>Hotel Transfer</span> <strong id="sr-hotel">Rp 0</strong></div>
+                    <div class="revenue-row"><span>Tamu Hotel (Lunas)</span> <strong id="sr-tamupaid">Rp 0</strong></div>
                     <div class="revenue-row"><span>Complimentary</span> <strong id="sr-free">Rp 0</strong></div>
                 </div>
                 
                 <div class="revenue-breakdown">
-                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">⚠️ Alerts</div>
-                    <div class="revenue-row"><span>New Piutang</span> <strong id="sr-piutang" style="color:#e74c3c;">Rp 0</strong></div>
+                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">⚠️ Pending & Alerts</div>
+                    <div class="revenue-row"><span>Tamu Hotel (Kamar)</span> <strong id="sr-tamupiutang" style="color:#e74c3c;">Rp 0</strong></div>
+                    <div class="revenue-row"><span>General Piutang</span> <strong id="sr-piutang" style="color:#e74c3c;">Rp 0</strong></div>
                     <div class="revenue-row"><span>Expenses Logged</span> <strong id="sr-expense" style="color:#e67e22;">Rp 0</strong></div>
                 </div>
             </div>
