@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 15; 
+const DB_VERSION = 16; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -82,17 +82,33 @@ function switchWorkspace(type) {
 }
 
 function lockMenu() {
-    isMenuLocked = true; activeCustomerProfile = null; document.getElementById("glass-overlay").style.opacity = "1"; document.getElementById("glass-overlay").style.pointerEvents = "auto";
+    isMenuLocked = true; activeCustomerProfile = null; 
+    
+    // UI: Tampilkan Form, Sembunyikan Banner
+    document.getElementById("customer-input-section").classList.remove("hidden");
+    document.getElementById("active-customer-banner").classList.add("hidden");
+    
+    document.getElementById("glass-overlay").style.opacity = "1"; document.getElementById("glass-overlay").style.pointerEvents = "auto";
     document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = ""; currentCart = []; renderCart();
     document.getElementById("promo-indicator").classList.add("hidden");
 }
 
 function unlockMenu(isGuest) {
-    if (isGuest) { document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; activeCustomerProfile = null; } 
-    else {
-        const phone = document.getElementById("cust-phone").value.trim();
+    let phone = "-"; let name = "Walk-in";
+    if (isGuest) { 
+        document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; activeCustomerProfile = null; 
+    } else {
+        phone = document.getElementById("cust-phone").value.trim();
+        name = document.getElementById("cust-name").value.trim() || "Pelanggan";
         if (phone.length < 5) return alert("Harap masukkan Nomor WhatsApp yang valid terlebih dahulu.");
     }
+    
+    // UI: Tampilkan Banner, Sembunyikan Form
+    document.getElementById("active-cust-name").innerText = name;
+    document.getElementById("active-cust-phone").innerText = phone !== "-" ? `(${phone})` : "";
+    document.getElementById("customer-input-section").classList.add("hidden");
+    document.getElementById("active-customer-banner").classList.remove("hidden");
+
     isMenuLocked = false; document.getElementById("glass-overlay").style.opacity = "0"; setTimeout(() => { document.getElementById("glass-overlay").style.pointerEvents = "none"; }, 300);
 }
 
@@ -141,9 +157,6 @@ async function syncMasterData() {
     }
 }
 
-// ----------------------------------------------------
-// UPDATED AUTOCOMPLETE ENGINE: NO LIMIT, NO SPENT TEXT
-// ----------------------------------------------------
 function handleAutocomplete(e) {
     const val = e.target.value.toLowerCase().trim(); const resBox = document.getElementById("autocomplete-results");
     activeCustomerProfile = null; document.getElementById("promo-indicator").classList.add("hidden");
@@ -156,11 +169,9 @@ function handleAutocomplete(e) {
             matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
         }
         
-        // Urutkan berdasarkan total belanja tertinggi
         matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
 
         if (matches.length > 0) {
-            // Hilangkan span total belanja dari hasil HTML agar bersih
             resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}', '${m.name.replace(/'/g, "\\'")}', ${m.points || 0}, ${m.freeCoins || 0})"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name}</div></div>`).join("");
             resBox.classList.remove("hidden");
         } else { resBox.classList.add("hidden"); }
@@ -174,9 +185,7 @@ document.getElementById("cust-phone").addEventListener("focus", handleAutocomple
 document.getElementById("cust-name").addEventListener("focus", handleAutocomplete);
 
 document.addEventListener('click', (e) => { 
-    if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') {
-        document.getElementById('autocomplete-results').classList.add('hidden'); 
-    }
+    if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') { document.getElementById('autocomplete-results').classList.add('hidden'); }
 });
 
 window.selectMember = function(phone, name, points, freeCoins) {
@@ -304,7 +313,10 @@ window.calculateRemaining = function() {
 
 function closeReview() { document.getElementById("review-modal").classList.add("hidden"); }
 
-async function finalizeOrder(shouldPrint) {
+// HELPER: Format No WA ke format internasional 628...
+function formatWAPhone(p) { let n = normalizePhone(p); if (n.startsWith('0')) n = '62' + n.substring(1); return n; }
+
+async function finalizeOrder(shouldPrint, shouldWA) {
     const cash = Number(document.getElementById("pay-cash").value) || 0; const qris = Number(document.getElementById("pay-qris").value) || 0;
     const transfer = Number(document.getElementById("pay-transfer").value) || 0; const hotelPiutang = Number(document.getElementById("pay-hotel-piutang").value) || 0;
     const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
@@ -318,19 +330,22 @@ async function finalizeOrder(shouldPrint) {
     const remaining = window.cartGrandTotal - totalAccounted;
 
     const requiresProcessing = currentCart.some(i => String(i.workflow).toUpperCase() === "TICKET");
-    const custPhone = document.getElementById("cust-phone").value.trim(); const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
+    let custPhoneRaw = document.getElementById("cust-phone").value.trim(); 
+    let custPhone = custPhoneRaw || "-";
+    const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
     const hasHotelItem = currentCart.some(i => String(i.category).toLowerCase().includes("hotel"));
 
-    if (remaining > 0) return alert("⚠️ PEMBAYARAN DITOLAK:\nSisa Kurang Bayar harus Rp 0. Jika ada hutang, wajib dicatat di kolom Piutang B2B/Tamu.");
+    if (remaining > 0) return alert("⚠️ PEMBAYARAN DITOLAK:\nSisa Kurang Bayar harus Rp 0.");
     if (totalPiutang > 0 && !requiresProcessing) return alert("⚠️ PEMBAYARAN DITOLAK:\nPiutang HANYA berlaku untuk Tiket Drop-off.");
     if (totalPiutang > 0 && !hasHotelItem) return alert("⚠️ PEMBAYARAN DITOLAK:\nPiutang HANYA berlaku untuk item dalam kategori Hotel.");
     if (totalPiutang > 0 && (!custPhone || custPhone === "-")) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda WAJIB memasukkan nomor WhatsApp pelanggan untuk mencatat Piutang.");
+    if (shouldWA && (!custPhoneRaw || custPhoneRaw.length < 9)) return alert("⚠️ WA DITOLAK:\nNomor WA tidak valid.");
 
     let payMethods = [];
     if(cash > 0) payMethods.push("Tunai"); if(qris > 0) payMethods.push("QRIS"); if(transfer > 0) payMethods.push("Trf.Bank"); if(hotelPiutang > 0) payMethods.push("Piutang(B2B)"); if(tamuPiutang > 0) payMethods.push("Piutang(Tamu)"); if(free > 0) payMethods.push("Gratis");
     const payString = payMethods.length > 0 ? payMethods.join("+") : "Belum Bayar";
 
-    if(custPhone) saveMemberToDB(custPhone, custName);
+    if(custPhone !== "-") saveMemberToDB(custPhone, custName);
 
     let status = "Completed"; if (totalPiutang > 0) status = "Pending Debt"; else if (requiresProcessing) status = "Processing";
 
@@ -357,7 +372,7 @@ async function finalizeOrder(shouldPrint) {
 
     const orderPayload = {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
-        customerName: custName, customerPhone: custPhone || "-", orderStatus: status, items: currentCart, subtotal: window.cartSubtotal, discounts: (redeemCount * activeCoinPrice), grandTotal: window.cartGrandTotal,
+        customerName: custName, customerPhone: custPhone, orderStatus: status, items: currentCart, subtotal: window.cartSubtotal, discounts: (redeemCount * activeCoinPrice), grandTotal: window.cartGrandTotal,
         paymentMethod: payString, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: coinsEarned, coinsRedeemed: redeemCount, expectedCoins: expectedCoinsTotal, internalCoinsUsed: internalCoins, syncStatus: "Pending" 
     };
@@ -380,6 +395,15 @@ async function finalizeOrder(shouldPrint) {
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     if (requiresProcessing) { activeLaundryTickets.unshift(orderPayload); document.getElementById("ticket-count").innerText = activeLaundryTickets.length; }
     
+    // WHATSAPP SENDING LOGIC (NEW ORDER)
+    if (shouldWA && custPhone !== "-") {
+        let targetWa = formatWAPhone(custPhone);
+        let msg = `Halo Bpk/Ibu ${custName},\n\nTerima kasih telah mempercayakan cucian di *Griya Laundry*.\n\nNomor Nota: ${orderPayload.orderId}\nTotal Tagihan: Rp ${window.cartGrandTotal.toLocaleString('id-ID')}\n`;
+        if (totalPiutang > 0) msg += `Sisa Piutang: Rp ${totalPiutang.toLocaleString('id-ID')}\n`;
+        msg += `\nPoin Koin Anda Saat Ini: ${newPoints}/10\nKoin Gratis Tersedia: ${newFree}`;
+        window.open(`https://wa.me/${targetWa}?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+
     if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + free + totalPiutang), 0, payString, newPoints, newFree); window.print(); }
     closeReview(); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
@@ -420,6 +444,21 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
     `;
 }
 
+// WHATSAPP SENDING LOGIC (PICKUP)
+window.notifyWA = function(orderId) {
+    const ticket = activeLaundryTickets.find(t => t.orderId === orderId);
+    if (!ticket || !ticket.customerPhone || ticket.customerPhone === "-") return alert("Tidak ada nomor WhatsApp yang tercatat untuk pelanggan ini.");
+    
+    const totalPaid = (ticket.cashAmount||0) + (ticket.qrisAmount||0) + (ticket.transferAmount||0) + (ticket.freeAmount||0);
+    const remaining = ticket.grandTotal - totalPaid;
+    let targetWa = formatWAPhone(ticket.customerPhone);
+    let msg = `Halo Bpk/Ibu ${ticket.customerName},\n\nCucian Anda dengan nomor nota *${ticket.orderId}* sudah selesai dan siap diambil di Griya Laundry.\n`;
+    if (remaining > 0) msg += `\nSisa Tagihan: Rp ${remaining.toLocaleString('id-ID')}\n`;
+    msg += `\nTerima kasih!`;
+    
+    window.open(`https://wa.me/${targetWa}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
 function renderActiveTickets() {
     const grid = document.getElementById("ticket-grid-container"); grid.innerHTML = "";
     activeLaundryTickets.forEach((ticket) => {
@@ -430,12 +469,23 @@ function renderActiveTickets() {
         let receiptText = ticket.readableReceipt || "";
         if (!receiptText && ticket.items) receiptText = ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n');
 
+        let buttonsHtml = "";
+        if (!isReady) {
+            buttonsHtml = `<button class="ticket-btn" style="background:#f39c12;" onclick="markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>`;
+        } else {
+            buttonsHtml = `
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <button class="ticket-btn" style="background:#25D366; flex:1; margin-top:0;" onclick="notifyWA('${ticket.orderId}')">🔔 WA</button>
+                <button class="ticket-btn" style="background:#2ecc71; flex:2; margin-top:0;" onclick="openSettlement('${ticket.orderId}', ${remaining})">Ambil & Bayar</button>
+            </div>`;
+        }
+
         grid.innerHTML += `
             <div class="ticket-card ${isReady ? 'ready' : ''}">
                 <div class="ticket-header"><span>${ticket.customerName}</span> <span style="color:#7f8c8d; font-size:12px;">${ticket.orderId}</span></div>
                 <div style="font-size:14px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>
                 <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:10px; border-top:1px dashed #ddd; padding-top:5px;"><span>Piutang / Sisa:</span> <strong style="color:#e74c3c;">Rp ${remaining.toLocaleString('id-ID')}</strong></div>
-                ${!isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="openSettlement('${ticket.orderId}', ${remaining})">Ambil Cucian & Bayar</button>`}
+                ${buttonsHtml}
             </div>
         `;
     });
@@ -509,7 +559,7 @@ function saveExpense() {
     if (amount <= 0 || !category) return alert("Harap masukkan jumlah dan kategori yang benar.");
     db.transaction(["expense_categories"], "readwrite").objectStore("expense_categories").put({ name: category });
 
-    const payload = { expenseId: "EXP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, category: category, description: document.getElementById("exp-desc").value || "-", amount: amount, status: "Active", syncStatus: "Pending" };
+    const payload = { expenseId: "EXP-" + Date.now(), timestamp: new DatetoISOString(), cashier: currentCashier, shiftId: currentShiftId, category: category, description: document.getElementById("exp-desc").value || "-", amount: amount, status: "Active", syncStatus: "Pending" };
     db.transaction(["expenses"], "readwrite").objectStore("expenses").add(payload);
     document.getElementById("expense-modal").classList.add("hidden"); document.getElementById("exp-amount").value = ""; document.getElementById("exp-category").value = ""; document.getElementById("exp-desc").value = ""; alert("Pengeluaran Berhasil Dicatat!"); runBackgroundSync();
 }
