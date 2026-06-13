@@ -137,7 +137,12 @@ document.getElementById("cust-phone").addEventListener("input", (e) => {
     };
 });
 
-document.addEventListener('click', (e) => { if(e.target.id !== 'cust-phone') document.getElementById('autocomplete-results').classList.add('hidden'); });
+document.addEventListener('click', (e) => {
+    // If the click is completely outside the wrapper, hide the dropdown safely
+    if (!e.target.closest('.autocomplete-wrapper')) {
+        document.getElementById('autocomplete-results').classList.add('hidden');
+    }
+});
 
 window.selectMember = function(phone, name, freeCoins) {
     document.getElementById("cust-phone").value = phone; document.getElementById("cust-name").value = name; document.getElementById("autocomplete-results").classList.add("hidden");
