@@ -8,7 +8,7 @@ let globalMenuData = []; let currentCategory = ""; let activeLaundryTickets = []
 let currentCart = []; let activeNumpadItem = null; let numpadValue = "0";
 let activeSettlementTicket = null; window.masterDrawerBalance = 0; let isLoggingOut = false;
 let currentVoidTarget = { type: null, id: null };
-let isMenuLocked = true; let isSyncing = false; // Prevents double orders
+let isMenuLocked = true; let isSyncing = false; 
 
 function initDB() {
     return new Promise((resolve, reject) => {
@@ -38,7 +38,6 @@ function attemptLogin() {
     db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = (e) => {
         const staff = e.target.result;
         if (staff) {
-            // Check if they have an active shift to prevent disappearing orders
             db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(pin).onsuccess = (shiftReq) => {
                 const activeShift = shiftReq.target.result;
                 currentCashier = staff.name; currentPin = staff.pin;
@@ -181,11 +180,8 @@ function clearCart() { lockMenu(); }
 function reviewOrder() {
     if (currentCart.length === 0) return alert("Cart is empty");
     document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
-    
-    // Auto-fill cash with grand total by default
     document.getElementById("pay-cash").value = window.cartGrandTotal;
     document.getElementById("pay-qris").value = 0; document.getElementById("pay-hotel").value = 0; document.getElementById("pay-free").value = 0;
-    
     calculateRemaining(); document.getElementById("review-modal").classList.remove("hidden");
 }
 
@@ -202,8 +198,7 @@ function closeReview() { document.getElementById("review-modal").classList.add("
 async function finalizeOrder(shouldPrint) {
     const cash = Number(document.getElementById("pay-cash").value) || 0; const qris = Number(document.getElementById("pay-qris").value) || 0;
     const hotel = Number(document.getElementById("pay-hotel").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
-    const totalPaid = cash + qris + hotel + free;
-    const remaining = window.cartGrandTotal - totalPaid;
+    const totalPaid = cash + qris + hotel + free; const remaining = window.cartGrandTotal - totalPaid;
     
     let payMethods = [];
     if(cash > 0) payMethods.push("Cash"); if(qris > 0) payMethods.push("QRIS"); if(hotel > 0) payMethods.push("Hotel"); if(free > 0) payMethods.push("Free");
@@ -220,11 +215,10 @@ async function finalizeOrder(shouldPrint) {
         customerName: custName, customerPhone: custPhone || "-",
         orderStatus: status, items: currentCart, subtotal: window.cartGrandTotal, discounts: 0, grandTotal: window.cartGrandTotal,
         paymentMethod: payString, cashAmount: cash, qrisAmount: qris, hotelAmount: hotel, freeAmount: free, remainingDue: remaining,
-        syncStatus: "Pending" // Flag for sync engine
+        syncStatus: "Pending" 
     };
 
-    const txMenu = db.transaction(["menu"], "readwrite");
-    const storeMenu = txMenu.objectStore("menu");
+    const txMenu = db.transaction(["menu"], "readwrite"); const storeMenu = txMenu.objectStore("menu");
     currentCart.forEach(cartItem => {
         storeMenu.get(cartItem.itemId).onsuccess = (ev) => {
             const menuItem = ev.target.result;
@@ -454,7 +448,6 @@ function calculateLiveDrawer(callback) {
     let tx = db.transaction(["orders", "cash_drops", "expenses"], "readonly");
     let ordersReq = tx.objectStore("orders").getAll(); let dropReq = tx.objectStore("cash_drops").getAll(); let expReq = tx.objectStore("expenses").getAll();
     tx.oncomplete = () => {
-        // Only count CASH. Ignore QRIS/Hotel/Free.
         ordersReq.result.forEach(o => { if (o.syncStatus === "Pending" && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") liveDrawer += (o.cashAmount || 0); });
         dropReq.result.forEach(d => { if (d.syncStatus === "Pending") liveDrawer -= (d.toAdmin + d.toBank); });
         expReq.result.forEach(e => { if (e.syncStatus === "Pending" && e.status === "Active") liveDrawer -= (e.amount || 0); });
@@ -485,10 +478,12 @@ function submitCashDrop() {
 
 function openShiftReport() {
     let tCust = 0; let tOrders = 0; let tOmset = 0; 
-    let tCash = 0; let tQris = 0; let tHotel = 0; let tFree = 0; let tPiutang = 0; 
+    let tCash = 0; let tQris = 0; let tHotel = 0; let tFree = 0; let tPiutang = 0; let tExpense = 0; 
     let foodSummary = {};
     
-    db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
+    document.getElementById("meter-token").value = ""; document.getElementById("meter-pasca").value = "";
+    
+    db.transaction(["orders", "expenses"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
         const validOrders = e.target.result.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
         validOrders.forEach(o => {
             tOrders++; if(o.customerPhone && o.customerPhone !== "-") tCust++;
@@ -498,22 +493,41 @@ function openShiftReport() {
             tPiutang += (o.remainingDue || 0);
             if (o.items) o.items.forEach(i => { if(!foodSummary[i.name]) foodSummary[i.name] = 0; foodSummary[i.name] += i.qty; });
         });
-        calculateLiveDrawer((liveDrawer) => {
-            document.getElementById("sr-orders").innerText = tOrders; document.getElementById("sr-customers").innerText = tCust;
-            document.getElementById("sr-omset").innerText = `Rp ${tOmset.toLocaleString('id-ID')}`;
-            document.getElementById("sr-cash").innerText = `Rp ${tCash.toLocaleString('id-ID')}`;
-            document.getElementById("sr-qris").innerText = `Rp ${tQris.toLocaleString('id-ID')}`;
-            document.getElementById("sr-hotel").innerText = `Rp ${tHotel.toLocaleString('id-ID')}`;
-            document.getElementById("sr-free").innerText = `Rp ${tFree.toLocaleString('id-ID')}`;
-            document.getElementById("sr-piutang").innerText = `Rp ${tPiutang.toLocaleString('id-ID')}`;
-            document.getElementById("sr-net").innerText = `Rp ${liveDrawer.toLocaleString('id-ID')}`;
-            document.getElementById("shift-report-modal").classList.remove("hidden");
-            window.currentShiftData = { totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalHotel: tHotel, totalFree: tFree, totalPiutang: tPiutang, net: liveDrawer, foodSummary };
-        });
+        
+        db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = (ex) => {
+            const shiftExpenses = ex.target.result.filter(exp => exp.shiftId === currentShiftId && exp.status === "Active");
+            shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
+            
+            calculateLiveDrawer((liveDrawer) => {
+                document.getElementById("sr-orders").innerText = tOrders; document.getElementById("sr-customers").innerText = tCust;
+                document.getElementById("sr-omset").innerText = `Rp ${tOmset.toLocaleString('id-ID')}`;
+                document.getElementById("sr-cash").innerText = `Rp ${tCash.toLocaleString('id-ID')}`;
+                document.getElementById("sr-qris").innerText = `Rp ${tQris.toLocaleString('id-ID')}`;
+                document.getElementById("sr-hotel").innerText = `Rp ${tHotel.toLocaleString('id-ID')}`;
+                document.getElementById("sr-free").innerText = `Rp ${tFree.toLocaleString('id-ID')}`;
+                document.getElementById("sr-piutang").innerText = `Rp ${tPiutang.toLocaleString('id-ID')}`;
+                if(document.getElementById("sr-expense")) document.getElementById("sr-expense").innerText = `Rp ${tExpense.toLocaleString('id-ID')}`;
+                
+                document.getElementById("sr-net").innerText = `Rp ${liveDrawer.toLocaleString('id-ID')}`;
+                document.getElementById("shift-report-modal").classList.remove("hidden");
+                
+                window.currentShiftData = { 
+                    totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, 
+                    totalCash: tCash, totalQris: tQris, totalHotel: tHotel, totalFree: tFree, 
+                    totalPiutang: tPiutang, totalExpenses: tExpense, net: liveDrawer, foodSummary 
+                };
+            });
+        };
     };
 }
 
-function initiateLogoutSequence() { document.getElementById("shift-report-modal").classList.add("hidden"); openCashDrop(true); }
+function initiateLogoutSequence() { 
+    const meterT = document.getElementById("meter-token").value; const meterP = document.getElementById("meter-pasca").value;
+    if (meterT === "" || meterP === "") return alert("⚠️ ERROR: You must enter both Electricity Meter readings before ending your shift.");
+    window.currentShiftData.meterToken = Number(meterT); window.currentShiftData.meterPasca = Number(meterP);
+
+    document.getElementById("shift-report-modal").classList.add("hidden"); openCashDrop(true); 
+}
 
 async function executeFinalLogout(netCash) { 
     const data = window.currentShiftData;
@@ -521,7 +535,7 @@ async function executeFinalLogout(netCash) {
         shiftId: currentShiftId, timestamp: new Date().toISOString(), cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), 
         totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, 
         totalCash: data.totalCash, totalQris: data.totalQris, totalHotel: data.totalHotel, totalFree: data.totalFree, totalPiutang: data.totalPiutang,
-        totalExpenses: 0, netCash: netCash, foodSummary: data.foodSummary, syncStatus: "Pending"
+        totalExpenses: data.totalExpenses, netCash: netCash, foodSummary: data.foodSummary, meterToken: data.meterToken, meterPasca: data.meterPasca, syncStatus: "Pending"
     };
 
     db.transaction(["local_shift_history"], "readwrite").objectStore("local_shift_history").add(shiftPayload);
@@ -542,7 +556,7 @@ function lockScreen() { window.location.reload(); }
 
 async function runBackgroundSync() {
     if (!navigator.onLine || isSyncing) return;
-    isSyncing = true; // Lock the sync process
+    isSyncing = true; 
     
     try {
         let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members"], "readonly");
@@ -589,7 +603,7 @@ async function runBackgroundSync() {
             try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncMember", data: mem }) }); if ((await r.json()).status === "Success") { db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone); } } catch(e) {}
         }
     } finally {
-        isSyncing = false; // Release the lock
+        isSyncing = false; 
     }
 }
 
