@@ -147,7 +147,9 @@ async function syncMasterData() {
 function handleAutocomplete(e) {
     const val = e.target.value.toLowerCase().trim(); const resBox = document.getElementById("autocomplete-results");
     activeCustomerProfile = null; document.getElementById("promo-indicator").classList.add("hidden");
-    if (val.length < 2) { resBox.classList.add("hidden"); return; }
+    
+    // START SEARCHING ON 1 CHARACTER
+    if (val.length < 1) { resBox.classList.add("hidden"); return; }
 
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
         const members = ev.target.result; const matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val)).slice(0, 10);
@@ -167,7 +169,7 @@ window.selectMember = function(phone, name, points, freeCoins) {
     activeCustomerProfile = { phone, name, points, freeCoins };
     
     let promoText = "";
-    if (freeCoins > 0) promoText = `🎁 ${freeCoins} Koin Gratis Tersedia! (Poin: ${points}/10)`;
+    if (freeCoins > 0) promoText = `🎁 ${freeCoins} Koin Gratis! (Poin Sisa: ${points}/10)`;
     else promoText = `🎁 Poin Koin: ${points}/10`;
     
     document.getElementById("promo-indicator").innerText = promoText;
@@ -241,21 +243,39 @@ function reviewOrder() {
     document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-transfer").value = 0;
     document.getElementById("pay-hotel-piutang").value = 0; document.getElementById("pay-tamu-piutang").value = 0; document.getElementById("pay-free").value = 0;
     
-    calculateRemaining(); document.getElementById("pay-cash").value = window.cartGrandTotal; calculateRemaining();
+    // OPTION B: Grand Total = Subtotal
+    window.cartGrandTotal = window.cartSubtotal;
+    document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
+    document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
+    
+    applyPromo();
     document.getElementById("review-modal").classList.remove("hidden");
 }
 
-function calculateRemaining() {
+function applyPromo() {
     let redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
     let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
     
-    if (redeemCount > totalCoinsInCart) { redeemCount = totalCoinsInCart; document.getElementById("redeem-coins").value = redeemCount; }
-    if (activeCustomerProfile && redeemCount > activeCustomerProfile.freeCoins) { redeemCount = activeCustomerProfile.freeCoins; document.getElementById("redeem-coins").value = redeemCount; }
+    if (redeemCount > totalCoinsInCart) { redeemCount = totalCoinsInCart; }
+    if (activeCustomerProfile && redeemCount > activeCustomerProfile.freeCoins) { redeemCount = activeCustomerProfile.freeCoins; }
+    document.getElementById("redeem-coins").value = redeemCount;
 
-    window.cartDiscount = redeemCount * activeCoinPrice; window.cartGrandTotal = Math.max(0, window.cartSubtotal - window.cartDiscount);
+    let freeValue = redeemCount * activeCoinPrice;
+    document.getElementById("pay-free").value = freeValue; // Auto-fill the free payment column
 
-    document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`; document.getElementById("review-discount").innerText = `- Rp ${window.cartDiscount.toLocaleString('id-ID')}`; document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
+    // Auto adjust cash to balance the drawer
+    let q = Number(document.getElementById("pay-qris").value) || 0;
+    let t = Number(document.getElementById("pay-transfer").value) || 0;
+    let hp = Number(document.getElementById("pay-hotel-piutang").value) || 0;
+    let tp = Number(document.getElementById("pay-tamu-piutang").value) || 0;
+    
+    let autoCash = window.cartGrandTotal - (q + t + hp + tp + freeValue);
+    document.getElementById("pay-cash").value = Math.max(0, autoCash);
 
+    calculateRemaining();
+}
+
+function calculateRemaining() {
     const c = Number(document.getElementById("pay-cash").value) || 0; const q = Number(document.getElementById("pay-qris").value) || 0;
     const t = Number(document.getElementById("pay-transfer").value) || 0; const hp = Number(document.getElementById("pay-hotel-piutang").value) || 0;
     const tp = Number(document.getElementById("pay-tamu-piutang").value) || 0; const f = Number(document.getElementById("pay-free").value) || 0;
@@ -276,14 +296,14 @@ async function finalizeOrder(shouldPrint) {
     const totalAccounted = cash + qris + transfer + free + totalPiutang; 
     const remaining = window.cartGrandTotal - totalAccounted;
 
-    const custPhone = document.getElementById("cust-phone").value.trim(); 
-    const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
+    const requiresProcessing = currentCart.some(i => String(i.workflow).toUpperCase() === "TICKET");
+    const custPhone = document.getElementById("cust-phone").value.trim(); const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
     const hasHotelItem = currentCart.some(i => String(i.category).toLowerCase().includes("hotel"));
 
-    // SECURITY GATEKEEPERS
     if (remaining > 0) return alert("⚠️ PEMBAYARAN DITOLAK:\nSeluruh tagihan WAJIB dialokasikan. Sisa Kurang Bayar harus Rp 0.");
+    if (totalPiutang > 0 && !requiresProcessing) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda tidak bisa mencatat Piutang untuk layanan ini.\nPiutang HANYA berlaku untuk Tiket Drop-off.");
     if (totalPiutang > 0 && !hasHotelItem) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda tidak bisa mencatat Piutang untuk layanan ini.\nPiutang HANYA berlaku untuk item dalam kategori Hotel.");
-    if (totalPiutang > 0 && (!custPhone || custPhone === "-")) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda WAJIB memasukkan nomor WhatsApp pelanggan untuk mencatat Piutang Hotel.");
+    if (totalPiutang > 0 && (!custPhone || custPhone === "-")) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda WAJIB memasukkan nomor WhatsApp pelanggan untuk mencatat Piutang.");
 
     let payMethods = [];
     if(cash > 0) payMethods.push("Tunai"); if(qris > 0) payMethods.push("QRIS"); if(transfer > 0) payMethods.push("Trf.Bank"); if(hotelPiutang > 0) payMethods.push("Piutang(B2B)"); if(tamuPiutang > 0) payMethods.push("Piutang(Tamu)"); if(free > 0) payMethods.push("Free");
@@ -291,14 +311,29 @@ async function finalizeOrder(shouldPrint) {
 
     if(custPhone) saveMemberToDB(custPhone, custName);
 
-    let status = "Completed"; if (totalPiutang > 0) status = "Pending Debt"; 
+    let status = "Completed"; if (requiresProcessing) status = "Processing"; else if (totalPiutang > 0) status = "Pending Debt"; 
 
     let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
     let coinsEarned = Math.max(0, totalCoinsInCart - redeemCount);
 
+    // FAST LOCAL SYNC: Hitung poin instan untuk struk & IndexedDB
+    let newPoints = 0; let newFree = 0;
+    if (activeCustomerProfile) {
+        let currentPoints = activeCustomerProfile.points || 0; let currentFree = activeCustomerProfile.freeCoins || 0;
+        currentFree -= redeemCount; currentPoints += coinsEarned;
+        let newlyEarnedFree = Math.floor(currentPoints / 10); currentPoints = currentPoints % 10; currentFree += newlyEarnedFree;
+        newPoints = currentPoints; newFree = currentFree;
+        
+        // Simpan langsung ke memori lokal agar order berikutnya tidak usah menunggu Google 15 detik
+        db.transaction(["members"], "readwrite").objectStore("members").get(activeCustomerProfile.phone).onsuccess = (e) => {
+            let mem = e.target.result;
+            if (mem) { mem.points = newPoints; mem.freeCoins = newFree; db.transaction(["members"], "readwrite").objectStore("members").put(mem); }
+        };
+    }
+
     const orderPayload = {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
-        customerName: custName, customerPhone: custPhone || "-", orderStatus: status, items: currentCart, subtotal: window.cartSubtotal, discounts: window.cartDiscount, grandTotal: window.cartGrandTotal,
+        customerName: custName, customerPhone: custPhone || "-", orderStatus: status, items: currentCart, subtotal: window.cartSubtotal, discounts: (redeemCount * activeCoinPrice), grandTotal: window.cartGrandTotal,
         paymentMethod: payString, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: coinsEarned, coinsRedeemed: redeemCount, syncStatus: "Pending" 
     };
@@ -312,13 +347,16 @@ async function finalizeOrder(shouldPrint) {
     });
 
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
-    if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, totalAccounted, remaining, payString); window.print(); }
+    if (requiresProcessing) { activeLaundryTickets.unshift(orderPayload); document.getElementById("ticket-count").innerText = activeLaundryTickets.length; }
+    
+    if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, totalAccounted, 0, payString, newPoints, newFree); window.print(); }
+    
     closeReview(); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
 
 async function getDynamicSettings() { return new Promise(res => { let req = db.transaction(["settings"], "readonly").objectStore("settings").getAll(); req.onsuccess = e => { let s = {}; e.target.result.forEach(row => s[row.key] = row.value); res(s); }; }); }
 
-async function buildPrintableReceipt(orderId, order, deposit, remaining, payMethod) {
+async function buildPrintableReceipt(orderId, order, deposit, remaining, payMethod, newPoints, newFree) {
     const settings = await getDynamicSettings();
     const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; const h2 = settings["Header_2"] || ""; const h3 = settings["Header_3"] || ""; 
     const f1 = settings["Footer_1"] || "TERIMA KASIH"; const f2 = settings["Footer_2"] || ""; const f3 = settings["Footer_3"] || ""; 
@@ -329,7 +367,12 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
         const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty; const lineTotal = item.qty * item.originalPrice;
         itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 2px;"><span>${qtyDisplay}x ${item.name}</span><span>${lineTotal.toLocaleString('id-ID')}</span></div>`;
     });
-    if (order.discounts > 0) itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 2px; color:#e74c3c;"><span>[PROMO] Tukar Koin</span><span>- ${order.discounts.toLocaleString('id-ID')}</span></div>`;
+
+    // Poin Section
+    let poinHtml = "";
+    if (order.customerPhone && order.customerPhone !== "-") {
+        poinHtml = `<div style="margin-top:10px; padding-top:5px; border-top:1px dashed #000; font-size:11px; text-align:center;"><strong>-- INFO POIN LAUNDRY --</strong><br>Poin Saat Ini: ${newPoints}/10<br>Koin Gratis Tersedia: ${newFree}</div>`;
+    }
 
     printArea.innerHTML = `
         <div style="text-align:center; margin-bottom:10px;"><h2 style="margin:0;">${h1}</h2>${h2 ? `<div style="font-size:10px;">${h2}</div>` : ''}${h3 ? `<div style="font-size:10px;">${h3}</div>` : ''}<div style="font-size:10px; margin-top:5px;">${dateStr}</div></div>
@@ -343,6 +386,7 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
             <div style="display:flex; justify-content:space-between;"><span>Tercatat (${payMethod}):</span><span>Rp ${deposit.toLocaleString('id-ID')}</span></div>
             ${order.hotelPiutangAmount > 0 || order.tamuPiutangAmount > 0 ? `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>TOTAL PIUTANG:</span><span>Rp ${(order.hotelPiutangAmount + order.tamuPiutangAmount).toLocaleString('id-ID')}</span></div>` : `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>STATUS:</span><span>LUNAS</span></div>`}
         </div>
+        ${poinHtml}
         <div style="text-align:center; margin-top:15px; font-weight:bold; font-size: 12px;">${f1}</div>${f2 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f2}</div>` : ''}${f3 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f3}</div>` : ''}
     `;
 }
