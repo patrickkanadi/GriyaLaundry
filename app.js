@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 5; 
+const DB_VERSION = 6; // Bumped for coin recycling
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -29,6 +29,7 @@ function initDB() {
             if (!db.objectStoreNames.contains("expense_categories")) db.createObjectStore("expense_categories", { keyPath: "name" });
             if (!db.objectStoreNames.contains("void_requests")) db.createObjectStore("void_requests", { keyPath: "id" });
             if (!db.objectStoreNames.contains("local_shift_history")) db.createObjectStore("local_shift_history", { keyPath: "shiftId" });
+            if (!db.objectStoreNames.contains("coin_retrievals")) db.createObjectStore("coin_retrievals", { keyPath: "retrievalId" });
         };
         request.onsuccess = (e) => { db = e.target.result; resolve(db); };
     });
@@ -114,7 +115,7 @@ async function syncMasterData() {
             if(document.getElementById("ticket-count")) document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
             if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Online & Synced";
             if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#2ecc71";
-            if (!document.getElementById("pos-screen").classList.contains("hidden")) { loadMenuUI(); renderActiveTickets(); populateMemberDatalist(); }
+            if (!document.getElementById("pos-screen").classList.contains("hidden")) { loadMenuUI(); renderActiveTickets(); }
         } else { throw new Error(result.message); }
     } catch (e) { 
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Sync Failed"; 
@@ -122,28 +123,30 @@ async function syncMasterData() {
     }
 }
 
-function populateMemberDatalist() {
-    const list = document.getElementById("member-list"); list.innerHTML = "";
-    db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (e) => { e.target.result.forEach(member => { const opt = document.createElement("option"); opt.value = member.phone; opt.innerText = member.name; list.appendChild(opt); }); };
-}
-
 document.getElementById("cust-phone").addEventListener("input", (e) => {
-    const phone = e.target.value.trim(); activeCustomerProfile = null; document.getElementById("promo-indicator").classList.add("hidden");
-    if(phone.length > 4) { 
-        db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (res) => { 
-            if(res.target.result) {
-                activeCustomerProfile = res.target.result; document.getElementById("cust-name").value = activeCustomerProfile.name; 
-                if (activeCustomerProfile.freeCoins > 0) {
-                    document.getElementById("promo-indicator").innerText = `🎁 ${activeCustomerProfile.freeCoins} Promo Coins!`;
-                    document.getElementById("promo-indicator").classList.remove("hidden");
-                }
-            }
-        }; 
-    }
+    const val = e.target.value.toLowerCase().trim(); const resBox = document.getElementById("autocomplete-results");
+    activeCustomerProfile = null; document.getElementById("promo-indicator").classList.add("hidden");
+    if (val.length < 2) { resBox.classList.add("hidden"); return; }
+
+    db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
+        const members = ev.target.result; const matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val)).slice(0, 10);
+        if (matches.length > 0) {
+            resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}', '${m.name.replace(/'/g, "\\'")}', ${m.freeCoins})"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name}</div></div>`).join("");
+            resBox.classList.remove("hidden");
+        } else { resBox.classList.add("hidden"); }
+    };
 });
 
+document.addEventListener('click', (e) => { if(e.target.id !== 'cust-phone') document.getElementById('autocomplete-results').classList.add('hidden'); });
+
+window.selectMember = function(phone, name, freeCoins) {
+    document.getElementById("cust-phone").value = phone; document.getElementById("cust-name").value = name; document.getElementById("autocomplete-results").classList.add("hidden");
+    activeCustomerProfile = { phone, name, freeCoins };
+    if (freeCoins > 0) { document.getElementById("promo-indicator").innerText = `🎁 ${freeCoins} Promo Coins!`; document.getElementById("promo-indicator").classList.remove("hidden"); }
+};
+
 function saveMemberToDB(phone, name) {
-    if(!phone) return; 
+    if(!phone || phone === "-") return; 
     db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
         let mem = e.target.result || { phone: phone, name: name, koinBalance: 0, freeCoins: 0 }; mem.name = name;
         db.transaction(["members"], "readwrite").objectStore("members").put(mem);
@@ -200,25 +203,16 @@ function reviewOrder() {
     if (currentCart.length === 0) return alert("Cart is empty");
     
     let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
-    
     if (activeCustomerProfile && activeCustomerProfile.freeCoins > 0 && totalCoinsInCart > 0) {
         document.getElementById("promo-section").classList.remove("hidden");
         document.getElementById("promo-text").innerText = `You have ${activeCustomerProfile.freeCoins} available. Max to use now: ${Math.min(activeCustomerProfile.freeCoins, totalCoinsInCart)}`;
-        document.getElementById("redeem-coins").max = Math.min(activeCustomerProfile.freeCoins, totalCoinsInCart);
-        document.getElementById("redeem-coins").value = 0;
-    } else {
-        document.getElementById("promo-section").classList.add("hidden"); document.getElementById("redeem-coins").value = 0;
-    }
+        document.getElementById("redeem-coins").max = Math.min(activeCustomerProfile.freeCoins, totalCoinsInCart); document.getElementById("redeem-coins").value = 0;
+    } else { document.getElementById("promo-section").classList.add("hidden"); document.getElementById("redeem-coins").value = 0; }
 
     document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-hotel").value = 0;
     document.getElementById("pay-tamu-paid").value = 0; document.getElementById("pay-tamu-piutang").value = 0; document.getElementById("pay-free").value = 0;
     
-    calculateRemaining(); 
-    
-    // Auto-fill cash with the final grand total
-    document.getElementById("pay-cash").value = window.cartGrandTotal;
-    calculateRemaining();
-    
+    calculateRemaining(); document.getElementById("pay-cash").value = window.cartGrandTotal; calculateRemaining();
     document.getElementById("review-modal").classList.remove("hidden");
 }
 
@@ -229,19 +223,15 @@ function calculateRemaining() {
     if (redeemCount > totalCoinsInCart) { redeemCount = totalCoinsInCart; document.getElementById("redeem-coins").value = redeemCount; }
     if (activeCustomerProfile && redeemCount > activeCustomerProfile.freeCoins) { redeemCount = activeCustomerProfile.freeCoins; document.getElementById("redeem-coins").value = redeemCount; }
 
-    window.cartDiscount = redeemCount * activeCoinPrice;
-    window.cartGrandTotal = Math.max(0, window.cartSubtotal - window.cartDiscount);
+    window.cartDiscount = redeemCount * activeCoinPrice; window.cartGrandTotal = Math.max(0, window.cartSubtotal - window.cartDiscount);
 
-    document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
-    document.getElementById("review-discount").innerText = `- Rp ${window.cartDiscount.toLocaleString('id-ID')}`;
-    document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
+    document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`; document.getElementById("review-discount").innerText = `- Rp ${window.cartDiscount.toLocaleString('id-ID')}`; document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
 
     const c = Number(document.getElementById("pay-cash").value) || 0; const q = Number(document.getElementById("pay-qris").value) || 0;
     const h = Number(document.getElementById("pay-hotel").value) || 0; const tp = Number(document.getElementById("pay-tamu-paid").value) || 0;
     const tu = Number(document.getElementById("pay-tamu-piutang").value) || 0; const f = Number(document.getElementById("pay-free").value) || 0;
     
-    const totalAccounted = c + q + h + tp + tu + f;
-    const remaining = Math.max(0, window.cartGrandTotal - totalAccounted);
+    const totalAccounted = c + q + h + tp + tu + f; const remaining = Math.max(0, window.cartGrandTotal - totalAccounted);
     document.getElementById("review-remaining").innerText = `Rp ${remaining.toLocaleString('id-ID')}`;
 }
 
@@ -254,15 +244,18 @@ async function finalizeOrder(shouldPrint) {
     const redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
     
     const totalAccounted = cash + qris + hotel + tp + tu + free; const remaining = window.cartGrandTotal - totalAccounted;
-    
+    const requiresProcessing = currentCart.some(i => String(i.workflow).toUpperCase() === "TICKET");
+    const custPhone = document.getElementById("cust-phone").value.trim(); const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
+
+    if ((remaining > 0 || tu > 0) && !requiresProcessing) return alert("⚠️ PAYMENT BLOCKED:\nYou cannot put Retail items or Instant items on Piutang (Debt / Kamar Hotel).\n\nOnly Laundry Tickets can be paid later. Please pay this order in full (LUNAS).");
+    if ((remaining > 0 || tu > 0) && (!custPhone || custPhone === "-")) return alert("⚠️ PAYMENT BLOCKED:\nYou cannot put an order on Piutang for a Guest/Walk-in.\n\nYou MUST enter the customer's WhatsApp number to record debt.");
+
     let payMethods = [];
     if(cash > 0) payMethods.push("Cash"); if(qris > 0) payMethods.push("QRIS"); if(hotel > 0) payMethods.push("Hotel"); if(tp > 0) payMethods.push("Tamu(Lunas)"); if(tu > 0) payMethods.push("Tamu(Kamar)"); if(free > 0) payMethods.push("Free");
     const payString = payMethods.length > 0 ? payMethods.join("+") : "Unpaid";
 
-    const custPhone = document.getElementById("cust-phone").value.trim(); const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
     if(custPhone) saveMemberToDB(custPhone, custName);
 
-    const requiresProcessing = currentCart.some(i => i.workflow === "TICKET");
     let status = "Completed"; if (requiresProcessing) status = "Processing"; else if (remaining > 0 || tu > 0) status = "Pending Debt"; 
 
     let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
@@ -284,11 +277,7 @@ async function finalizeOrder(shouldPrint) {
     });
 
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
-    
-    if (requiresProcessing) {
-        activeLaundryTickets.unshift(orderPayload); document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
-    }
-
+    if (requiresProcessing) { activeLaundryTickets.unshift(orderPayload); document.getElementById("ticket-count").innerText = activeLaundryTickets.length; }
     if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, totalAccounted, remaining, payString); window.print(); }
     closeReview(); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
@@ -417,6 +406,21 @@ function renderHistoryList(type) {
     }
 }
 
+// COIN RESTOCK ENGINE
+function openCoinRestock() {
+    document.getElementById("restock-coin-qty").value = "";
+    document.getElementById("coin-restock-modal").classList.remove("hidden");
+}
+
+function submitCoinRestock() {
+    const qty = Number(document.getElementById("restock-coin-qty").value);
+    if (qty <= 0) return alert("Please enter a valid quantity.");
+    const payload = { retrievalId: "COIN-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, coinName: "Koin_Fisik", qty: qty, syncStatus: "Pending" };
+    db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
+    document.getElementById("coin-restock-modal").classList.add("hidden"); runBackgroundSync(); 
+    alert(`Request to restock ${qty}x Coins sent to Admin for approval!`);
+}
+
 function requestVoid(type, id) { currentVoidTarget = { type, id }; document.getElementById("admin-void-pin").value = ""; document.getElementById("admin-void-modal").classList.remove("hidden"); }
 
 function submitRemoteVoid() {
@@ -475,15 +479,38 @@ function processVoidApprovals(authStatuses) {
 
 function applyVoidAftermath(order) {
     let itemsToReturn = []; if(order.items) order.items.forEach(i => itemsToReturn.push({ name: i.name, qty: i.qty }));
-    const tx = db.transaction(["menu"], "readwrite"); const menuStore = tx.objectStore("menu");
+    const tx = db.transaction(["menu", "members"], "readwrite"); const menuStore = tx.objectStore("menu"); const memberStore = tx.objectStore("members");
+
     itemsToReturn.forEach(item => {
+        let isCoin = String(item.name).toLowerCase().includes("koin");
         menuStore.openCursor().onsuccess = (e) => {
             const cursor = e.target.result;
-            if (cursor) { if (cursor.value.name === item.name && cursor.value.trackStock) { const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); } cursor.continue(); }
+            if (cursor) { 
+                if (isCoin && String(cursor.value.name).toLowerCase() === "koin_fisik") {
+                    const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated);
+                } else if (cursor.value.name === item.name && cursor.value.trackStock) { 
+                    const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); 
+                } 
+                cursor.continue(); 
+            }
         };
     });
+
+    if (order.customerPhone && order.customerPhone !== "Walk-in" && order.customerPhone !== "-") {
+        memberStore.get(order.customerPhone).onsuccess = (e) => { 
+            const mem = e.target.result; 
+            if (mem) { 
+                mem.spent = Math.max(0, (mem.spent || 0) - order.grandTotal); 
+                let kBal = mem.koinBalance || 0; let fAvail = mem.freeCoins || 0;
+                kBal -= (order.coinsEarned || 0); fAvail += (order.coinsRedeemed || 0);
+                while (kBal < 0) { kBal += 10; fAvail -= 1; }
+                mem.koinBalance = kBal; mem.freeCoins = Math.max(0, fAvail);
+                memberStore.put(mem); 
+            } 
+        };
+    }
     tx.oncomplete = () => { renderProductGrid(); };
-    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn } }) });
+    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed } }) });
 }
 
 function calculateLiveDrawer(callback) {
@@ -585,7 +612,7 @@ async function runBackgroundSync() {
     if (!navigator.onLine || isSyncing) return;
     isSyncing = true; 
     try {
-        let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members"], "readonly");
+        let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members", "coin_retrievals"], "readonly");
         
         let orders = await new Promise(res => tx.objectStore("orders").getAll().onsuccess = e => res(e.target.result));
         for (const order of orders) {
@@ -621,6 +648,11 @@ async function runBackgroundSync() {
         let members = await new Promise(res => tx.objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
         for (const mem of members) {
             try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncMember", data: mem }) }); if ((await r.json()).status === "Success") { db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone); } } catch(e) {}
+        }
+        
+        let coinRets = await new Promise(res => tx.objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
+        for (const ret of coinRets) {
+            if (ret.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncCoinRetrieval", data: ret }) }); if ((await r.json()).status === "Success") { ret.syncStatus = "Synced"; db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").put(ret); } } catch(e) {} }
         }
     } finally { isSyncing = false; }
 }
