@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 10; 
+const DB_VERSION = 11; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -11,7 +11,6 @@ let currentVoidTarget = { type: null, id: null };
 let isMenuLocked = true; let isSyncing = false; 
 let activeCustomerProfile = null; let activeCoinPrice = 10000;
 
-// PWA INSTALLATION ENGINE
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault(); deferredPrompt = e;
@@ -141,22 +140,40 @@ async function syncMasterData() {
     }
 }
 
+// ----------------------------------------------------
+// NEW AUTOCOMPLETE ENGINE (TRIGGERS ON CLICK & FOCUS)
+// ----------------------------------------------------
 function handleAutocomplete(e) {
     const val = e.target.value.toLowerCase().trim(); const resBox = document.getElementById("autocomplete-results");
     activeCustomerProfile = null; document.getElementById("promo-indicator").classList.add("hidden");
-    if (val.length < 1) { resBox.classList.add("hidden"); return; } // Triggers on 1 character
 
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
-        const members = ev.target.result; const matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val)).slice(0, 10);
+        const members = ev.target.result; 
+        let matches = members;
+        
+        if (val.length > 0) {
+            matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
+        }
+        matches = matches.slice(0, 15); // Show top 15 results even if empty
+
         if (matches.length > 0) {
-            resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}', '${m.name.replace(/'/g, "\\'")}', ${m.points}, ${m.freeCoins})"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name}</div></div>`).join("");
+            resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}', '${m.name.replace(/'/g, "\\'")}', ${m.points || 0}, ${m.freeCoins || 0})"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name}</div></div>`).join("");
             resBox.classList.remove("hidden");
         } else { resBox.classList.add("hidden"); }
     };
 }
 document.getElementById("cust-phone").addEventListener("input", handleAutocomplete);
 document.getElementById("cust-name").addEventListener("input", handleAutocomplete);
-document.addEventListener('click', (e) => { if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') document.getElementById('autocomplete-results').classList.add('hidden'); });
+document.getElementById("cust-phone").addEventListener("click", handleAutocomplete);
+document.getElementById("cust-name").addEventListener("click", handleAutocomplete);
+document.getElementById("cust-phone").addEventListener("focus", handleAutocomplete);
+document.getElementById("cust-name").addEventListener("focus", handleAutocomplete);
+
+document.addEventListener('click', (e) => { 
+    if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') {
+        document.getElementById('autocomplete-results').classList.add('hidden'); 
+    }
+});
 
 window.selectMember = function(phone, name, points, freeCoins) {
     document.getElementById("cust-phone").value = phone; document.getElementById("cust-name").value = name; document.getElementById("autocomplete-results").classList.add("hidden");
@@ -235,7 +252,10 @@ function reviewOrder() {
 
     document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-transfer").value = 0;
     document.getElementById("pay-hotel-piutang").value = 0; document.getElementById("pay-tamu-piutang").value = 0; document.getElementById("pay-free").value = 0;
-    document.getElementById("internal-coins").value = 0;
+    
+    // SAFETY CHECK FOR MISSING HTML ELEMENT
+    let internalCoinBox = document.getElementById("internal-coins");
+    if(internalCoinBox) internalCoinBox.value = 0;
     
     window.cartGrandTotal = window.cartSubtotal;
     document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
@@ -278,7 +298,9 @@ async function finalizeOrder(shouldPrint) {
     const transfer = Number(document.getElementById("pay-transfer").value) || 0; const hotelPiutang = Number(document.getElementById("pay-hotel-piutang").value) || 0;
     const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
     const redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
-    const internalCoins = Number(document.getElementById("internal-coins").value) || 0;
+    
+    let internalCoinBox = document.getElementById("internal-coins");
+    const internalCoins = internalCoinBox ? (Number(internalCoinBox.value) || 0) : 0;
     
     const totalPiutang = hotelPiutang + tamuPiutang;
     const totalAccounted = cash + qris + transfer + free + totalPiutang; 
@@ -499,14 +521,12 @@ function submitCoinManagement() {
         alert(`Request isi ulang ${qty} Koin telah dikirim ke Admin untuk di-Approve!`);
     } else if (actionType === "jammed") {
         const payload = { logId: "JAM-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, qty: qty, notes: note, syncStatus: "Pending" };
-        
         const txMenu = db.transaction(["menu"], "readwrite");
         txMenu.objectStore("menu").openCursor().onsuccess = (e) => {
             const cursor = e.target.result;
             if(cursor) { if(String(cursor.value.name).toLowerCase() === "koin_fisik") { const updated = cursor.value; updated.currentStock = Math.max(0, updated.currentStock - qty); cursor.update(updated); } cursor.continue(); }
         };
-        
-        db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload); // Reusing table for queue
+        db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
         alert(`${qty} Koin Macet/Rusak berhasil dicatat dan stok fisik telah dipotong.`);
     }
 
@@ -578,11 +598,8 @@ function applyVoidAftermath(order) {
         menuStore.openCursor().onsuccess = (e) => {
             const cursor = e.target.result;
             if (cursor) { 
-                if (isCoin && String(cursor.value.name).toLowerCase() === "koin_fisik") {
-                    const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated);
-                } else if (cursor.value.name === item.name && cursor.value.trackStock) { 
-                    const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); 
-                } 
+                if (isCoin && String(cursor.value.name).toLowerCase() === "koin_fisik") { const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); } 
+                else if (cursor.value.name === item.name && cursor.value.trackStock) { const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); } 
                 cursor.continue(); 
             }
         };
