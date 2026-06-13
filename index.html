@@ -31,6 +31,13 @@
         #command-bar { background: #fff; padding: 15px; border-bottom: 2px solid #ecf0f1; display: flex; gap: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); z-index: 10; align-items: center;}
         #command-bar input { flex: 1; padding: 12px; font-size: 16px; border: 2px solid #bdc3c7; border-radius: 8px; }
         
+        .autocomplete-wrapper { position: relative; flex: 1; }
+        #autocomplete-results { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 2px solid #bdc3c7; border-top: none; border-radius: 0 0 8px 8px; max-height: 250px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .autocomplete-item { padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; flex-direction: column; }
+        .autocomplete-item:hover { background: #e8f4f8; }
+        .autocomplete-phone { font-weight: bold; color: #2c3e50; }
+        .autocomplete-name { font-size: 12px; color: #7f8c8d; }
+
         #glass-overlay { position: absolute; top: 75px; left: 0; width: 100%; height: calc(100% - 75px); background: rgba(255,255,255,0.8); backdrop-filter: blur(5px); z-index: 20; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; transition: opacity 0.3s; }
         
         .category-tabs { display: flex; background: #ecf0f1; padding: 10px; gap: 10px; overflow-x: auto; }
@@ -125,6 +132,7 @@
             <div class="status-indicator">
                 <span class="dot-online" id="network-dot"></span><span id="network-text" style="margin-right: 10px;">Initializing...</span>
                 <button class="btn-top" style="background:#34495e; border-color:#34495e;" onclick="manualPushSync()">🔄 Sync</button>
+                <button class="btn-top" style="background:#f1c40f; border-color:#f1c40f; color:#856404;" onclick="openCoinRestock()">🪙 Coins</button>
                 <button class="btn-top" style="background:#16a085; border-color:#16a085;" onclick="openCashDrop(false)">🏦 Drawer</button>
                 <button class="btn-top" style="background:#8e44ad; border-color:#8e44ad;" onclick="openHistoryModal()">📋 History</button>
                 <button class="btn-top" style="background:#e67e22; border-color:#e67e22;" onclick="openExpenseModal()">💸 Expenses</button>
@@ -141,8 +149,10 @@
         <div id="main-workspace">
             <div id="menu-section">
                 <div id="command-bar">
-                    <input type="text" id="cust-phone" list="member-list" placeholder="Customer WA Number" autocomplete="off">
-                    <datalist id="member-list"></datalist>
+                    <div class="autocomplete-wrapper">
+                        <input type="text" id="cust-phone" placeholder="Type WA or Name to Search..." autocomplete="off" style="width: 100%;">
+                        <div id="autocomplete-results" class="hidden"></div>
+                    </div>
                     <input type="text" id="cust-name" placeholder="Customer Name">
                     <button onclick="unlockMenu(false)" style="background:#27ae60; color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:bold; cursor:pointer;">Start Order</button>
                     <button onclick="unlockMenu(true)" style="background:#95a5a6; color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:bold; cursor:pointer;">Guest/Walk-in</button>
@@ -154,7 +164,7 @@
                 <div id="glass-overlay">
                     <h1 style="color:#2c3e50; font-size:48px; margin:0;">🔒</h1>
                     <h2 style="color:#2c3e50;">Customer First</h2>
-                    <p style="color:#7f8c8d; max-width:300px; margin:0 auto;">Please enter the WhatsApp number above or select Guest to unlock the menu.</p>
+                    <p style="color:#7f8c8d; max-width:300px; margin:0 auto;">Please search for a customer above, enter a new number, or select Guest to unlock the menu.</p>
                 </div>
             </div>
             
@@ -175,7 +185,6 @@
         </div>
     </div>
 
-    <!-- NUMPAD MODAL -->
     <div id="numpad-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:320px; text-align:center;">
             <h3 id="numpad-title" style="margin-top:0; color:#2980b9;">Enter Weight/Qty</h3>
@@ -193,36 +202,43 @@
         </div>
     </div>
 
-    <!-- CHECKOUT MODAL (PROMO + SPLIT PAYMENT) -->
+    <div id="coin-restock-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width:400px; text-align:center;">
+            <h2 style="margin-top:0; color:#856404;">🪙 Recycle Coins</h2>
+            <p style="color:#7f8c8d; font-size:14px; margin-bottom: 20px;">Count the physical coins from the machines. A request will be sent to the Admin to restock the system.</p>
+            <div class="form-box" style="text-align:left;">
+                <label>Quantity Retrieved</label>
+                <input type="number" id="restock-coin-qty" placeholder="e.g., 50" style="font-size:24px; font-weight:bold; text-align:center; color:#27ae60;">
+            </div>
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button onclick="document.getElementById('coin-restock-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#ecf0f1;">Cancel</button>
+                <button onclick="submitCoinRestock()" style="flex:2; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#f1c40f; color:#856404;">Send Request</button>
+            </div>
+        </div>
+    </div>
+
     <div id="review-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <h2 style="margin-top:0; border-bottom:2px solid #eee; padding-bottom:10px;">🧾 Checkout & Payment</h2>
-            
             <div id="promo-section" class="hidden" style="background:#fff3cd; border:1px solid #ffeeba; padding:15px; border-radius:8px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
                 <div><strong style="color:#856404; font-size:16px;">🎁 Redeem Free Coins</strong><br><small style="color:#856404;" id="promo-text">You have 0 free coins available.</small></div>
-                <div><input type="number" id="redeem-coins" value="0" min="0" oninput="calculateRemaining()" style="width:80px; padding:10px; font-weight:bold; font-size:18px; text-align:center; border:2px solid #f1c40f; border-radius:6px;"></div>
+                <div><input type="number" id="redeem-coins" value="0" min="0" oninput="calculateRemaining()" style="width:80px; padding:10px; font-weight:bold; font-size:18px; text-align:center; border:2px solid #f1c40f; border-radius:6px; background: white;"></div>
             </div>
-
             <div style="background:#f9f9f9; padding:15px; border-radius:8px; border:1px solid #eee; margin-bottom:15px;">
                 <div style="display:flex; justify-content:space-between; font-size:16px; color:#7f8c8d; margin-bottom:5px;"><span>Subtotal:</span> <span id="review-subtotal">Rp 0</span></div>
                 <div style="display:flex; justify-content:space-between; font-size:16px; color:#e74c3c; margin-bottom:10px; border-bottom:1px solid #ddd; padding-bottom:10px;"><span>Promo Discount:</span> <span id="review-discount">- Rp 0</span></div>
                 <div style="display:flex; justify-content:space-between; font-size:24px; color:#2c3e50; font-weight:bold;"><span>Grand Total:</span> <span id="review-grandtotal">Rp 0</span></div>
             </div>
-
             <p style="font-weight:bold; color:#e67e22; margin-bottom:5px;">💵 Split Payment Grid</p>
             <div class="split-pay-grid">
                 <div class="form-box" style="margin-bottom:0;"><label>Cash (Rp)</label><input type="number" id="pay-cash" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
                 <div class="form-box" style="margin-bottom:0;"><label>QRIS (Rp)</label><input type="number" id="pay-qris" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
                 <div class="form-box" style="margin-bottom:0;"><label>Hotel / Bank Transfer (Rp)</label><input type="number" id="pay-hotel" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
                 <div class="form-box" style="margin-bottom:0;"><label>Tamu Hotel - LUNAS (Rp)</label><input type="number" id="pay-tamu-paid" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
-                <div class="form-box" style="margin-bottom:0; background:#f8d7da; padding:5px; border-radius:6px;"><label style="color:#721c24;">Tamu Hotel - KAMAR/PIUTANG (Rp)</label><input type="number" id="pay-tamu-piutang" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
+                <div class="form-box" style="margin-bottom:0; background:#f8d7da; padding:5px; border-radius:6px;"><label style="color:#721c24;">Tamu Hotel - KAMAR/PIUTANG</label><input type="number" id="pay-tamu-piutang" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
                 <div class="form-box" style="margin-bottom:0;"><label>Free / Compliment (Rp)</label><input type="number" id="pay-free" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
             </div>
-
-            <div style="display:flex; justify-content:space-between; font-size:18px; color:#c0392b; font-weight:bold; margin-bottom: 20px; padding:10px; background:#fdf2e9; border-radius:8px;">
-                <span>General Piutang (Sisa Tagihan):</span> <span id="review-remaining">Rp 0</span>
-            </div>
-
+            <div style="display:flex; justify-content:space-between; font-size:18px; color:#c0392b; font-weight:bold; margin-bottom: 20px; padding:10px; background:#fdf2e9; border-radius:8px;"><span>General Piutang (Sisa Tagihan):</span> <span id="review-remaining">Rp 0</span></div>
             <div style="display: flex; gap: 10px; flex-wrap:wrap;">
                 <button onclick="closeReview()" style="flex:1; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold;">Back</button>
                 <button onclick="finalizeOrder(false)" style="flex:1; padding:15px; background:#f39c12; color:white; border:none; border-radius:8px; font-weight:bold;">Save (No Print)</button>
@@ -231,7 +247,6 @@
         </div>
     </div>
 
-    <!-- SETTLEMENT MODAL -->
     <div id="settlement-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">💳 Settle Pickup</h2>
@@ -247,7 +262,6 @@
         </div>
     </div>
 
-    <!-- EXPENSE MODAL -->
     <div id="expense-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">💸 Record Expense</h2>
@@ -261,7 +275,6 @@
         </div>
     </div>
 
-    <!-- HISTORY MODAL -->
     <div id="history-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <h2 style="margin-top:0;">📋 System History</h2>
@@ -275,10 +288,8 @@
         </div>
     </div>
 
-    <!-- ADMIN VOID MODAL -->
     <div id="admin-void-modal" class="modal-overlay hidden"><div class="modal-content" style="text-align:center;"><h2 style="margin-top:0; color:#e74c3c;">⚠️ Admin Override</h2><input type="password" id="admin-void-pin" placeholder="****" inputmode="numeric" style="font-size:24px; text-align:center; margin-bottom:15px; width:100%; padding:10px; border:2px solid #bdc3c7; border-radius:8px;"><div style="display:flex; gap:10px; flex-wrap:wrap;"><button onclick="document.getElementById('admin-void-modal').classList.add('hidden')" style="flex:1; min-width:80px; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold;">Cancel</button><button onclick="submitRemoteVoid()" style="flex:1; min-width:100px; padding:15px; background:#f39c12; color:white; border:none; border-radius:8px; font-weight:bold;">Request</button><button onclick="confirmAdminVoid()" style="flex:1; min-width:100px; padding:15px; background:#e74c3c; color:white; border:none; border-radius:8px; font-weight:bold;">Insta-Void</button></div></div></div>
 
-    <!-- DRAWER MODAL -->
     <div id="cash-drop-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 id="cash-drop-title" style="margin-top:0;">🏦 Store / Pull Money</h2>
@@ -291,7 +302,6 @@
                 <label>Store Where? (Destination)</label>
                 <select id="drop-destination">
                     <option value="Admin">👤 Handed to Admin / Owner</option>
-                    <option value="Brankas">🗄️ Stored in Safe / Brankas</option>
                     <option value="Bank">🏦 Deposited to Bank</option>
                 </select>
             </div>
@@ -303,46 +313,29 @@
         </div>
     </div>
     
-    <!-- EXPLICIT SHIFT REPORT MODAL -->
     <div id="shift-report-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
-            <div style="text-align: center; margin-bottom: 20px;">
-                <h2 style="margin:0; color: #2c3e50;">📊 End of Shift Summary</h2>
-                <p style="color: #7f8c8d; margin: 5px 0 0 0;">Please review your numbers before logging out.</p>
-            </div>
-            
+            <div style="text-align: center; margin-bottom: 20px;"><h2 style="margin:0; color: #2c3e50;">📊 End of Shift Summary</h2><p style="color: #7f8c8d; margin: 5px 0 0 0;">Please review your numbers before logging out.</p></div>
             <div class="stats-grid">
                 <div class="stat-box"><div class="stat-label">Total Orders</div><div class="stat-value" id="sr-orders">0</div></div>
                 <div class="stat-box"><div class="stat-label">Customers</div><div class="stat-value" id="sr-customers">0</div></div>
-                <div class="stat-box" style="grid-column: span 2; background: #e8f4f8; border-color: #bee5eb;">
-                    <div class="stat-label" style="color: #0c5460;">Gross Omset</div>
-                    <div class="stat-value" id="sr-omset" style="font-size: 28px; color: #0c5460;">Rp 0</div>
-                </div>
+                <div class="stat-box" style="grid-column: span 2; background: #e8f4f8; border-color: #bee5eb;"><div class="stat-label" style="color: #0c5460;">Gross Omset</div><div class="stat-value" id="sr-omset" style="font-size: 28px; color: #0c5460;">Rp 0</div></div>
             </div>
-
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <div class="revenue-breakdown">
                     <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">💰 Revenue Split</div>
-                    <div class="revenue-row"><span>Cash Paid</span> <strong id="sr-cash">Rp 0</strong></div>
-                    <div class="revenue-row"><span>QRIS Paid</span> <strong id="sr-qris">Rp 0</strong></div>
-                    <div class="revenue-row"><span>Hotel Transfer</span> <strong id="sr-hotel">Rp 0</strong></div>
-                    <div class="revenue-row"><span>Tamu Hotel (Lunas)</span> <strong id="sr-tamupaid">Rp 0</strong></div>
-                    <div class="revenue-row"><span>Complimentary</span> <strong id="sr-free">Rp 0</strong></div>
+                    <div class="revenue-row"><span>Cash Paid</span> <strong id="sr-cash">Rp 0</strong></div><div class="revenue-row"><span>QRIS Paid</span> <strong id="sr-qris">Rp 0</strong></div>
+                    <div class="revenue-row"><span>Hotel Transfer</span> <strong id="sr-hotel">Rp 0</strong></div><div class="revenue-row"><span>Tamu Hotel (Lunas)</span> <strong id="sr-tamupaid">Rp 0</strong></div><div class="revenue-row"><span>Complimentary</span> <strong id="sr-free">Rp 0</strong></div>
                 </div>
-                
                 <div class="revenue-breakdown">
                     <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">⚠️ Pending & Alerts</div>
-                    <div class="revenue-row"><span>Tamu Hotel (Kamar)</span> <strong id="sr-tamupiutang" style="color:#e74c3c;">Rp 0</strong></div>
-                    <div class="revenue-row"><span>General Piutang</span> <strong id="sr-piutang" style="color:#e74c3c;">Rp 0</strong></div>
-                    <div class="revenue-row"><span>Expenses Logged</span> <strong id="sr-expense" style="color:#e67e22;">Rp 0</strong></div>
+                    <div class="revenue-row"><span>Tamu Hotel (Kamar)</span> <strong id="sr-tamupiutang" style="color:#e74c3c;">Rp 0</strong></div><div class="revenue-row"><span>General Piutang</span> <strong id="sr-piutang" style="color:#e74c3c;">Rp 0</strong></div><div class="revenue-row"><span>Expenses Logged</span> <strong id="sr-expense" style="color:#e67e22;">Rp 0</strong></div>
                 </div>
             </div>
-
             <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 15px;">
                 <div style="font-size: 14px; font-weight: bold; color: #155724; text-transform: uppercase;">Expected Cash in Drawer</div>
                 <div id="sr-net" style="font-size: 32px; font-weight: bold; color: #155724; margin-top: 5px;">Rp 0</div>
             </div>
-
             <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left;">
                 <div style="font-weight: bold; color: #856404; margin-bottom: 10px;">⚡ Mandatory Utility Log</div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -350,7 +343,6 @@
                     <div><label style="font-size: 12px; font-weight: bold; color: #856404;">Meter Pasca (Total kWh)</label><input type="number" id="meter-pasca" placeholder="e.g. 14500" step="0.01" style="width: 100%; padding: 10px; border: 1px solid #ffeeba; border-radius: 4px; margin-top: 5px;"></div>
                 </div>
             </div>
-
             <div style="display:flex; gap:10px;">
                 <button onclick="document.getElementById('shift-report-modal').classList.add('hidden')" style="flex:1; padding:15px; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Back</button>
                 <button onclick="initiateLogoutSequence()" style="flex:2; padding:15px; background:#c0392b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">End Shift & Logout</button>
