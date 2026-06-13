@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 12; // Bumped for new Ticket Coin flow
+const DB_VERSION = 13; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -213,8 +213,17 @@ function numpadPress(val) {
 function confirmNumpad() { let qty = parseFloat(numpadValue); if (qty > 0) addToCart(activeNumpadItem, qty); closeNumpad(); }
 
 function addToCart(item, qty) {
+    let finalQty = qty;
     const existing = currentCart.find(i => i.itemId === item.itemId);
-    if (existing) existing.qty += qty; else currentCart.push({ ...item, qty: qty, originalPrice: item.price, expectedCoins: item.expectedCoins });
+    
+    if (!existing && item.hasMoq && item.moqQty > 0 && finalQty < item.moqQty) {
+        alert(`⚠️ Minimum Order (MOQ) untuk ${item.name} adalah ${item.moqQty}.\nJumlah otomatis disesuaikan.`);
+        finalQty = item.moqQty;
+    }
+
+    if (existing) { existing.qty += finalQty; } 
+    else { currentCart.push({ ...item, qty: finalQty, originalPrice: item.price }); }
+    
     renderCart();
 }
 
@@ -242,8 +251,6 @@ function reviewOrder() {
     document.getElementById("pay-hotel-piutang").value = 0; document.getElementById("pay-tamu-piutang").value = 0; document.getElementById("pay-free").value = 0;
     
     window.cartGrandTotal = window.cartSubtotal;
-    // THIS LINE CAUSED THE BUG (Missing Subtotal HTML Element) - Removed to fix crash.
-    document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
     
     applyPromo(); document.getElementById("review-modal").classList.remove("hidden");
 }
@@ -319,8 +326,12 @@ async function finalizeOrder(shouldPrint) {
         };
     }
 
-    // Hitung Estimasi Koin (Hanya untuk Ticket)
-    let expectedCoinsTotal = currentCart.reduce((sum, item) => sum + ((item.expectedCoins || 0) * item.qty), 0);
+    // HITUNG ESTIMASI KOIN TIKET (BERDASARKAN MOQ CHUNK)
+    let expectedCoinsTotal = currentCart.reduce((sum, item) => {
+        let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1;
+        let multiplier = Math.ceil(item.qty / divisor);
+        return sum + ((item.expectedCoins || 0) * multiplier);
+    }, 0);
 
     const orderPayload = {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
@@ -401,9 +412,6 @@ function renderActiveTickets() {
     });
 }
 
-// ----------------------------------------------------
-// NEW TICKET DONE / COIN USAGE AUDIT ENGINE
-// ----------------------------------------------------
 let activeDoneOrderId = null;
 window.markTicketReady = function(orderId, expectedCoins) {
     activeDoneOrderId = orderId;
@@ -429,7 +437,7 @@ window.submitTicketDone = function() {
             let baseUsage = Math.min(expected, actual);
 
             const payload = {
-                retrievalId: "TKC-" + Date.now(), // Use same table as coin retrieval
+                logId: "TKC-" + Date.now(),
                 orderId: activeDoneOrderId,
                 timestamp: new Date().toISOString(),
                 cashier: currentCashier,
@@ -614,11 +622,8 @@ function applyVoidAftermath(order) {
         menuStore.openCursor().onsuccess = (e) => {
             const cursor = e.target.result;
             if (cursor) { 
-                if (isCoin && String(cursor.value.name).toLowerCase() === "koin_fisik") {
-                    const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated);
-                } else if (cursor.value.name === item.name && cursor.value.trackStock) { 
-                    const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); 
-                } 
+                if (isCoin && String(cursor.value.name).toLowerCase() === "koin_fisik") { const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); } 
+                else if (cursor.value.name === item.name && cursor.value.trackStock) { const updated = cursor.value; updated.currentStock += item.qty; cursor.update(updated); } 
                 cursor.continue(); 
             }
         };
@@ -638,7 +643,7 @@ function applyVoidAftermath(order) {
         };
     }
     tx.oncomplete = () => { renderProductGrid(); };
-    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed } }) });
+    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed, internalCoinsUsed: order.internalCoinsUsed } }) });
 }
 
 function calculateLiveDrawer(callback) {
@@ -670,4 +675,130 @@ function submitCashDrop() {
     
     calculateLiveDrawer((liveAmount) => {
         const leftInDrawer = liveAmount - pullAmount;
-        const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, to
+        const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, toAdmin: adminAmt, toBank: bankAmt, leftInDrawer: leftInDrawer, notes: finalNotes, syncStatus: "Pending" };
+        db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").add(payload);
+        document.getElementById("cash-drop-modal").classList.add("hidden"); runBackgroundSync();
+        if (isLoggingOut) { executeFinalLogout(leftInDrawer); } else { alert(`Setor Uang Berhasil!\nTujuan: ${destination}\nSisa Tunai di Laci: Rp ${leftInDrawer.toLocaleString('id-ID')}`); }
+    });
+}
+
+function openShiftReport() {
+    let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0; let tTransfer = 0; let hPiu = 0; let tPiu = 0; let tFree = 0; let tExpense = 0; let foodSummary = {};
+    document.getElementById("meter-token").value = ""; document.getElementById("meter-pasca").value = "";
+    
+    db.transaction(["orders", "expenses"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
+        const validOrders = e.target.result.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
+        validOrders.forEach(o => {
+            tOrders++; if(o.customerPhone && o.customerPhone !== "-") tCust++; tOmset += o.grandTotal;
+            tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tTransfer += (o.transferAmount || 0); 
+            hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0); 
+            if (o.items) o.items.forEach(i => { if(!foodSummary[i.name]) foodSummary[i.name] = 0; foodSummary[i.name] += i.qty; });
+        });
+        
+        db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = (ex) => {
+            const shiftExpenses = ex.target.result.filter(exp => exp.shiftId === currentShiftId && exp.status === "Active"); shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
+            
+            calculateLiveDrawer((liveDrawer) => {
+                document.getElementById("sr-orders").innerText = tOrders; document.getElementById("sr-customers").innerText = tCust; document.getElementById("sr-omset").innerText = `Rp ${tOmset.toLocaleString('id-ID')}`;
+                document.getElementById("sr-cash").innerText = `Rp ${tCash.toLocaleString('id-ID')}`; document.getElementById("sr-qris").innerText = `Rp ${tQris.toLocaleString('id-ID')}`; document.getElementById("sr-transfer").innerText = `Rp ${tTransfer.toLocaleString('id-ID')}`;
+                document.getElementById("sr-hotel-piutang").innerText = `Rp ${hPiu.toLocaleString('id-ID')}`; document.getElementById("sr-tamu-piutang").innerText = `Rp ${tPiu.toLocaleString('id-ID')}`; document.getElementById("sr-free").innerText = `Rp ${tFree.toLocaleString('id-ID')}`;
+                if(document.getElementById("sr-expense")) document.getElementById("sr-expense").innerText = `Rp ${tExpense.toLocaleString('id-ID')}`;
+                document.getElementById("sr-net").innerText = `Rp ${liveDrawer.toLocaleString('id-ID')}`; document.getElementById("shift-report-modal").classList.remove("hidden");
+                
+                window.currentShiftData = { totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer, totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, net: liveDrawer, foodSummary };
+            });
+        };
+    };
+}
+
+function initiateLogoutSequence() { 
+    const meterT = document.getElementById("meter-token").value; const meterP = document.getElementById("meter-pasca").value;
+    if (meterT === "" || meterP === "") return alert("⚠️ ERROR: Wajib mengisi kedua Meteran Listrik sebelum mengakhiri Shift.");
+    window.currentShiftData.meterToken = Number(meterT); window.currentShiftData.meterPasca = Number(meterP);
+    document.getElementById("shift-report-modal").classList.add("hidden"); openCashDrop(true); 
+}
+
+async function executeFinalLogout(netCash) { 
+    const data = window.currentShiftData;
+    const shiftPayload = {
+        shiftId: currentShiftId, timestamp: new Date().toISOString(), cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), 
+        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalTransfer: data.totalTransfer, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree,
+        totalExpenses: data.totalExpenses, netCash: netCash, foodSummary: data.foodSummary, meterToken: data.meterToken, meterPasca: data.meterPasca, syncStatus: "Pending"
+    };
+
+    db.transaction(["local_shift_history"], "readwrite").objectStore("local_shift_history").add(shiftPayload);
+    db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").add(shiftPayload);
+    db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").delete(currentPin); 
+    
+    if (navigator.onLine) {
+        if(document.getElementById("network-text")) document.getElementById("network-text").innerText = `Mengirim Laporan Shift...`;
+        try {
+            let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncShiftReport", data: shiftPayload }) });
+            if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(shiftPayload.shiftId); }
+        } catch(e) {}
+    }
+    window.location.reload(); 
+}
+
+function lockScreen() { window.location.reload(); }
+
+async function runBackgroundSync() {
+    if (!navigator.onLine || isSyncing) return;
+    isSyncing = true; 
+    try {
+        let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members", "coin_retrievals", "ticket_coins"], "readonly");
+        
+        let orders = await new Promise(res => tx.objectStore("orders").getAll().onsuccess = e => res(e.target.result));
+        for (const order of orders) {
+            if (order.syncStatus === "Pending") {
+                order.syncStatus = "Syncing"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order);
+                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncOrder", data: order }) }); if ((await r.json()).status === "Success") { order.syncStatus = "Synced"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); } else { order.syncStatus = "Pending"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); } } catch(e) { order.syncStatus = "Pending"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); }
+            }
+        }
+        
+        let drops = await new Promise(res => tx.objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
+        for (const drop of drops) {
+            if (drop.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncCashDrop", data: drop }) }); if ((await r.json()).status === "Success") { drop.syncStatus = "Synced"; db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").put(drop); } } catch(e) {} }
+        }
+        
+        let reports = await new Promise(res => tx.objectStore("shift_reports").getAll().onsuccess = e => res(e.target.result));
+        for (const report of reports) {
+            if (report.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncShiftReport", data: report }) }); if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId); } } catch(e) {} }
+        }
+
+        let expenses = await new Promise(res => tx.objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
+        for (const exp of expenses) {
+            if (exp.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncExpense", data: exp }) }); if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); } } catch(e) {} }
+        }
+
+        let voids = await new Promise(res => tx.objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
+        for (const req of voids) {
+            try {
+                const actionType = req.type === 'orders' ? "requestOrderVoid" : "requestExpenseVoid"; const payload = req.type === 'orders' ? { orderId: req.id, status: req.status, authName: req.authName } : { expenseId: req.id, status: req.status, authName: req.authName };
+                let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: actionType, ...payload }) }); if ((await r.json()).status === "Success") { db.transaction(["void_requests"], "readwrite").objectStore("void_requests").delete(req.id); }
+            } catch(e) {}
+        }
+
+        let members = await new Promise(res => tx.objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
+        for (const mem of members) {
+            try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncMember", data: mem }) }); if ((await r.json()).status === "Success") { db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone); } } catch(e) {}
+        }
+        
+        let coinRets = await new Promise(res => tx.objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
+        for (const ret of coinRets) {
+            if (ret.syncStatus === "Pending") {
+                let actionCode = ret.notes && ret.notes.includes("Macet") ? "syncCoinJammed" : "syncCoinRetrieval";
+                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: actionCode, data: ret }) }); if ((await r.json()).status === "Success") { ret.syncStatus = "Synced"; db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").put(ret); } } catch(e) {} 
+            }
+        }
+
+        let ticketCoins = await new Promise(res => tx.objectStore("ticket_coins").getAll().onsuccess = e => res(e.target.result));
+        for (const tc of ticketCoins) {
+            if (tc.syncStatus === "Pending") {
+                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncTicketCoins", data: tc }) }); if ((await r.json()).status === "Success") { tc.syncStatus = "Synced"; db.transaction(["ticket_coins"], "readwrite").objectStore("ticket_coins").put(tc); } } catch(e) {}
+            }
+        }
+    } finally { isSyncing = false; }
+}
+
+window.onload = async () => { await initDB(); await syncMasterData(); window.setInterval(runBackgroundSync, 15000); };
