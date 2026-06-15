@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 17; 
+const DB_VERSION = 19; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -10,6 +10,14 @@ let activeSettlementTicket = null; window.masterDrawerBalance = 0; let isLogging
 let currentVoidTarget = { type: null, id: null };
 let isMenuLocked = true; let isSyncing = false; 
 let activeCustomerProfile = null; let activeCoinPrice = 10000;
+
+// HELPER: Format Waktu ke WIB (Surabaya) 24 Jam
+function formatWIB(dateString) {
+    return new Date(dateString).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') + ' WIB';
+}
+function formatTimeOnlyWIB(dateString) {
+    return new Date(dateString).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, hour: '2-digit', minute: '2-digit' }) + ' WIB';
+}
 
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -83,11 +91,8 @@ function switchWorkspace(type) {
 
 function lockMenu() {
     isMenuLocked = true; activeCustomerProfile = null; 
-    
-    // UI: Tampilkan Form, Sembunyikan Banner
     document.getElementById("customer-input-section").classList.remove("hidden");
     document.getElementById("active-customer-banner").classList.add("hidden");
-    
     document.getElementById("glass-overlay").style.opacity = "1"; document.getElementById("glass-overlay").style.pointerEvents = "auto";
     document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = ""; currentCart = []; renderCart();
     document.getElementById("promo-indicator").classList.add("hidden");
@@ -103,7 +108,6 @@ function unlockMenu(isGuest) {
         if (phone.length < 5) return alert("Harap masukkan Nomor WhatsApp yang valid terlebih dahulu.");
     }
     
-    // UI: Tampilkan Banner, Sembunyikan Form
     document.getElementById("active-cust-name").innerText = name;
     document.getElementById("active-cust-phone").innerText = phone !== "-" ? `(${phone})` : "";
     document.getElementById("customer-input-section").classList.add("hidden");
@@ -115,7 +119,7 @@ function unlockMenu(isGuest) {
 async function manualPushSync() {
     if (!navigator.onLine) return alert("Anda sedang offline!");
     document.getElementById("network-text").innerText = "Mengirim Data..."; document.getElementById("network-dot").style.backgroundColor = "#f39c12";
-    await runBackgroundSync(); document.getElementById("network-text").innerText = "Menarik Data..."; await syncMasterData(); alert("Sinkronisasi Database Berhasil!");
+    await runBackgroundSync(); document.getElementById("network-text").innerText = "Menarik Data..."; await syncMasterData();
 }
 
 async function syncMasterData() {
@@ -401,7 +405,10 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
     const settings = await getDynamicSettings();
     const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; const h2 = settings["Header_2"] || ""; const h3 = settings["Header_3"] || ""; 
     const f1 = settings["Footer_1"] || "TERIMA KASIH"; const f2 = settings["Footer_2"] || ""; const f3 = settings["Footer_3"] || ""; 
-    const printArea = document.getElementById("printable-area"); const dateStr = new Date().toLocaleString('id-ID');
+    
+    // FORMAT TANGGAL WIB
+    const dateStr = formatWIB(new Date().toISOString());
+    const printArea = document.getElementById("printable-area"); 
     
     let itemsHtml = "";
     order.items.forEach(item => {
@@ -543,7 +550,7 @@ function renderHistoryList(type) {
             shiftOrders.forEach(o => {
                 let badge = o.orderStatus === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : o.orderStatus === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">${o.orderStatus}</span>`; 
                 let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Batal/Void</button>` : '';
-                container.innerHTML += `<div class="history-row"><div><strong>${o.customerName}</strong><br><small style="color:#7f8c8d;">${new Date(o.timestamp).toLocaleTimeString()} | Rp ${o.grandTotal.toLocaleString('id-ID')}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
+                container.innerHTML += `<div class="history-row"><div><strong>${o.customerName}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(o.timestamp)} | Rp ${o.grandTotal.toLocaleString('id-ID')}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
             });
         };
     } else if (type === 'expenses') {
@@ -553,7 +560,7 @@ function renderHistoryList(type) {
             shiftExpenses.forEach(exp => {
                 let badge = exp.status === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : exp.status === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">Aktif</span>`;
                 let btn = (exp.status !== "Voided" && exp.status !== "Void Pending") ? `<button onclick="requestVoid('expenses', '${exp.expenseId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Batal/Void</button>` : '';
-                container.innerHTML += `<div class="history-row"><div><strong>${exp.category}</strong><br><small style="color:#7f8c8d;">${new Date(exp.timestamp).toLocaleTimeString()} | Rp ${exp.amount.toLocaleString('id-ID')}</small><br><small>${exp.description}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
+                container.innerHTML += `<div class="history-row"><div><strong>${exp.category}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(exp.timestamp)} | Rp ${exp.amount.toLocaleString('id-ID')}</small><br><small>${exp.description}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
             });
         };
     } else if (type === 'shifts') {
@@ -561,7 +568,7 @@ function renderHistoryList(type) {
             const shifts = e.target.result.reverse();
             if(shifts.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada histori shift di tablet ini.</div>`;
             shifts.forEach(s => {
-                container.innerHTML += `<div class="history-row"><div><strong>Shift: ${s.shiftId}</strong><br><small style="color:#7f8c8d;">Kasir: ${s.cashier} | Keluar: ${new Date(s.logoutTime).toLocaleString('id-ID')}</small></div><div style="text-align:right;"><strong>Omset: Rp ${s.totalOmset.toLocaleString('id-ID')}</strong><br><small style="color:#27ae60;">Uang Tunai Laci: Rp ${s.netCash.toLocaleString('id-ID')}</small></div></div>`;
+                container.innerHTML += `<div class="history-row"><div><strong>Shift: ${s.shiftId}</strong><br><small style="color:#7f8c8d;">Kasir: ${s.cashier} | Keluar: ${formatWIB(s.logoutTime)}</small></div><div style="text-align:right;"><strong>Omset: Rp ${s.totalOmset.toLocaleString('id-ID')}</strong><br><small style="color:#27ae60;">Uang Tunai Laci: Rp ${s.netCash.toLocaleString('id-ID')}</small></div></div>`;
             });
         };
     }
@@ -716,6 +723,8 @@ function openCashDrop(forLogout = false) {
 function submitCashDrop() {
     const pullAmount = Number(document.getElementById("drop-amount").value) || 0;
     if (pullAmount < 0) return alert("⚠️ ERROR: Nominal uang tidak valid.");
+    
+    // Perbaikan: Izinkan input 0 jika sedang logout
     if (pullAmount === 0 && !isLoggingOut) return alert("⚠️ ERROR: Harap masukkan nominal uang yang diambil dari laci.");
     
     const destination = document.getElementById("drop-destination").value; const customNotes = document.getElementById("drop-notes").value || (isLoggingOut ? "Tutup Shift" : "Tarik Uang Tengah Shift");
@@ -850,4 +859,9 @@ async function runBackgroundSync() {
     } finally { isSyncing = false; }
 }
 
-window.onload = async () => { await initDB(); await syncMasterData(); window.setInterval(runBackgroundSync, 15000); };
+window.onload = async () => { 
+    await initDB(); 
+    await syncMasterData(); 
+    window.setInterval(runBackgroundSync, 15000); 
+    window.setInterval(syncMasterData, 60000); 
+};
