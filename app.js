@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 19; 
+const DB_VERSION = 20; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -11,13 +11,8 @@ let currentVoidTarget = { type: null, id: null };
 let isMenuLocked = true; let isSyncing = false; 
 let activeCustomerProfile = null; let activeCoinPrice = 10000;
 
-// HELPER: Format Waktu ke WIB (Surabaya) 24 Jam
-function formatWIB(dateString) {
-    return new Date(dateString).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') + ' WIB';
-}
-function formatTimeOnlyWIB(dateString) {
-    return new Date(dateString).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, hour: '2-digit', minute: '2-digit' }) + ' WIB';
-}
+function formatWIB(dateString) { return new Date(dateString).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') + ' WIB'; }
+function formatTimeOnlyWIB(dateString) { return new Date(dateString).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, hour: '2-digit', minute: '2-digit' }) + ' WIB'; }
 
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -107,19 +102,17 @@ function unlockMenu(isGuest) {
         name = document.getElementById("cust-name").value.trim() || "Pelanggan";
         if (phone.length < 5) return alert("Harap masukkan Nomor WhatsApp yang valid terlebih dahulu.");
     }
-    
     document.getElementById("active-cust-name").innerText = name;
     document.getElementById("active-cust-phone").innerText = phone !== "-" ? `(${phone})` : "";
     document.getElementById("customer-input-section").classList.add("hidden");
     document.getElementById("active-customer-banner").classList.remove("hidden");
-
     isMenuLocked = false; document.getElementById("glass-overlay").style.opacity = "0"; setTimeout(() => { document.getElementById("glass-overlay").style.pointerEvents = "none"; }, 300);
 }
 
 async function manualPushSync() {
     if (!navigator.onLine) return alert("Anda sedang offline!");
     document.getElementById("network-text").innerText = "Mengirim Data..."; document.getElementById("network-dot").style.backgroundColor = "#f39c12";
-    await runBackgroundSync(); document.getElementById("network-text").innerText = "Menarik Data..."; await syncMasterData();
+    await runBackgroundSync(); document.getElementById("network-text").innerText = "Menarik Data..."; await syncMasterData(); alert("Sinkronisasi Database Berhasil!");
 }
 
 async function syncMasterData() {
@@ -168,11 +161,7 @@ function handleAutocomplete(e) {
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
         const members = ev.target.result; 
         let matches = members;
-        
-        if (val.length > 0) {
-            matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
-        }
-        
+        if (val.length > 0) matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
         matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
 
         if (matches.length > 0) {
@@ -242,17 +231,9 @@ function numpadPress(val) {
 function confirmNumpad() { let qty = parseFloat(numpadValue); if (qty > 0) addToCart(activeNumpadItem, qty); closeNumpad(); }
 
 function addToCart(item, qty) {
-    let finalQty = qty;
-    const existing = currentCart.find(i => i.itemId === item.itemId);
-    
-    if (!existing && item.hasMoq && item.moqQty > 0 && finalQty < item.moqQty) {
-        alert(`⚠️ Minimum Order (MOQ) untuk ${item.name} adalah ${item.moqQty}.\nJumlah otomatis disesuaikan.`);
-        finalQty = item.moqQty;
-    }
-
-    if (existing) { existing.qty += finalQty; } 
-    else { currentCart.push({ ...item, qty: finalQty, originalPrice: item.price, expectedCoins: item.expectedCoins, hasMoq: item.hasMoq, moqQty: item.moqQty }); }
-    
+    let finalQty = qty; const existing = currentCart.find(i => i.itemId === item.itemId);
+    if (!existing && item.hasMoq && item.moqQty > 0 && finalQty < item.moqQty) { alert(`⚠️ Minimum Order (MOQ) untuk ${item.name} adalah ${item.moqQty}.\nJumlah otomatis disesuaikan.`); finalQty = item.moqQty; }
+    if (existing) { existing.qty += finalQty; } else { currentCart.push({ ...item, qty: finalQty, originalPrice: item.price, expectedCoins: item.expectedCoins, hasMoq: item.hasMoq, moqQty: item.moqQty }); }
     renderCart();
 }
 
@@ -279,8 +260,7 @@ function reviewOrder() {
     document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-transfer").value = 0;
     document.getElementById("pay-hotel-piutang").value = 0; document.getElementById("pay-tamu-piutang").value = 0; document.getElementById("pay-free").value = 0;
     
-    let internalCoinBox = document.getElementById("internal-coins");
-    if(internalCoinBox) internalCoinBox.value = 0;
+    let internalCoinBox = document.getElementById("internal-coins"); if(internalCoinBox) internalCoinBox.value = 0;
     
     window.cartGrandTotal = window.cartSubtotal;
     document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
@@ -310,7 +290,6 @@ window.calculateRemaining = function() {
     const c = Number(document.getElementById("pay-cash").value) || 0; const q = Number(document.getElementById("pay-qris").value) || 0;
     const t = Number(document.getElementById("pay-transfer").value) || 0; const hp = Number(document.getElementById("pay-hotel-piutang").value) || 0;
     const tp = Number(document.getElementById("pay-tamu-piutang").value) || 0; const f = Number(document.getElementById("pay-free").value) || 0;
-    
     const totalAccounted = c + q + t + hp + tp + f; const remaining = Math.max(0, window.cartGrandTotal - totalAccounted);
     document.getElementById("review-remaining").innerText = `Rp ${remaining.toLocaleString('id-ID')}`;
 }
@@ -323,16 +302,11 @@ async function finalizeOrder(shouldPrint) {
     const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
     const redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
     
-    let internalCoinBox = document.getElementById("internal-coins");
-    const internalCoins = internalCoinBox ? (Number(internalCoinBox.value) || 0) : 0;
+    let internalCoinBox = document.getElementById("internal-coins"); const internalCoins = internalCoinBox ? (Number(internalCoinBox.value) || 0) : 0;
     
-    const totalPiutang = hotelPiutang + tamuPiutang;
-    const totalAccounted = cash + qris + transfer + free + totalPiutang; 
-    const remaining = window.cartGrandTotal - totalAccounted;
-
+    const totalPiutang = hotelPiutang + tamuPiutang; const totalAccounted = cash + qris + transfer + free + totalPiutang; const remaining = window.cartGrandTotal - totalAccounted;
     const requiresProcessing = currentCart.some(i => String(i.workflow).toUpperCase() === "TICKET");
-    let custPhoneRaw = document.getElementById("cust-phone").value.trim(); 
-    let custPhone = custPhoneRaw || "-";
+    let custPhoneRaw = document.getElementById("cust-phone").value.trim(); let custPhone = custPhoneRaw || "-";
     const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
     const hasHotelItem = currentCart.some(i => String(i.category).toLowerCase().includes("hotel"));
 
@@ -344,15 +318,14 @@ async function finalizeOrder(shouldPrint) {
     let payMethods = [];
     if(cash > 0) payMethods.push("Tunai"); if(qris > 0) payMethods.push("QRIS"); if(transfer > 0) payMethods.push("Trf.Bank"); if(hotelPiutang > 0) payMethods.push("Piutang(B2B)"); if(tamuPiutang > 0) payMethods.push("Piutang(Tamu)"); if(free > 0) payMethods.push("Gratis");
     const payString = payMethods.length > 0 ? payMethods.join("+") : "Belum Bayar";
-
     if(custPhone !== "-") saveMemberToDB(custPhone, custName);
 
     let status = "Completed"; if (totalPiutang > 0) status = "Pending Debt"; else if (requiresProcessing) status = "Processing";
 
     let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
     let coinsEarned = Math.max(0, totalCoinsInCart - redeemCount);
-
     let newPoints = 0; let newFree = 0;
+    
     if (activeCustomerProfile) {
         let currentPoints = activeCustomerProfile.points || 0; let currentFree = activeCustomerProfile.freeCoins || 0;
         currentFree -= redeemCount; currentPoints += coinsEarned;
@@ -364,11 +337,7 @@ async function finalizeOrder(shouldPrint) {
         };
     }
 
-    let expectedCoinsTotal = currentCart.reduce((sum, item) => {
-        let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1;
-        let multiplier = Math.ceil(item.qty / divisor);
-        return sum + ((item.expectedCoins || 0) * multiplier);
-    }, 0);
+    let expectedCoinsTotal = currentCart.reduce((sum, item) => { let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; let multiplier = Math.ceil(item.qty / divisor); return sum + ((item.expectedCoins || 0) * multiplier); }, 0);
 
     const orderPayload = {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
@@ -406,7 +375,6 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
     const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; const h2 = settings["Header_2"] || ""; const h3 = settings["Header_3"] || ""; 
     const f1 = settings["Footer_1"] || "TERIMA KASIH"; const f2 = settings["Footer_2"] || ""; const f3 = settings["Footer_3"] || ""; 
     
-    // FORMAT TANGGAL WIB
     const dateStr = formatWIB(new Date().toISOString());
     const printArea = document.getElementById("printable-area"); 
     
@@ -449,11 +417,8 @@ function renderActiveTickets() {
         if (!receiptText && ticket.items) receiptText = ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n');
 
         let buttonsHtml = "";
-        if (!isReady) {
-            buttonsHtml = `<button class="ticket-btn" style="background:#f39c12;" onclick="markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>`;
-        } else {
-            buttonsHtml = `<button class="ticket-btn" style="background:#2ecc71;" onclick="openSettlement('${ticket.orderId}', ${remaining})">Ambil Cucian & Bayar</button>`;
-        }
+        if (!isReady) { buttonsHtml = `<button class="ticket-btn" style="background:#f39c12;" onclick="markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>`; } 
+        else { buttonsHtml = `<button class="ticket-btn" style="background:#2ecc71;" onclick="openSettlement('${ticket.orderId}', ${remaining})">Ambil Cucian & Bayar</button>`; }
 
         grid.innerHTML += `
             <div class="ticket-card ${isReady ? 'ready' : ''}">
@@ -477,31 +442,18 @@ window.markTicketReady = function(orderId, expectedCoins) {
 window.submitTicketDone = function() {
     let actual = Number(document.getElementById("done-actual-coins").value) || 0;
     let expected = Number(document.getElementById("done-expected-coins").innerText) || 0;
-
     if (actual < 0) return alert("Jumlah koin tidak valid.");
 
     const ticket = activeLaundryTickets.find(t => t.orderId === activeDoneOrderId);
     if (ticket) {
-        ticket.orderStatus = "Ready for Pickup";
-        ticket.syncStatus = "Pending";
+        ticket.orderStatus = "Ready for Pickup"; ticket.syncStatus = "Pending";
         db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
 
         if (actual > 0) {
-            let overuse = Math.max(0, actual - expected);
-            let baseUsage = Math.min(expected, actual);
-
-            const payload = {
-                logId: "TKC-" + Date.now(),
-                orderId: activeDoneOrderId,
-                timestamp: new Date().toISOString(),
-                cashier: currentCashier,
-                expected: baseUsage,
-                overuse: overuse,
-                syncStatus: "Pending"
-            };
+            let overuse = Math.max(0, actual - expected); let baseUsage = Math.min(expected, actual);
+            const payload = { logId: "TKC-" + Date.now(), orderId: activeDoneOrderId, timestamp: new Date().toISOString(), cashier: currentCashier, expected: baseUsage, overuse: overuse, syncStatus: "Pending" };
             db.transaction(["ticket_coins"], "readwrite").objectStore("ticket_coins").add(payload);
         }
-
         renderActiveTickets(); runBackgroundSync();
     }
     document.getElementById("ticket-done-modal").classList.add("hidden");
@@ -580,9 +532,7 @@ document.getElementById("coin-action-type").addEventListener("change", function(
 });
 
 function openCoinManagement() {
-    document.getElementById("manage-coin-qty").value = "";
-    document.getElementById("manage-coin-note").value = "";
-    document.getElementById("coin-management-modal").classList.remove("hidden");
+    document.getElementById("manage-coin-qty").value = ""; document.getElementById("manage-coin-note").value = ""; document.getElementById("coin-management-modal").classList.remove("hidden");
 }
 
 function submitCoinManagement() {
@@ -607,7 +557,6 @@ function submitCoinManagement() {
         db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
         alert(`${qty} Koin Macet/Rusak berhasil dicatat dan stok fisik telah dipotong.`);
     }
-
     document.getElementById("coin-management-modal").classList.add("hidden"); runBackgroundSync(); 
 }
 
@@ -697,9 +646,10 @@ function applyVoidAftermath(order) {
         };
     }
     tx.oncomplete = () => { renderProductGrid(); };
-    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed, internalCoinsUsed: order.internalCoinsUsed } }) });
+    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed, internalCoinsUsed: order.internalCoinsUsed, cashRefund: order.cashAmount } }) });
 }
 
+// UPDATE: Perhitungan Laci Menggabungkan Cloud dan Offline
 function calculateLiveDrawer(callback) {
     let liveDrawer = window.masterDrawerBalance || 0; 
     let tx = db.transaction(["orders", "cash_drops", "expenses"], "readonly");
@@ -723,8 +673,6 @@ function openCashDrop(forLogout = false) {
 function submitCashDrop() {
     const pullAmount = Number(document.getElementById("drop-amount").value) || 0;
     if (pullAmount < 0) return alert("⚠️ ERROR: Nominal uang tidak valid.");
-    
-    // Perbaikan: Izinkan input 0 jika sedang logout
     if (pullAmount === 0 && !isLoggingOut) return alert("⚠️ ERROR: Harap masukkan nominal uang yang diambil dari laci.");
     
     const destination = document.getElementById("drop-destination").value; const customNotes = document.getElementById("drop-notes").value || (isLoggingOut ? "Tutup Shift" : "Tarik Uang Tengah Shift");
@@ -862,6 +810,6 @@ async function runBackgroundSync() {
 window.onload = async () => { 
     await initDB(); 
     await syncMasterData(); 
-    window.setInterval(runBackgroundSync, 15000); 
-    window.setInterval(syncMasterData, 60000); 
+    window.setInterval(runBackgroundSync, 5000); // Tembak antrean setiap 5 detik (Sangat cepat & aman karena antrean hanya data kecil)
+    window.setInterval(syncMasterData, 30000); // Tarik stok & menu dari server setiap 30 detik
 };
