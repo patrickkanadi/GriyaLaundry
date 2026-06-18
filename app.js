@@ -113,11 +113,28 @@ async function manualPushSync() {
 }
 
 async function syncMasterData() {
-    if (!navigator.onLine) { if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Mode Offline"; if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c"; return; }
-    if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Sinkronisasi..."; if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#f39c12";
+    let netText1 = document.getElementById("network-text");
+    let netText2 = document.getElementById("login-network-text");
+    let netDot1 = document.getElementById("network-dot");
+    let netDot2 = document.getElementById("login-network-dot");
+
+    if (!navigator.onLine) {
+        if(netText1) netText1.innerText = "Mode Offline";
+        if(netText2) netText2.innerText = "Mode Offline (Gagal Tarik PIN)";
+        if(netDot1) netDot1.style.backgroundColor = "#e74c3c";
+        if(netDot2) netDot2.style.backgroundColor = "#e74c3c";
+        return;
+    }
+    
+    if(netText1) netText1.innerText = "Sinkronisasi...";
+    if(netText2) netText2.innerText = "Menarik Database...";
+    if(netDot1) netDot1.style.backgroundColor = "#f39c12";
+    if(netDot2) netDot2.style.backgroundColor = "#f39c12";
 
     try {
-        const response = await fetch(API_URL); const result = await response.json();
+        const response = await fetch(API_URL); 
+        const result = await response.json();
+        
         if (result.status === "Success") {
             window.masterDrawerBalance = result.masterDrawerBalance || 0; 
             window.loyaltyTarget = result.data.loyaltyTarget || 10;
@@ -135,11 +152,23 @@ async function syncMasterData() {
             let cItem = globalMenuData.find(i => String(i.category).toLowerCase().includes("coin") || String(i.name).toLowerCase().includes("koin")); if(cItem) activeCoinPrice = cItem.price;
 
             if(document.getElementById("ticket-count")) document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
-            if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Online & Sinkron";
-            if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#2ecc71";
+            
+            // UPDATE UI MENJADI HIJAU JIKA BERHASIL
+            if(netText1) netText1.innerText = "Online & Sinkron";
+            if(netText2) netText2.innerText = "Sistem Siap! Silakan Login";
+            if(netDot1) netDot1.style.backgroundColor = "#2ecc71";
+            if(netDot2) netDot2.style.backgroundColor = "#2ecc71";
+            
             if (!document.getElementById("pos-screen").classList.contains("hidden")) { loadMenuUI(); renderActiveTickets(); }
         } else { throw new Error(result.message); }
-    } catch (e) { if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Gagal Sinkron"; if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c"; }
+    } catch (e) { 
+        // UPDATE UI MENJADI MERAH JIKA URL SALAH / GAGAL
+        if(netText1) netText1.innerText = "Gagal Sinkron"; 
+        if(netText2) netText2.innerText = "Gagal Terhubung ke Google Sheets"; 
+        if(netDot1) netDot1.style.backgroundColor = "#e74c3c";
+        if(netDot2) netDot2.style.backgroundColor = "#e74c3c";
+        console.error("Sync Error:", e);
+    }
 }
 
 function handleAutocomplete(e) {
