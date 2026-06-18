@@ -6,7 +6,6 @@
     <title>Griya Laundry POS</title>
     <link rel="manifest" href="manifest.json">
     <style>
-        /* BASE DESKTOP/TABLET STYLES */
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         html, body { margin: 0; padding: 0; background-color: #f4f7f6; height: 100vh; height: 100dvh; overflow: hidden; }
         .hidden { display: none !important; }
@@ -111,52 +110,39 @@
             @page { margin: 2mm; } 
         }
 
-        /* ====================================================
-           RESPONSIVE MOBILE / PORTRAIT TABLET ENGINE
-           ==================================================== */
         @media screen and (max-width: 850px) {
             #top-bar { flex-direction: column; align-items: stretch; gap: 10px; padding: 10px; }
             .status-indicator { flex-wrap: wrap; justify-content: center; gap: 6px; }
             .btn-top { flex: 1 1 calc(33% - 10px); margin: 0; font-size: 12px; padding: 8px 4px; text-align: center; }
-            
             #workspace-tabs { padding: 10px 10px 0 10px; }
             .ws-tab { padding: 10px 15px; font-size: 14px; }
-
-            /* Switch to Stacked Layout */
             #main-workspace { flex-direction: column; }
             #menu-section { flex: 1.2; border-right: none; border-bottom: 3px solid #bdc3c7; }
             #cart-section { flex: 1; }
-
             #command-bar { padding: 10px; }
             #customer-input-section { flex-direction: column; align-items: stretch; }
             .input-group { flex-direction: column; width: 100%; gap: 10px; }
             .btn-action-group { width: 100%; }
-            
+            #active-customer-banner { flex-direction: column; gap: 10px; align-items: stretch; text-align: center; }
             .category-tabs { padding: 10px; }
             .cat-btn { padding: 10px 15px; font-size: 14px; }
-
             #product-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); padding: 10px; gap: 10px; }
             .product-card { padding: 10px; }
             .product-card h4 { font-size: 14px; margin-bottom: 5px; }
             .price-badge { font-size: 12px; padding: 4px 8px; margin-top: 5px; }
-
             #cart-header { padding: 10px; font-size: 14px; }
             #cart-items { padding: 10px; }
             #checkout-panel { padding: 15px; }
             .grand-total { font-size: 20px; }
             .btn-pay { padding: 12px; font-size: 16px; margin-top: 10px; }
-
             .modal-content { width: 100%; padding: 15px; }
             .numpad-grid { gap: 5px; margin-bottom: 10px; }
             .num-btn { padding: 12px; font-size: 18px; }
-            
             .split-pay-grid { grid-template-columns: 1fr; gap: 8px; padding: 10px; }
             .form-box label { font-size: 12px; }
             .form-box input, .form-box select { padding: 10px; font-size: 14px; }
-            
             .stats-grid { grid-template-columns: 1fr; }
             .ticket-grid { grid-template-columns: 1fr; }
-            
             #glass-overlay h1 { font-size: 32px; }
             #glass-overlay h2 { font-size: 20px; }
             #glass-overlay p { font-size: 14px; }
@@ -221,7 +207,10 @@
                             👤 <span id="active-cust-name">---</span> 
                             <span style="font-size:12px; color:#7f8c8d; font-weight:normal; margin-left:5px;" id="active-cust-phone"></span>
                         </div>
-                        <button onclick="lockMenu()" style="background:#e74c3c; color:white; border:none; padding:10px 15px; border-radius:6px; font-weight:bold; cursor:pointer;">Ganti / Kunci</button>
+                        <div style="display:flex; gap:10px;">
+                            <button onclick="openLotteryModal()" style="background:#8e44ad; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">🎫 Input Undian</button>
+                            <button onclick="lockMenu()" style="background:#e74c3c; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">Ganti / Kunci</button>
+                        </div>
                     </div>
                 </div>
                 
@@ -249,6 +238,19 @@
         <div id="active-tickets-workspace" class="hidden">
             <h2 style="margin-top:0;">Cucian Dalam Proses (SPK)</h2>
             <div class="ticket-grid" id="ticket-grid-container"></div>
+        </div>
+    </div>
+
+    <!-- LOTTERY MODAL -->
+    <div id="lottery-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width:350px; text-align:center;">
+            <h2 style="margin-top:0; color:#8e44ad;">🎫 Klaim Undian</h2>
+            <p style="color:#7f8c8d; font-size:14px; margin-bottom:20px;">Masukkan kode rahasia dari kertas undian yang diambil pelanggan.</p>
+            <input type="text" id="lottery-code-input" placeholder="Misal: GRATIS-KOIN" style="width:100%; padding:15px; font-size:20px; font-weight:bold; text-align:center; text-transform:uppercase; border:2px solid #bdc3c7; border-radius:8px; margin-bottom:20px;">
+            <div style="display:flex; gap:10px;">
+                <button onclick="document.getElementById('lottery-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#ecf0f1;">Batal</button>
+                <button onclick="submitLotteryCode()" style="flex:2; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#8e44ad; color:white;">Simpan ke Profil</button>
+            </div>
         </div>
     </div>
 
@@ -320,10 +322,8 @@
     <div id="review-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <h2 style="margin-top:0; border-bottom:2px solid #eee; padding-bottom:10px;">🧾 Rincian Pembayaran</h2>
-            <div id="promo-section" class="hidden" style="background:#fff3cd; border:1px solid #ffeeba; padding:15px; border-radius:8px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
-                <div><strong style="color:#856404; font-size:16px;">🎁 Tukar Koin Gratis</strong><br><small style="color:#856404;" id="promo-text">Anda punya 0 koin gratis.</small></div>
-                <div><input type="number" id="redeem-coins" value="0" min="0" oninput="applyPromo()" style="width:80px; padding:10px; font-weight:bold; font-size:18px; text-align:center; border:2px solid #f1c40f; border-radius:6px; background: white;"></div>
-            </div>
+            
+            <div id="dynamic-promo-section" class="hidden" style="background:#fff3cd; border:1px solid #ffeeba; padding:15px; border-radius:8px; margin-bottom:15px; display:flex; flex-direction:column; gap:10px;"></div>
             
             <div style="background:#f9f9f9; padding:15px; border-radius:8px; border:1px solid #eee; margin-bottom:15px;">
                 <div style="display:flex; justify-content:space-between; font-size:16px; color:#7f8c8d; margin-bottom:5px;"><span>Subtotal:</span> <span id="review-subtotal">Rp 0</span></div>
@@ -335,7 +335,7 @@
                 <div class="form-box" style="margin-bottom:0;"><label>Tunai / Cash (Rp)</label><input type="number" id="pay-cash" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
                 <div class="form-box" style="margin-bottom:0;"><label>QRIS (Rp)</label><input type="number" id="pay-qris" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
                 <div class="form-box" style="margin-bottom:0;"><label>Transfer Bank (Rp)</label><input type="number" id="pay-transfer" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
-                <div class="form-box" style="margin-bottom:0;"><label style="color:#27ae60;">Gratis / Promo Koin (Rp)</label><input type="number" id="pay-free" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
+                <div class="form-box" style="margin-bottom:0;"><label style="color:#27ae60;">Gratis / Promo Diskon (Rp)</label><input type="number" id="pay-free" value="0" readonly style="background:#e8f4f8; font-weight:bold;"></div>
                 <div class="form-box" style="margin-bottom:0; background:#f8d7da; padding:5px; border-radius:6px;"><label style="color:#721c24;">Piutang: B2B Hotel (Rp)</label><input type="number" id="pay-hotel-piutang" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
                 <div class="form-box" style="margin-bottom:0; background:#f8d7da; padding:5px; border-radius:6px;"><label style="color:#721c24;">Piutang: Tamu Kamar (Rp)</label><input type="number" id="pay-tamu-piutang" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
             </div>
