@@ -1,6 +1,6 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbyDGb115Iw45a9DQ_E-GYjhfBUz6hgsbdMnTyGis7xftBNHgvBnm7un7B8esYkihfA/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbxLfrUoCplYPUKJTbj_EUtXT2NDcU067bS8qHnapbC9g9Wr6CubXGrPJAtFKW2ti9Ts/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 21; 
+const DB_VERSION = 22; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -45,33 +45,17 @@ function initDB() {
 
         request.onsuccess = (e) => { 
             db = e.target.result; 
-            
-            // 🛡️ PERTAHANAN BARU: Jika ada tab lain yang memaksa update database
-            db.onversionchange = () => {
-                db.close();
-                console.warn("Database diperbarui oleh tab lain. Memuat ulang sistem...");
-                window.location.reload();
-            };
-            
+            db.onversionchange = () => { db.close(); window.location.reload(); };
             resolve(db); 
         };
 
-        request.onerror = (e) => { 
-            console.error("IndexedDB Error:", e); 
-            reject(e); 
-        };
-
-        // 🛡️ PERTAHANAN BARU: Jika tab nyangkut saat di-update
-        request.onblocked = () => { 
-            alert("⚠️ Mohon TUTUP tab aplikasi POS yang lain agar sistem bisa diperbarui ke versi terbaru!"); 
-        };
+        request.onerror = (e) => { console.error("IndexedDB Error:", e); reject(e); };
+        request.onblocked = () => { alert("⚠️ Mohon TUTUP tab aplikasi POS yang lain agar sistem bisa diperbarui ke versi terbaru!"); };
     });
 }
 
 function attemptLogin() {
-    // TAMBAHAN: .trim() akan otomatis menghapus spasi yang tidak sengaja terketik
-    const pin = document.getElementById("cashier-pin").value.trim(); 
-    
+    const pin = document.getElementById("cashier-pin").value.trim();
     db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = (e) => {
         const staff = e.target.result;
         if (staff) {
@@ -79,15 +63,11 @@ function attemptLogin() {
                 const activeShift = shiftReq.target.result;
                 currentCashier = staff.name; currentPin = staff.pin;
                 if (activeShift) { currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime; } 
-                else {
-                    currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString();
-                    db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: pin, shiftId: currentShiftId, loginTime: currentLoginTime});
-                }
-                document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden");
-                document.getElementById("display-cashier").innerText = currentCashier;
+                else { currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString(); db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: pin, shiftId: currentShiftId, loginTime: currentLoginTime}); }
+                document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden"); document.getElementById("display-cashier").innerText = currentCashier;
                 syncMasterData(); lockMenu(); 
             };
-        } else { alert("PIN Salah! Cek tab 'Staff' di Google Sheets Anda."); }
+        } else { alert("PIN Salah! Data tidak ditemukan."); }
     };
 }
 
@@ -119,23 +99,16 @@ async function manualPushSync() {
 }
 
 async function syncMasterData() {
-    let netText1 = document.getElementById("network-text");
-    let netText2 = document.getElementById("login-network-text");
-    let netDot1 = document.getElementById("network-dot");
-    let netDot2 = document.getElementById("login-network-dot");
+    let netText1 = document.getElementById("network-text"); let netText2 = document.getElementById("login-network-text");
+    let netDot1 = document.getElementById("network-dot"); let netDot2 = document.getElementById("login-network-dot");
 
     if (!navigator.onLine) {
-        if(netText1) netText1.innerText = "Mode Offline";
-        if(netText2) netText2.innerText = "Mode Offline (Gagal Tarik PIN)";
-        if(netDot1) netDot1.style.backgroundColor = "#e74c3c";
-        if(netDot2) netDot2.style.backgroundColor = "#e74c3c";
-        return;
+        if(netText1) netText1.innerText = "Mode Offline"; if(netText2) netText2.innerText = "Mode Offline (Gagal Tarik PIN)";
+        if(netDot1) netDot1.style.backgroundColor = "#e74c3c"; if(netDot2) netDot2.style.backgroundColor = "#e74c3c"; return;
     }
     
-    if(netText1) netText1.innerText = "Sinkronisasi...";
-    if(netText2) netText2.innerText = "Menarik Database...";
-    if(netDot1) netDot1.style.backgroundColor = "#f39c12";
-    if(netDot2) netDot2.style.backgroundColor = "#f39c12";
+    if(netText1) netText1.innerText = "Sinkronisasi..."; if(netText2) netText2.innerText = "Menarik Database...";
+    if(netDot1) netDot1.style.backgroundColor = "#f39c12"; if(netDot2) netDot2.style.backgroundColor = "#f39c12";
 
     try {
         const response = await fetch(API_URL); 
@@ -145,8 +118,12 @@ async function syncMasterData() {
             window.masterDrawerBalance = result.masterDrawerBalance || 0; 
             window.loyaltyTarget = result.data.loyaltyTarget || 10;
             window.globalPromos = result.data.promos || [];
+            
             const tx = db.transaction(["staff", "menu", "settings", "members", "expense_categories"], "readwrite");
             
+            // GUARD TERHADAP SILENT FAILURE
+            tx.onerror = (event) => { console.error("Database Transaction Error:", event.target.error); };
+
             const staffStore = tx.objectStore("staff"); staffStore.clear(); result.data.staff.forEach(s => staffStore.add(s));
             const menuStore = tx.objectStore("menu"); menuStore.clear(); result.data.menu.forEach(m => menuStore.add(m));
             const memStore = tx.objectStore("members"); memStore.clear(); result.data.members.forEach(m => memStore.add(m));
@@ -159,21 +136,14 @@ async function syncMasterData() {
 
             if(document.getElementById("ticket-count")) document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
             
-            // UPDATE UI MENJADI HIJAU JIKA BERHASIL
-            if(netText1) netText1.innerText = "Online & Sinkron";
-            if(netText2) netText2.innerText = "Sistem Siap! Silakan Login";
-            if(netDot1) netDot1.style.backgroundColor = "#2ecc71";
-            if(netDot2) netDot2.style.backgroundColor = "#2ecc71";
+            if(netText1) netText1.innerText = "Online & Sinkron"; if(netText2) netText2.innerText = "Sistem Siap! Silakan Login";
+            if(netDot1) netDot1.style.backgroundColor = "#2ecc71"; if(netDot2) netDot2.style.backgroundColor = "#2ecc71";
             
             if (!document.getElementById("pos-screen").classList.contains("hidden")) { loadMenuUI(); renderActiveTickets(); }
         } else { throw new Error(result.message); }
     } catch (e) { 
-        // UPDATE UI MENJADI MERAH JIKA URL SALAH / GAGAL
-        if(netText1) netText1.innerText = "Gagal Sinkron"; 
-        if(netText2) netText2.innerText = "Gagal Terhubung ke Google Sheets"; 
-        if(netDot1) netDot1.style.backgroundColor = "#e74c3c";
-        if(netDot2) netDot2.style.backgroundColor = "#e74c3c";
-        console.error("Sync Error:", e);
+        if(netText1) netText1.innerText = "Gagal Sinkron"; if(netText2) netText2.innerText = "Gagal Terhubung ke Google Sheets"; 
+        if(netDot1) netDot1.style.backgroundColor = "#e74c3c"; if(netDot2) netDot2.style.backgroundColor = "#e74c3c"; console.error("Sync Error:", e);
     }
 }
 
