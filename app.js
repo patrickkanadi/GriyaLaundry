@@ -69,7 +69,9 @@ function initDB() {
 }
 
 function attemptLogin() {
-    const pin = document.getElementById("cashier-pin").value;
+    // TAMBAHAN: .trim() akan otomatis menghapus spasi yang tidak sengaja terketik
+    const pin = document.getElementById("cashier-pin").value.trim(); 
+    
     db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = (e) => {
         const staff = e.target.result;
         if (staff) {
@@ -77,11 +79,15 @@ function attemptLogin() {
                 const activeShift = shiftReq.target.result;
                 currentCashier = staff.name; currentPin = staff.pin;
                 if (activeShift) { currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime; } 
-                else { currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString(); db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: pin, shiftId: currentShiftId, loginTime: currentLoginTime}); }
-                document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden"); document.getElementById("display-cashier").innerText = currentCashier;
+                else {
+                    currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString();
+                    db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: pin, shiftId: currentShiftId, loginTime: currentLoginTime});
+                }
+                document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden");
+                document.getElementById("display-cashier").innerText = currentCashier;
                 syncMasterData(); lockMenu(); 
             };
-        } else { alert("PIN Salah!"); }
+        } else { alert("PIN Salah! Cek tab 'Staff' di Google Sheets Anda."); }
     };
 }
 
