@@ -25,6 +25,7 @@
         .ws-tab { padding: 12px 25px; border: none; background: #bdc3c7; border-radius: 8px 8px 0 0; font-weight: bold; font-size: 16px; cursor: pointer; margin-right: 5px; flex-shrink: 0; }
         .ws-tab.active { background: white; color: #2980b9; border-top: 3px solid #3498db; }
 
+        #main-workspace-wrapper { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
         #main-workspace { display: flex; flex-direction: row; flex: 1; overflow: hidden; }
         
         #menu-section { flex: 6; display: flex; flex-direction: column; border-right: 2px solid #ddd; background: #fff; overflow: hidden; position: relative;}
@@ -185,52 +186,61 @@
             <button class="ws-tab" id="tab-active-tickets" onclick="switchWorkspace('tickets')">📋 Cucian Aktif (<span id="ticket-count">0</span>)</button>
         </div>
 
-        <div id="main-workspace">
-            <div id="menu-section">
-                <div id="command-bar">
-                    <div id="customer-input-section">
-                        <div class="input-group">
-                            <div class="autocomplete-wrapper" style="flex:1;">
-                                <input type="text" id="cust-phone" placeholder="Ketik WA atau Nama..." autocomplete="off" style="width:100%;">
-                                <div id="autocomplete-results" class="hidden"></div>
+        <!-- NEW WRAPPER FOR MULTIPLE ANTREAN -->
+        <div id="main-workspace-wrapper" class="hidden">
+            <div style="display:flex; background:#ecf0f1; padding:10px 10px 0 10px; gap:5px; border-bottom: 2px solid #bdc3c7;">
+                <button class="antrean-btn active" onclick="switchAntrean(0)" style="padding:10px 20px; border:none; border-radius:8px 8px 0 0; font-weight:bold; cursor:pointer; background:#fff; color:#2980b9;">🛒 Antrean 1</button>
+                <button class="antrean-btn" onclick="switchAntrean(1)" style="padding:10px 20px; border:none; border-radius:8px 8px 0 0; font-weight:bold; cursor:pointer; background:#bdc3c7; color:#fff;">🛒 Antrean 2</button>
+                <button class="antrean-btn" onclick="switchAntrean(2)" style="padding:10px 20px; border:none; border-radius:8px 8px 0 0; font-weight:bold; cursor:pointer; background:#bdc3c7; color:#fff;">🛒 Antrean 3</button>
+            </div>
+            
+            <div id="main-workspace">
+                <div id="menu-section">
+                    <div id="command-bar">
+                        <div id="customer-input-section">
+                            <div class="input-group">
+                                <div class="autocomplete-wrapper" style="flex:1;">
+                                    <input type="text" id="cust-phone" placeholder="Ketik WA atau Nama..." autocomplete="off" style="width:100%;">
+                                    <div id="autocomplete-results" class="hidden"></div>
+                                </div>
+                                <input type="text" id="cust-name" placeholder="Nama Pelanggan" autocomplete="off" style="flex:1;">
                             </div>
-                            <input type="text" id="cust-name" placeholder="Nama Pelanggan" autocomplete="off" style="flex:1;">
+                            <div class="btn-action-group">
+                                <button onclick="unlockMenu(false)" style="background:#27ae60; color:white;">Buka Menu Kasir</button>
+                                <button onclick="unlockMenu(true)" style="background:#95a5a6; color:white;">Tamu / Walk-in</button>
+                            </div>
                         </div>
-                        <div class="btn-action-group">
-                            <button onclick="unlockMenu(false)" style="background:#27ae60; color:white;">Buka Menu Kasir</button>
-                            <button onclick="unlockMenu(true)" style="background:#95a5a6; color:white;">Tamu / Walk-in</button>
+                        
+                        <div id="active-customer-banner" class="hidden">
+                            <div style="font-size:16px; color:#2c3e50; font-weight:bold;">
+                                👤 <span id="active-cust-name">---</span> 
+                                <span style="font-size:12px; color:#7f8c8d; font-weight:normal; margin-left:5px;" id="active-cust-phone"></span>
+                            </div>
+                            <div style="display:flex; gap:10px;">
+                                <button onclick="openLotteryModal()" style="background:#8e44ad; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">🎫 Input Undian</button>
+                                <button onclick="lockMenu()" style="background:#e74c3c; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">Ganti / Kunci</button>
+                            </div>
                         </div>
                     </div>
                     
-                    <div id="active-customer-banner" class="hidden">
-                        <div style="font-size:16px; color:#2c3e50; font-weight:bold;">
-                            👤 <span id="active-cust-name">---</span> 
-                            <span style="font-size:12px; color:#7f8c8d; font-weight:normal; margin-left:5px;" id="active-cust-phone"></span>
-                        </div>
-                        <div style="display:flex; gap:10px;">
-                            <button onclick="openLotteryModal()" style="background:#8e44ad; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">🎫 Input Undian</button>
-                            <button onclick="lockMenu()" style="background:#e74c3c; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">Ganti / Kunci</button>
-                        </div>
+                    <div class="category-tabs" id="category-container"></div>
+                    <div id="product-grid"></div>
+                    
+                    <div id="glass-overlay">
+                        <h1 style="color:#2c3e50; font-size:48px; margin:0;">🔒</h1>
+                        <h2 style="color:#2c3e50;">Pelanggan Dahulu</h2>
+                        <p style="color:#7f8c8d; max-width:350px; margin:0 auto;">Ketik nomor WA atau Nama Pelanggan di atas, klik <strong>Buka Menu Kasir</strong>. Atau klik Tamu/Walk-in.</p>
                     </div>
                 </div>
                 
-                <div class="category-tabs" id="category-container"></div>
-                <div id="product-grid"></div>
-                
-                <div id="glass-overlay">
-                    <h1 style="color:#2c3e50; font-size:48px; margin:0;">🔒</h1>
-                    <h2 style="color:#2c3e50;">Pelanggan Dahulu</h2>
-                    <p style="color:#7f8c8d; max-width:350px; margin:0 auto;">Ketik nomor WA atau Nama Pelanggan di atas, klik <strong>Buka Menu Kasir</strong>. Atau klik Tamu/Walk-in.</p>
-                </div>
-            </div>
-            
-            <div id="cart-section">
-                <div id="cart-header"><span>Keranjang Saat Ini</span> <span id="promo-indicator" class="hidden"></span></div>
-                <div id="cart-items"></div>
-                <div id="checkout-panel">
-                    <div class="grand-total"><span>Total Akhir:</span> <span id="cart-total">Rp 0</span></div>
-                    <button class="btn-pay" onclick="reviewOrder()">Bayar Order (Checkout)</button>
-                    <button class="btn-pay" style="background:#e74c3c; margin-top:10px;" onclick="clearCart()">🗑️ Batalkan Order</button>
+                <div id="cart-section">
+                    <div id="cart-header"><span>Keranjang Saat Ini</span> <span id="promo-indicator" class="hidden"></span></div>
+                    <div id="cart-items"></div>
+                    <div id="checkout-panel">
+                        <div class="grand-total"><span>Total Akhir:</span> <span id="cart-total">Rp 0</span></div>
+                        <button class="btn-pay" onclick="reviewOrder()">Bayar Order (Checkout)</button>
+                        <button class="btn-pay" style="background:#e74c3c; margin-top:10px;" onclick="clearCart()">🗑️ Batalkan Order</button>
+                    </div>
                 </div>
             </div>
         </div>
