@@ -1,7 +1,15 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxLfrUoCplYPUKJTbj_EUtXT2NDcU067bS8qHnapbC9g9Wr6CubXGrPJAtFKW2ti9Ts/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 23; // Incremented to force a hard cache refresh
+const DB_VERSION = 24; 
 let db;
+
+// MULTI-ANTREAN STATE MANAGEMENT
+let antreans = [
+    { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "" },
+    { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "" },
+    { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "" }
+];
+let currentAntreanIndex = 0;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
 let globalMenuData = []; let currentCategory = ""; let activeLaundryTickets = [];
@@ -22,7 +30,6 @@ function installPWA() { if (deferredPrompt) { deferredPrompt.prompt(); deferredP
 function initDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
-        
         request.onupgradeneeded = (event) => {
             db = event.target.result;
             if (!db.objectStoreNames.contains("staff")) db.createObjectStore("staff", { keyPath: "pin" });
@@ -42,13 +49,7 @@ function initDB() {
             if (!db.objectStoreNames.contains("ticket_coins")) db.createObjectStore("ticket_coins", { keyPath: "logId" });
             if (!db.objectStoreNames.contains("promo_claims")) db.createObjectStore("promo_claims", { keyPath: "claimId" });
         };
-
-        request.onsuccess = (e) => { 
-            db = e.target.result; 
-            db.onversionchange = () => { db.close(); window.location.reload(); };
-            resolve(db); 
-        };
-
+        request.onsuccess = (e) => { db = e.target.result; db.onversionchange = () => { db.close(); window.location.reload(); }; resolve(db); };
         request.onerror = (e) => { console.error("IndexedDB Error:", e); reject(e); };
         request.onblocked = () => { alert("⚠️ Mohon TUTUP tab aplikasi POS yang lain agar sistem bisa diperbarui ke versi terbaru!"); };
     });
@@ -64,7 +65,9 @@ function attemptLogin() {
                 currentCashier = staff.name; currentPin = staff.pin;
                 if (activeShift) { currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime; } 
                 else { currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString(); db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: pin, shiftId: currentShiftId, loginTime: currentLoginTime}); }
-                document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden"); document.getElementById("display-cashier").innerText = currentCashier;
+                document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden"); 
+                document.getElementById("display-cashier").innerText = currentCashier;
+                document.getElementById("main-workspace-wrapper").classList.remove("hidden");
                 syncMasterData(); lockMenu(); 
             };
         } else { alert("PIN Salah! Data tidak ditemukan."); }
@@ -73,26 +76,147 @@ function attemptLogin() {
 
 function switchWorkspace(type) {
     document.querySelectorAll('.ws-tab').forEach(b => b.classList.remove('active'));
-    document.getElementById("main-workspace").classList.add("hidden"); document.getElementById("active-tickets-workspace").classList.add("hidden");
-    if (type === 'new') { document.getElementById("tab-new-order").classList.add("active"); document.getElementById("main-workspace").classList.remove("hidden"); } 
-    else { document.getElementById("tab-active-tickets").classList.add("active"); document.getElementById("active-tickets-workspace").classList.remove("hidden"); renderActiveTickets(); }
+    document.getElementById("main-workspace-wrapper").classList.add("hidden"); 
+    document.getElementById("active-tickets-workspace").classList.add("hidden");
+    
+    if (type === 'new') { 
+        document.getElementById("tab-new-order").classList.add("active"); 
+        document.getElementById("main-workspace-wrapper").classList.remove("hidden"); 
+    } else { 
+        document.getElementById("tab-active-tickets").classList.add("active"); 
+        document.getElementById("active-tickets-workspace").classList.remove("hidden"); renderActiveTickets(); 
+    }
+}
+
+window.switchAntrean = function(index) {
+    if (currentAntreanIndex === index) return;
+
+    // 1. Simpan Status Antrean Saat Ini
+    antreans[currentAntreanIndex].cart = [...currentCart];
+    antreans[currentAntreanIndex].profile = activeCustomerProfile ? {...activeCustomerProfile} : null;
+    antreans[currentAntreanIndex].isLocked = isMenuLocked;
+    antreans[currentAntreanIndex].phoneInput = document.getElementById("cust-phone").value;
+    antreans[currentAntreanIndex].nameInput = document.getElementById("cust-name").value;
+
+    // 2. Pindah Index
+    currentAntreanIndex = index;
+
+    // 3. Muat Status Antrean Baru
+    currentCart = [...antreans[currentAntreanIndex].cart];
+    activeCustomerProfile = antreans[currentAntreanIndex].profile ? {...antreans[currentAntreanIndex].profile} : null;
+    isMenuLocked = antreans[currentAntreanIndex].isLocked;
+    document.getElementById("cust-phone").value = antreans[currentAntreanIndex].phoneInput;
+    document.getElementById("cust-name").value = antreans[currentAntreanIndex].nameInput;
+
+    // 4. Update UI Tab
+    document.querySelectorAll(".antrean-btn").forEach((btn, i) => {
+        if (i === index) { btn.classList.add("active"); btn.style.background = "#fff"; btn.style.color = "#2980b9"; } 
+        else { btn.classList.remove("active"); btn.style.background = "#bdc3c7"; btn.style.color = "#fff"; }
+    });
+
+    // 5. Update Status Kunci Menu
+    if (isMenuLocked) {
+        document.getElementById("customer-input-section").classList.remove("hidden"); 
+        document.getElementById("active-customer-banner").classList.add("hidden");
+        document.getElementById("glass-overlay").style.opacity = "1"; 
+        document.getElementById("glass-overlay").style.pointerEvents = "auto";
+        document.getElementById("promo-indicator").classList.add("hidden");
+    } else {
+        let pName = activeCustomerProfile ? activeCustomerProfile.name : (document.getElementById("cust-name").value || "Walk-in");
+        let pPhone = activeCustomerProfile ? activeCustomerProfile.phone : document.getElementById("cust-phone").value;
+        document.getElementById("active-cust-name").innerText = pName; 
+        document.getElementById("active-cust-phone").innerText = (pPhone && pPhone !== "-") ? `(${pPhone})` : "";
+        document.getElementById("customer-input-section").classList.add("hidden"); 
+        document.getElementById("active-customer-banner").classList.remove("hidden");
+        document.getElementById("glass-overlay").style.opacity = "0"; 
+        document.getElementById("glass-overlay").style.pointerEvents = "none";
+        
+        if (activeCustomerProfile) {
+            let promoText = "";
+            if (activeCustomerProfile.freeCoins > 0) promoText += `🎁 ${activeCustomerProfile.freeCoins} Koin Gratis! `;
+            promoText += `(Poin: ${activeCustomerProfile.points}/${window.loyaltyTarget})`;
+            let storedCount = Object.values(activeCustomerProfile.storedRewards || {}).reduce((a,b)=>a+b,0);
+            if (storedCount > 0) promoText += ` | 🎫 ${storedCount} Undian Tersimpan`;
+            document.getElementById("promo-indicator").innerText = promoText; 
+            document.getElementById("promo-indicator").classList.remove("hidden");
+        } else { document.getElementById("promo-indicator").classList.add("hidden"); }
+    }
+    
+    document.getElementById("autocomplete-results").classList.add("hidden");
+    renderCart();
 }
 
 function lockMenu() {
     isMenuLocked = true; activeCustomerProfile = null; 
-    document.getElementById("customer-input-section").classList.remove("hidden"); document.getElementById("active-customer-banner").classList.add("hidden");
-    document.getElementById("glass-overlay").style.opacity = "1"; document.getElementById("glass-overlay").style.pointerEvents = "auto";
-    document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = ""; currentCart = []; renderCart(); document.getElementById("promo-indicator").classList.add("hidden");
+    document.getElementById("customer-input-section").classList.remove("hidden"); 
+    document.getElementById("active-customer-banner").classList.add("hidden");
+    document.getElementById("glass-overlay").style.opacity = "1"; 
+    document.getElementById("glass-overlay").style.pointerEvents = "auto";
+    document.getElementById("cust-phone").value = ""; 
+    document.getElementById("cust-name").value = ""; 
+    currentCart = []; 
+    
+    antreans[currentAntreanIndex].cart = [];
+    antreans[currentAntreanIndex].profile = null;
+    antreans[currentAntreanIndex].isLocked = true;
+    antreans[currentAntreanIndex].phoneInput = "";
+    antreans[currentAntreanIndex].nameInput = "";
+
+    renderCart(); document.getElementById("promo-indicator").classList.add("hidden");
 }
 
 function unlockMenu(isGuest) {
     let phone = "-"; let name = "Walk-in";
-    if (isGuest) { document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; activeCustomerProfile = null; } 
-    else { phone = document.getElementById("cust-phone").value.trim(); name = document.getElementById("cust-name").value.trim() || "Pelanggan"; if (phone.length < 5) return alert("Harap masukkan Nomor WhatsApp yang valid terlebih dahulu."); }
+    if (isGuest) { 
+        document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; activeCustomerProfile = null; 
+    } else { 
+        phone = document.getElementById("cust-phone").value.trim(); name = document.getElementById("cust-name").value.trim() || "Pelanggan"; 
+        if (phone.length < 5) return alert("Harap masukkan Nomor WhatsApp yang valid terlebih dahulu."); 
+    }
+
+    // CEK VALIDASI GANDA: Pelanggan yang sama tidak boleh dibuka di 2 antrean berbeda
+    let isDuplicate = false;
+    for (let i = 0; i < antreans.length; i++) {
+        if (i === currentAntreanIndex) continue;
+        let otherPhone = antreans[i].profile ? antreans[i].profile.phone : (antreans[i].isLocked ? "" : antreans[i].phoneInput);
+        if (!antreans[i].isLocked && phone !== "-" && otherPhone === phone) { isDuplicate = true; break; }
+    }
+    if (isDuplicate) return alert("⚠️ Pelanggan ini sedang dilayani di Antrean lain. Silakan selesaikan atau batalkan transaksi di antrean tersebut terlebih dahulu.");
+
     document.getElementById("active-cust-name").innerText = name; document.getElementById("active-cust-phone").innerText = phone !== "-" ? `(${phone})` : "";
     document.getElementById("customer-input-section").classList.add("hidden"); document.getElementById("active-customer-banner").classList.remove("hidden");
     isMenuLocked = false; document.getElementById("glass-overlay").style.opacity = "0"; setTimeout(() => { document.getElementById("glass-overlay").style.pointerEvents = "none"; }, 300);
+
+    antreans[currentAntreanIndex].isLocked = false;
+    antreans[currentAntreanIndex].phoneInput = phone;
+    antreans[currentAntreanIndex].nameInput = name;
+    antreans[currentAntreanIndex].profile = activeCustomerProfile ? {...activeCustomerProfile} : null;
 }
+
+window.selectMember = function(phone) {
+    // CEK VALIDASI GANDA SAAT AUTOCOMPLETE DIPILIH
+    for (let i = 0; i < antreans.length; i++) {
+        if (i === currentAntreanIndex) continue;
+        let otherPhone = antreans[i].profile ? antreans[i].profile.phone : (antreans[i].isLocked ? "" : antreans[i].phoneInput);
+        if (!antreans[i].isLocked && otherPhone === phone) {
+            return alert("⚠️ Pelanggan ini sedang dilayani di Antrean " + (i+1) + ". Silakan selesaikan atau batalkan antrean tersebut terlebih dahulu.");
+        }
+    }
+
+    db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
+        activeCustomerProfile = e.target.result;
+        document.getElementById("cust-phone").value = activeCustomerProfile.phone; document.getElementById("cust-name").value = activeCustomerProfile.name;
+        document.getElementById("autocomplete-results").classList.add("hidden");
+        
+        let promoText = "";
+        if (activeCustomerProfile.freeCoins > 0) promoText += `🎁 ${activeCustomerProfile.freeCoins} Koin Gratis! `;
+        promoText += `(Poin: ${activeCustomerProfile.points}/${window.loyaltyTarget})`;
+        let storedCount = Object.values(activeCustomerProfile.storedRewards || {}).reduce((a,b)=>a+b,0);
+        if (storedCount > 0) promoText += ` | 🎫 ${storedCount} Undian Tersimpan`;
+        
+        document.getElementById("promo-indicator").innerText = promoText; document.getElementById("promo-indicator").classList.remove("hidden");
+    };
+};
 
 async function manualPushSync() {
     if (!navigator.onLine) return alert("Anda sedang offline!"); document.getElementById("network-text").innerText = "Mengirim Data..."; document.getElementById("network-dot").style.backgroundColor = "#f39c12"; await runBackgroundSync(); document.getElementById("network-text").innerText = "Menarik Data..."; await syncMasterData(); alert("Sinkronisasi Database Berhasil!");
@@ -111,27 +235,14 @@ async function syncMasterData() {
     if(netDot1) netDot1.style.backgroundColor = "#f39c12"; if(netDot2) netDot2.style.backgroundColor = "#f39c12";
 
     try {
-        // --- NEW FETCH CONFIGURATION ---
-        // We explicitly tell fetch how to handle the redirect from Google Apps Script.
-        const response = await fetch(API_URL, {
-            method: 'GET', // Or POST if required, but doGet is the default for fetching data
-            mode: 'cors',  // Ensure Cross-Origin requests are allowed
-            redirect: 'follow' // Explicitly tell the browser to follow the 302 redirect
-        }); 
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
+        const response = await fetch(API_URL, { method: 'GET', mode: 'cors', redirect: 'follow' }); 
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const result = await response.json();
         
         if (result.status === "Success") {
-            window.masterDrawerBalance = result.masterDrawerBalance || 0; 
-            window.loyaltyTarget = result.data.loyaltyTarget || 10;
-            window.globalPromos = result.data.promos || [];
+            window.masterDrawerBalance = result.masterDrawerBalance || 0; window.loyaltyTarget = result.data.loyaltyTarget || 10; window.globalPromos = result.data.promos || [];
             
             const tx = db.transaction(["staff", "menu", "settings", "members", "expense_categories"], "readwrite");
-            
             tx.onerror = (event) => { console.error("Database Transaction Error:", event.target.error); };
 
             const staffStore = tx.objectStore("staff"); staffStore.clear(); result.data.staff.forEach(s => staffStore.add(s));
@@ -145,7 +256,6 @@ async function syncMasterData() {
             let cItem = globalMenuData.find(i => String(i.category).toLowerCase().includes("coin") || String(i.name).toLowerCase().includes("koin")); if(cItem) activeCoinPrice = cItem.price;
 
             if(document.getElementById("ticket-count")) document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
-            
             if(netText1) netText1.innerText = "Online & Sinkron"; if(netText2) netText2.innerText = "Sistem Siap! Silakan Login";
             if(netDot1) netDot1.style.backgroundColor = "#2ecc71"; if(netDot2) netDot2.style.backgroundColor = "#2ecc71";
             
@@ -175,22 +285,6 @@ document.getElementById("cust-phone").addEventListener("input", handleAutocomple
 document.getElementById("cust-phone").addEventListener("click", handleAutocomplete); document.getElementById("cust-name").addEventListener("click", handleAutocomplete);
 document.getElementById("cust-phone").addEventListener("focus", handleAutocomplete); document.getElementById("cust-name").addEventListener("focus", handleAutocomplete);
 document.addEventListener('click', (e) => { if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') { document.getElementById('autocomplete-results').classList.add('hidden'); } });
-
-window.selectMember = function(phone) {
-    db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
-        activeCustomerProfile = e.target.result;
-        document.getElementById("cust-phone").value = activeCustomerProfile.phone; document.getElementById("cust-name").value = activeCustomerProfile.name;
-        document.getElementById("autocomplete-results").classList.add("hidden");
-        
-        let promoText = "";
-        if (activeCustomerProfile.freeCoins > 0) promoText += `🎁 ${activeCustomerProfile.freeCoins} Koin Gratis! `;
-        promoText += `(Poin: ${activeCustomerProfile.points}/${window.loyaltyTarget})`;
-        let storedCount = Object.values(activeCustomerProfile.storedRewards || {}).reduce((a,b)=>a+b,0);
-        if (storedCount > 0) promoText += ` | 🎫 ${storedCount} Undian Tersimpan`;
-        
-        document.getElementById("promo-indicator").innerText = promoText; document.getElementById("promo-indicator").classList.remove("hidden");
-    };
-};
 
 function saveMemberToDB(profile) {
     if(!profile.phone || profile.phone === "-") return; 
@@ -690,7 +784,7 @@ function applyVoidAftermath(order) {
         };
     }
     tx.oncomplete = () => { renderProductGrid(); };
-    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed, internalCoinsUsed: order.internalCoinsUsed, cashRefund: order.cashAmount, redeemedPromos: order.redeemedPromos } }) });
+    if (navigator.onLine) fetch(API_URL, { method: "POST", mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed, internalCoinsUsed: order.internalCoinsUsed, cashRefund: order.cashAmount, redeemedPromos: order.redeemedPromos } }) });
 }
 
 function calculateLiveDrawer(callback) {
@@ -783,10 +877,7 @@ async function executeFinalLogout(netCash) {
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = `Mengirim Laporan Shift...`;
         try {
             let r = await fetch(API_URL, {
-                method: 'POST',
-                mode: 'cors',
-                redirect: 'follow',
-                body: JSON.stringify({ action: "syncShiftReport", data: shiftPayload })
+                method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncShiftReport", data: shiftPayload })
             });
             if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(shiftPayload.shiftId); }
         } catch(e) {}
