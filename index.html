@@ -186,14 +186,7 @@
             <button class="ws-tab" id="tab-active-tickets" onclick="switchWorkspace('tickets')">📋 Cucian Aktif (<span id="ticket-count">0</span>)</button>
         </div>
 
-        <!-- NEW WRAPPER FOR MULTIPLE ANTREAN -->
         <div id="main-workspace-wrapper" class="hidden">
-            <div style="display:flex; background:#ecf0f1; padding:10px 10px 0 10px; gap:5px; border-bottom: 2px solid #bdc3c7;">
-                <button class="antrean-btn active" onclick="switchAntrean(0)" style="padding:10px 20px; border:none; border-radius:8px 8px 0 0; font-weight:bold; cursor:pointer; background:#fff; color:#2980b9;">🛒 Antrean 1</button>
-                <button class="antrean-btn" onclick="switchAntrean(1)" style="padding:10px 20px; border:none; border-radius:8px 8px 0 0; font-weight:bold; cursor:pointer; background:#bdc3c7; color:#fff;">🛒 Antrean 2</button>
-                <button class="antrean-btn" onclick="switchAntrean(2)" style="padding:10px 20px; border:none; border-radius:8px 8px 0 0; font-weight:bold; cursor:pointer; background:#bdc3c7; color:#fff;">🛒 Antrean 3</button>
-            </div>
-            
             <div id="main-workspace">
                 <div id="menu-section">
                     <div id="command-bar">
@@ -234,7 +227,14 @@
                 </div>
                 
                 <div id="cart-section">
-                    <div id="cart-header"><span>Keranjang Saat Ini</span> <span id="promo-indicator" class="hidden"></span></div>
+                    <!-- TABS MULTI-ANTREAN DI SINI -->
+                    <div style="display:flex; background:#2c3e50; padding:10px 10px 0 10px; gap:6px;">
+                        <button class="antrean-btn active" onclick="switchAntrean(0)" style="flex:1; padding:12px 5px; border:none; border-radius:8px 8px 0 0; font-weight:bold; cursor:pointer; background:#fff; color:#2980b9; font-size:14px; white-space:nowrap; transition:background 0.2s;">1️⃣ Antrean</button>
+                        <button class="antrean-btn" onclick="switchAntrean(1)" style="flex:1; padding:12px 5px; border:none; border-radius:8px 8px 0 0; font-weight:bold; cursor:pointer; background:#bdc3c7; color:#fff; font-size:14px; white-space:nowrap; transition:background 0.2s;">2️⃣ Antrean</button>
+                        <button class="antrean-btn" onclick="switchAntrean(2)" style="flex:1; padding:12px 5px; border:none; border-radius:8px 8px 0 0; font-weight:bold; cursor:pointer; background:#bdc3c7; color:#fff; font-size:14px; white-space:nowrap; transition:background 0.2s;">3️⃣ Antrean</button>
+                    </div>
+
+                    <div id="cart-header" style="padding-top:10px;"><span>Keranjang Saat Ini</span> <span id="promo-indicator" class="hidden"></span></div>
                     <div id="cart-items"></div>
                     <div id="checkout-panel">
                         <div class="grand-total"><span>Total Akhir:</span> <span id="cart-total">Rp 0</span></div>
@@ -251,6 +251,7 @@
         </div>
     </div>
 
+    <!-- SEMUA MODAL DI BAWAH INI TETAP SAMA -->
     <div id="lottery-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:350px; text-align:center;">
             <h2 style="margin-top:0; color:#8e44ad;">🎫 Klaim Undian</h2>
