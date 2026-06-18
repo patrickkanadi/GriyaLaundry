@@ -22,6 +22,7 @@ function installPWA() { if (deferredPrompt) { deferredPrompt.prompt(); deferredP
 function initDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
+        
         request.onupgradeneeded = (event) => {
             db = event.target.result;
             if (!db.objectStoreNames.contains("staff")) db.createObjectStore("staff", { keyPath: "pin" });
@@ -41,7 +42,29 @@ function initDB() {
             if (!db.objectStoreNames.contains("ticket_coins")) db.createObjectStore("ticket_coins", { keyPath: "logId" });
             if (!db.objectStoreNames.contains("promo_claims")) db.createObjectStore("promo_claims", { keyPath: "claimId" });
         };
-        request.onsuccess = (e) => { db = e.target.result; resolve(db); };
+
+        request.onsuccess = (e) => { 
+            db = e.target.result; 
+            
+            // 🛡️ PERTAHANAN BARU: Jika ada tab lain yang memaksa update database
+            db.onversionchange = () => {
+                db.close();
+                console.warn("Database diperbarui oleh tab lain. Memuat ulang sistem...");
+                window.location.reload();
+            };
+            
+            resolve(db); 
+        };
+
+        request.onerror = (e) => { 
+            console.error("IndexedDB Error:", e); 
+            reject(e); 
+        };
+
+        // 🛡️ PERTAHANAN BARU: Jika tab nyangkut saat di-update
+        request.onblocked = () => { 
+            alert("⚠️ Mohon TUTUP tab aplikasi POS yang lain agar sistem bisa diperbarui ke versi terbaru!"); 
+        };
     });
 }
 
