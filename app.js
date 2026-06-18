@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyqhUWHZIy1g-tGk8lHX51Ayf2byF6oK3-LsVo8lVpT7AReYmEi61GRhIwfBivlZfto/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 20; 
+const DB_VERSION = 21; 
 let db;
 
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
@@ -10,26 +10,14 @@ let activeSettlementTicket = null; window.masterDrawerBalance = 0; let isLogging
 let currentVoidTarget = { type: null, id: null };
 let isMenuLocked = true; let isSyncing = false; 
 let activeCustomerProfile = null; let activeCoinPrice = 10000;
+window.loyaltyTarget = 10; window.globalPromos = [];
 
 function formatWIB(dateString) { return new Date(dateString).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') + ' WIB'; }
 function formatTimeOnlyWIB(dateString) { return new Date(dateString).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, hour: '2-digit', minute: '2-digit' }) + ' WIB'; }
 
 let deferredPrompt;
-window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault(); deferredPrompt = e;
-    const installBtn = document.getElementById('btn-install');
-    if(installBtn) installBtn.classList.remove('hidden');
-});
-
-function installPWA() {
-    if (deferredPrompt) {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then((choiceResult) => {
-            if (choiceResult.outcome === 'accepted') document.getElementById('btn-install').classList.add('hidden');
-            deferredPrompt = null;
-        });
-    }
-}
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; const installBtn = document.getElementById('btn-install'); if(installBtn) installBtn.classList.remove('hidden'); });
+function installPWA() { if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.then((choiceResult) => { if (choiceResult.outcome === 'accepted') document.getElementById('btn-install').classList.add('hidden'); deferredPrompt = null; }); } }
 
 function initDB() {
     return new Promise((resolve, reject) => {
@@ -51,6 +39,7 @@ function initDB() {
             if (!db.objectStoreNames.contains("local_shift_history")) db.createObjectStore("local_shift_history", { keyPath: "shiftId" });
             if (!db.objectStoreNames.contains("coin_retrievals")) db.createObjectStore("coin_retrievals", { keyPath: "retrievalId" });
             if (!db.objectStoreNames.contains("ticket_coins")) db.createObjectStore("ticket_coins", { keyPath: "logId" });
+            if (!db.objectStoreNames.contains("promo_claims")) db.createObjectStore("promo_claims", { keyPath: "claimId" });
         };
         request.onsuccess = (e) => { db = e.target.result; resolve(db); };
     });
@@ -65,12 +54,8 @@ function attemptLogin() {
                 const activeShift = shiftReq.target.result;
                 currentCashier = staff.name; currentPin = staff.pin;
                 if (activeShift) { currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime; } 
-                else {
-                    currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString();
-                    db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: pin, shiftId: currentShiftId, loginTime: currentLoginTime});
-                }
-                document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden");
-                document.getElementById("display-cashier").innerText = currentCashier;
+                else { currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString(); db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: pin, shiftId: currentShiftId, loginTime: currentLoginTime}); }
+                document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden"); document.getElementById("display-cashier").innerText = currentCashier;
                 syncMasterData(); lockMenu(); 
             };
         } else { alert("PIN Salah!"); }
@@ -86,119 +71,122 @@ function switchWorkspace(type) {
 
 function lockMenu() {
     isMenuLocked = true; activeCustomerProfile = null; 
-    document.getElementById("customer-input-section").classList.remove("hidden");
-    document.getElementById("active-customer-banner").classList.add("hidden");
+    document.getElementById("customer-input-section").classList.remove("hidden"); document.getElementById("active-customer-banner").classList.add("hidden");
     document.getElementById("glass-overlay").style.opacity = "1"; document.getElementById("glass-overlay").style.pointerEvents = "auto";
-    document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = ""; currentCart = []; renderCart();
-    document.getElementById("promo-indicator").classList.add("hidden");
+    document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = ""; currentCart = []; renderCart(); document.getElementById("promo-indicator").classList.add("hidden");
 }
 
 function unlockMenu(isGuest) {
     let phone = "-"; let name = "Walk-in";
-    if (isGuest) { 
-        document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; activeCustomerProfile = null; 
-    } else {
-        phone = document.getElementById("cust-phone").value.trim();
-        name = document.getElementById("cust-name").value.trim() || "Pelanggan";
-        if (phone.length < 5) return alert("Harap masukkan Nomor WhatsApp yang valid terlebih dahulu.");
-    }
-    document.getElementById("active-cust-name").innerText = name;
-    document.getElementById("active-cust-phone").innerText = phone !== "-" ? `(${phone})` : "";
-    document.getElementById("customer-input-section").classList.add("hidden");
-    document.getElementById("active-customer-banner").classList.remove("hidden");
+    if (isGuest) { document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; activeCustomerProfile = null; } 
+    else { phone = document.getElementById("cust-phone").value.trim(); name = document.getElementById("cust-name").value.trim() || "Pelanggan"; if (phone.length < 5) return alert("Harap masukkan Nomor WhatsApp yang valid terlebih dahulu."); }
+    document.getElementById("active-cust-name").innerText = name; document.getElementById("active-cust-phone").innerText = phone !== "-" ? `(${phone})` : "";
+    document.getElementById("customer-input-section").classList.add("hidden"); document.getElementById("active-customer-banner").classList.remove("hidden");
     isMenuLocked = false; document.getElementById("glass-overlay").style.opacity = "0"; setTimeout(() => { document.getElementById("glass-overlay").style.pointerEvents = "none"; }, 300);
 }
 
 async function manualPushSync() {
-    if (!navigator.onLine) return alert("Anda sedang offline!");
-    document.getElementById("network-text").innerText = "Mengirim Data..."; document.getElementById("network-dot").style.backgroundColor = "#f39c12";
-    await runBackgroundSync(); document.getElementById("network-text").innerText = "Menarik Data..."; await syncMasterData(); alert("Sinkronisasi Database Berhasil!");
+    if (!navigator.onLine) return alert("Anda sedang offline!"); document.getElementById("network-text").innerText = "Mengirim Data..."; document.getElementById("network-dot").style.backgroundColor = "#f39c12"; await runBackgroundSync(); document.getElementById("network-text").innerText = "Menarik Data..."; await syncMasterData(); alert("Sinkronisasi Database Berhasil!");
 }
 
 async function syncMasterData() {
-    if (!navigator.onLine) {
-        if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Mode Offline";
-        if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c"; return;
-    }
-    if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Sinkronisasi...";
-    if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#f39c12";
+    if (!navigator.onLine) { if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Mode Offline"; if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c"; return; }
+    if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Sinkronisasi..."; if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#f39c12";
 
     try {
         const response = await fetch(API_URL); const result = await response.json();
         if (result.status === "Success") {
             window.masterDrawerBalance = result.masterDrawerBalance || 0; 
+            window.loyaltyTarget = result.data.loyaltyTarget || 10;
+            window.globalPromos = result.data.promos || [];
             const tx = db.transaction(["staff", "menu", "settings", "members", "expense_categories"], "readwrite");
             
             const staffStore = tx.objectStore("staff"); staffStore.clear(); result.data.staff.forEach(s => staffStore.add(s));
             const menuStore = tx.objectStore("menu"); menuStore.clear(); result.data.menu.forEach(m => menuStore.add(m));
             const memStore = tx.objectStore("members"); memStore.clear(); result.data.members.forEach(m => memStore.add(m));
-            const expCatStore = tx.objectStore("expense_categories"); expCatStore.clear(); 
-            if(result.data.expenseCategories) result.data.expenseCategories.forEach(c => expCatStore.add({name: c}));
-            const settingsStore = tx.objectStore("settings"); settingsStore.clear(); 
-            for (const [key, value] of Object.entries(result.data.settings)) { settingsStore.add({ key: key, value: value }); }
+            const expCatStore = tx.objectStore("expense_categories"); expCatStore.clear(); if(result.data.expenseCategories) result.data.expenseCategories.forEach(c => expCatStore.add({name: c}));
+            const settingsStore = tx.objectStore("settings"); settingsStore.clear(); for (const [key, value] of Object.entries(result.data.settings)) { settingsStore.add({ key: key, value: value }); }
             if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
 
             globalMenuData = result.data.menu; activeLaundryTickets = result.data.activeLaundryOrders || [];
-            
-            let cItem = globalMenuData.find(i => String(i.category).toLowerCase().includes("coin") || String(i.name).toLowerCase().includes("koin"));
-            if(cItem) activeCoinPrice = cItem.price;
+            let cItem = globalMenuData.find(i => String(i.category).toLowerCase().includes("coin") || String(i.name).toLowerCase().includes("koin")); if(cItem) activeCoinPrice = cItem.price;
 
             if(document.getElementById("ticket-count")) document.getElementById("ticket-count").innerText = activeLaundryTickets.length;
             if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Online & Sinkron";
             if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#2ecc71";
             if (!document.getElementById("pos-screen").classList.contains("hidden")) { loadMenuUI(); renderActiveTickets(); }
         } else { throw new Error(result.message); }
-    } catch (e) { 
-        if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Gagal Sinkron"; 
-        if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c";
-    }
+    } catch (e) { if(document.getElementById("network-text")) document.getElementById("network-text").innerText = "Gagal Sinkron"; if(document.getElementById("network-dot")) document.getElementById("network-dot").style.backgroundColor = "#e74c3c"; }
 }
 
 function handleAutocomplete(e) {
     const val = e.target.value.toLowerCase().trim(); const resBox = document.getElementById("autocomplete-results");
     activeCustomerProfile = null; document.getElementById("promo-indicator").classList.add("hidden");
-
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
-        const members = ev.target.result; 
-        let matches = members;
-        if (val.length > 0) matches = members.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
+        let matches = ev.target.result; 
+        if (val.length > 0) matches = matches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
         matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
 
         if (matches.length > 0) {
-            resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}', '${m.name.replace(/'/g, "\\'")}', ${m.points || 0}, ${m.freeCoins || 0})"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name}</div></div>`).join("");
+            resBox.innerHTML = matches.map(m => `<div class="autocomplete-item" onclick="selectMember('${m.phone}')"><div class="autocomplete-phone">${m.phone}</div><div class="autocomplete-name">${m.name}</div></div>`).join("");
             resBox.classList.remove("hidden");
         } else { resBox.classList.add("hidden"); }
     };
 }
-document.getElementById("cust-phone").addEventListener("input", handleAutocomplete);
-document.getElementById("cust-name").addEventListener("input", handleAutocomplete);
-document.getElementById("cust-phone").addEventListener("click", handleAutocomplete);
-document.getElementById("cust-name").addEventListener("click", handleAutocomplete);
-document.getElementById("cust-phone").addEventListener("focus", handleAutocomplete);
-document.getElementById("cust-name").addEventListener("focus", handleAutocomplete);
+document.getElementById("cust-phone").addEventListener("input", handleAutocomplete); document.getElementById("cust-name").addEventListener("input", handleAutocomplete);
+document.getElementById("cust-phone").addEventListener("click", handleAutocomplete); document.getElementById("cust-name").addEventListener("click", handleAutocomplete);
+document.getElementById("cust-phone").addEventListener("focus", handleAutocomplete); document.getElementById("cust-name").addEventListener("focus", handleAutocomplete);
+document.addEventListener('click', (e) => { if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') { document.getElementById('autocomplete-results').classList.add('hidden'); } });
 
-document.addEventListener('click', (e) => { 
-    if(!e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') { document.getElementById('autocomplete-results').classList.add('hidden'); }
-});
-
-window.selectMember = function(phone, name, points, freeCoins) {
-    document.getElementById("cust-phone").value = phone; document.getElementById("cust-name").value = name; document.getElementById("autocomplete-results").classList.add("hidden");
-    activeCustomerProfile = { phone, name, points, freeCoins };
-    
-    let promoText = "";
-    if (freeCoins > 0) promoText = `🎁 ${freeCoins} Koin Gratis Tersedia! (Sisa Poin: ${points}/10)`;
-    else promoText = `🎁 Poin Koin Saat Ini: ${points}/10`;
-    
-    document.getElementById("promo-indicator").innerText = promoText; document.getElementById("promo-indicator").classList.remove("hidden");
+window.selectMember = function(phone) {
+    db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
+        activeCustomerProfile = e.target.result;
+        document.getElementById("cust-phone").value = activeCustomerProfile.phone; document.getElementById("cust-name").value = activeCustomerProfile.name;
+        document.getElementById("autocomplete-results").classList.add("hidden");
+        
+        let promoText = "";
+        if (activeCustomerProfile.freeCoins > 0) promoText += `🎁 ${activeCustomerProfile.freeCoins} Koin Gratis! `;
+        promoText += `(Poin: ${activeCustomerProfile.points}/${window.loyaltyTarget})`;
+        let storedCount = Object.values(activeCustomerProfile.storedRewards || {}).reduce((a,b)=>a+b,0);
+        if (storedCount > 0) promoText += ` | 🎫 ${storedCount} Undian Tersimpan`;
+        
+        document.getElementById("promo-indicator").innerText = promoText; document.getElementById("promo-indicator").classList.remove("hidden");
+    };
 };
 
-function saveMemberToDB(phone, name) {
-    if(!phone || phone === "-") return; 
-    db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
-        let mem = e.target.result || { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0 }; mem.name = name;
-        db.transaction(["members"], "readwrite").objectStore("members").put(mem);
-        db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(mem);
-    };
+function saveMemberToDB(profile) {
+    if(!profile.phone || profile.phone === "-") return; 
+    db.transaction(["members"], "readwrite").objectStore("members").put(profile);
+    db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(profile);
+}
+
+function openLotteryModal() {
+    if (!activeCustomerProfile) return alert("Harap pilih profil pelanggan terlebih dahulu untuk menyimpan hadiah.");
+    document.getElementById("lottery-code-input").value = ""; document.getElementById("lottery-modal").classList.remove("hidden");
+}
+
+function submitLotteryCode() {
+    if (!activeCustomerProfile) return alert("Pilih pelanggan terlebih dahulu!");
+    let code = document.getElementById("lottery-code-input").value.trim().toUpperCase();
+    if (!code) return;
+
+    let promo = window.globalPromos.find(p => p.code === code);
+    if (!promo) return alert("Kode tidak valid atau tidak ditemukan di sistem.");
+    if (promo.weeklyQuota > 0 && promo.usedQuota >= promo.weeklyQuota) return alert("Kuota mingguan untuk kode ini sudah habis.");
+
+    promo.usedQuota += 1;
+    if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
+    activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
+    saveMemberToDB(activeCustomerProfile);
+
+    db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({
+        claimId: "CLM-" + Date.now(), timestamp: new Date().toISOString(), phone: activeCustomerProfile.phone, code: code, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier, syncStatus: "Pending"
+    });
+
+    document.getElementById("lottery-code-input").value = ""; document.getElementById("lottery-modal").classList.add("hidden");
+    selectMember(activeCustomerProfile.phone); 
+    alert(`Selamat! ${promo.rewardQty}x ${promo.rewardItem} telah ditambahkan ke profil pelanggan.`);
+    runBackgroundSync();
 }
 
 function loadMenuUI() {
@@ -250,46 +238,59 @@ function clearCart() { lockMenu(); }
 function reviewOrder() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
-    let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
-    if (activeCustomerProfile && activeCustomerProfile.freeCoins > 0 && totalCoinsInCart > 0) {
-        document.getElementById("promo-section").classList.remove("hidden");
-        document.getElementById("promo-text").innerText = `Anda punya ${activeCustomerProfile.freeCoins} koin gratis. Maksimal bisa diklaim sekarang: ${Math.min(activeCustomerProfile.freeCoins, totalCoinsInCart)}`;
-        document.getElementById("redeem-coins").max = Math.min(activeCustomerProfile.freeCoins, totalCoinsInCart); document.getElementById("redeem-coins").value = 0;
-    } else { document.getElementById("promo-section").classList.add("hidden"); document.getElementById("redeem-coins").value = 0; }
+    let promoHtml = "";
+    if (activeCustomerProfile) {
+        let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
+        if (activeCustomerProfile.freeCoins > 0 && cartCoins > 0) {
+            promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <div><strong style="color:#856404;">🎁 Koin Gratis (Loyalty)</strong><br><small style="color:#856404;">Tersedia di Profil: ${activeCustomerProfile.freeCoins}</small></div>
+                <input type="number" class="promo-input" data-type="loyalty" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${Math.min(activeCustomerProfile.freeCoins, cartCoins)}" min="0" oninput="applyPromo()" style="width:70px; padding:8px; font-weight:bold; text-align:center;">
+            </div>`;
+        }
+
+        if (activeCustomerProfile.storedRewards) {
+            for (const [itemName, qtyOwned] of Object.entries(activeCustomerProfile.storedRewards)) {
+                if (qtyOwned > 0) {
+                    let cartItem = currentCart.find(i => i.name === itemName);
+                    if (cartItem) {
+                        promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                            <div><strong style="color:#8e44ad;">🎫 Hadiah Undian: ${itemName}</strong><br><small style="color:#8e44ad;">Tersedia di Profil: ${qtyOwned}</small></div>
+                            <input type="number" class="promo-input" data-type="stored" data-item="${itemName}" data-price="${cartItem.originalPrice}" value="0" max="${Math.min(qtyOwned, cartItem.qty)}" min="0" oninput="applyPromo()" style="width:70px; padding:8px; font-weight:bold; text-align:center; border: 2px solid #9b59b6;">
+                        </div>`;
+                    }
+                }
+            }
+        }
+    }
+
+    if (promoHtml) { document.getElementById("dynamic-promo-section").innerHTML = promoHtml; document.getElementById("dynamic-promo-section").classList.remove("hidden"); } 
+    else { document.getElementById("dynamic-promo-section").classList.add("hidden"); }
 
     document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-transfer").value = 0;
     document.getElementById("pay-hotel-piutang").value = 0; document.getElementById("pay-tamu-piutang").value = 0; document.getElementById("pay-free").value = 0;
-    
     let internalCoinBox = document.getElementById("internal-coins"); if(internalCoinBox) internalCoinBox.value = 0;
-    
-    window.cartGrandTotal = window.cartSubtotal;
-    document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
+    window.cartGrandTotal = window.cartSubtotal; document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
     
     applyPromo(); document.getElementById("review-modal").classList.remove("hidden");
 }
 
 window.applyPromo = function() {
-    let redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
-    let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
-    
-    if (redeemCount > totalCoinsInCart) { redeemCount = totalCoinsInCart; }
-    if (activeCustomerProfile && redeemCount > activeCustomerProfile.freeCoins) { redeemCount = activeCustomerProfile.freeCoins; }
-    document.getElementById("redeem-coins").value = redeemCount;
+    let totalFreeValue = 0;
+    document.querySelectorAll('.promo-input').forEach(input => {
+        let max = Number(input.max) || 0; let val = Number(input.value) || 0;
+        if (val > max) { val = max; input.value = val; } if (val < 0) { val = 0; input.value = 0; }
+        let price = Number(input.getAttribute('data-price')) || 0;
+        totalFreeValue += (val * price);
+    });
 
-    let freeValue = redeemCount * activeCoinPrice;
-    document.getElementById("pay-free").value = freeValue; 
-
-    let q = Number(document.getElementById("pay-qris").value) || 0; let t = Number(document.getElementById("pay-transfer").value) || 0;
-    let hp = Number(document.getElementById("pay-hotel-piutang").value) || 0; let tp = Number(document.getElementById("pay-tamu-piutang").value) || 0;
-    
-    let autoCash = window.cartGrandTotal - (q + t + hp + tp + freeValue);
+    document.getElementById("pay-free").value = totalFreeValue; 
+    let q = Number(document.getElementById("pay-qris").value) || 0; let t = Number(document.getElementById("pay-transfer").value) || 0; let hp = Number(document.getElementById("pay-hotel-piutang").value) || 0; let tp = Number(document.getElementById("pay-tamu-piutang").value) || 0;
+    let autoCash = window.cartGrandTotal - (q + t + hp + tp + totalFreeValue);
     document.getElementById("pay-cash").value = Math.max(0, autoCash); calculateRemaining();
 }
 
 window.calculateRemaining = function() {
-    const c = Number(document.getElementById("pay-cash").value) || 0; const q = Number(document.getElementById("pay-qris").value) || 0;
-    const t = Number(document.getElementById("pay-transfer").value) || 0; const hp = Number(document.getElementById("pay-hotel-piutang").value) || 0;
-    const tp = Number(document.getElementById("pay-tamu-piutang").value) || 0; const f = Number(document.getElementById("pay-free").value) || 0;
+    const c = Number(document.getElementById("pay-cash").value) || 0; const q = Number(document.getElementById("pay-qris").value) || 0; const t = Number(document.getElementById("pay-transfer").value) || 0; const hp = Number(document.getElementById("pay-hotel-piutang").value) || 0; const tp = Number(document.getElementById("pay-tamu-piutang").value) || 0; const f = Number(document.getElementById("pay-free").value) || 0;
     const totalAccounted = c + q + t + hp + tp + f; const remaining = Math.max(0, window.cartGrandTotal - totalAccounted);
     document.getElementById("review-remaining").innerText = `Rp ${remaining.toLocaleString('id-ID')}`;
 }
@@ -297,13 +298,8 @@ window.calculateRemaining = function() {
 function closeReview() { document.getElementById("review-modal").classList.add("hidden"); }
 
 async function finalizeOrder(shouldPrint) {
-    const cash = Number(document.getElementById("pay-cash").value) || 0; const qris = Number(document.getElementById("pay-qris").value) || 0;
-    const transfer = Number(document.getElementById("pay-transfer").value) || 0; const hotelPiutang = Number(document.getElementById("pay-hotel-piutang").value) || 0;
-    const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
-    const redeemCount = Number(document.getElementById("redeem-coins").value) || 0;
-    
+    const cash = Number(document.getElementById("pay-cash").value) || 0; const qris = Number(document.getElementById("pay-qris").value) || 0; const transfer = Number(document.getElementById("pay-transfer").value) || 0; const hotelPiutang = Number(document.getElementById("pay-hotel-piutang").value) || 0; const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
     let internalCoinBox = document.getElementById("internal-coins"); const internalCoins = internalCoinBox ? (Number(internalCoinBox.value) || 0) : 0;
-    
     const totalPiutang = hotelPiutang + tamuPiutang; const totalAccounted = cash + qris + transfer + free + totalPiutang; const remaining = window.cartGrandTotal - totalAccounted;
     const requiresProcessing = currentCart.some(i => String(i.workflow).toUpperCase() === "TICKET");
     let custPhoneRaw = document.getElementById("cust-phone").value.trim(); let custPhone = custPhoneRaw || "-";
@@ -315,35 +311,45 @@ async function finalizeOrder(shouldPrint) {
     if (totalPiutang > 0 && !hasHotelItem) return alert("⚠️ PEMBAYARAN DITOLAK:\nPiutang HANYA berlaku untuk item dalam kategori Hotel.");
     if (totalPiutang > 0 && (!custPhone || custPhone === "-")) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda WAJIB memasukkan nomor WhatsApp pelanggan untuk mencatat Piutang.");
 
-    let payMethods = [];
-    if(cash > 0) payMethods.push("Tunai"); if(qris > 0) payMethods.push("QRIS"); if(transfer > 0) payMethods.push("Trf.Bank"); if(hotelPiutang > 0) payMethods.push("Piutang(B2B)"); if(tamuPiutang > 0) payMethods.push("Piutang(Tamu)"); if(free > 0) payMethods.push("Gratis");
+    let payMethods = []; if(cash > 0) payMethods.push("Tunai"); if(qris > 0) payMethods.push("QRIS"); if(transfer > 0) payMethods.push("Trf.Bank"); if(hotelPiutang > 0) payMethods.push("Piutang(B2B)"); if(tamuPiutang > 0) payMethods.push("Piutang(Tamu)"); if(free > 0) payMethods.push("Gratis");
     const payString = payMethods.length > 0 ? payMethods.join("+") : "Belum Bayar";
-    if(custPhone !== "-") saveMemberToDB(custPhone, custName);
-
     let status = "Completed"; if (totalPiutang > 0) status = "Pending Debt"; else if (requiresProcessing) status = "Processing";
 
+    let redeemedList = []; let redeemedLoyaltyCoins = 0;
+    document.querySelectorAll('.promo-input').forEach(input => {
+        let val = Number(input.value) || 0;
+        if (val > 0) {
+            let src = input.getAttribute('data-type');
+            redeemedList.push({ source: src, item: input.getAttribute('data-item'), qty: val, price: Number(input.getAttribute('data-price')) });
+            if (src === 'loyalty') redeemedLoyaltyCoins += val;
+        }
+    });
+
     let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
-    let coinsEarned = Math.max(0, totalCoinsInCart - redeemCount);
+    let coinsEarned = Math.max(0, totalCoinsInCart - redeemedLoyaltyCoins);
     let newPoints = 0; let newFree = 0;
     
-    if (activeCustomerProfile) {
+    if (custPhone !== "-") {
+        if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
+        activeCustomerProfile.spent += window.cartGrandTotal;
         let currentPoints = activeCustomerProfile.points || 0; let currentFree = activeCustomerProfile.freeCoins || 0;
-        currentFree -= redeemCount; currentPoints += coinsEarned;
-        let newlyEarnedFree = Math.floor(currentPoints / 10); currentPoints = currentPoints % 10; currentFree += newlyEarnedFree;
+        
+        currentFree -= redeemedLoyaltyCoins; currentPoints += coinsEarned;
+        let newlyEarnedFree = Math.floor(currentPoints / window.loyaltyTarget); currentPoints = currentPoints % window.loyaltyTarget; currentFree += newlyEarnedFree;
         newPoints = currentPoints; newFree = currentFree;
         
-        db.transaction(["members"], "readwrite").objectStore("members").get(activeCustomerProfile.phone).onsuccess = (e) => {
-            let mem = e.target.result; if (mem) { mem.points = newPoints; mem.freeCoins = newFree; db.transaction(["members"], "readwrite").objectStore("members").put(mem); }
-        };
+        activeCustomerProfile.points = currentPoints; activeCustomerProfile.freeCoins = currentFree;
+        redeemedList.forEach(rp => { if(rp.source === 'stored' && activeCustomerProfile.storedRewards[rp.item]) activeCustomerProfile.storedRewards[rp.item] -= rp.qty; });
+        saveMemberToDB(activeCustomerProfile);
     }
 
     let expectedCoinsTotal = currentCart.reduce((sum, item) => { let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; let multiplier = Math.ceil(item.qty / divisor); return sum + ((item.expectedCoins || 0) * multiplier); }, 0);
 
     const orderPayload = {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
-        customerName: custName, customerPhone: custPhone, orderStatus: status, items: currentCart, subtotal: window.cartSubtotal, discounts: (redeemCount * activeCoinPrice), grandTotal: window.cartGrandTotal,
+        customerName: custName, customerPhone: custPhone, orderStatus: status, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payString, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: coinsEarned, coinsRedeemed: redeemCount, expectedCoins: expectedCoinsTotal, internalCoinsUsed: internalCoins, syncStatus: "Pending" 
+        coinsEarned: coinsEarned, redeemedPromos: redeemedList, expectedCoins: expectedCoinsTotal, internalCoinsUsed: internalCoins, syncStatus: "Pending" 
     };
 
     const txMenu = db.transaction(["menu"], "readwrite"); const storeMenu = txMenu.objectStore("menu");
@@ -386,7 +392,7 @@ async function buildPrintableReceipt(orderId, order, deposit, remaining, payMeth
     
     let poinHtml = "";
     if (order.customerPhone && order.customerPhone !== "-") {
-        poinHtml = `<div style="margin-top:10px; padding-top:5px; border-top:1px dashed #000; font-size:11px; text-align:center;"><strong>-- INFO POIN LAUNDRY --</strong><br>Sisa Poin: ${newPoints}/10<br>Koin Gratis Tersedia: ${newFree}</div>`;
+        poinHtml = `<div style="margin-top:10px; padding-top:5px; border-top:1px dashed #000; font-size:11px; text-align:center;"><strong>-- INFO POIN LAUNDRY --</strong><br>Sisa Poin: ${newPoints}/${window.loyaltyTarget}<br>Koin Gratis Tersedia: ${newFree}</div>`;
     }
 
     printArea.innerHTML = `
@@ -432,14 +438,12 @@ function renderActiveTickets() {
 }
 
 let activeDoneOrderId = null;
-window.markTicketReady = function(orderId, expectedCoins) {
-    activeDoneOrderId = orderId;
-    document.getElementById("done-expected-coins").innerText = expectedCoins;
-    document.getElementById("done-actual-coins").value = expectedCoins;
-    document.getElementById("ticket-done-modal").classList.remove("hidden");
+function markTicketReady(orderId, expectedCoins) {
+    activeDoneOrderId = orderId; document.getElementById("done-expected-coins").innerText = expectedCoins;
+    document.getElementById("done-actual-coins").value = expectedCoins; document.getElementById("ticket-done-modal").classList.remove("hidden");
 }
 
-window.submitTicketDone = function() {
+function submitTicketDone() {
     let actual = Number(document.getElementById("done-actual-coins").value) || 0;
     let expected = Number(document.getElementById("done-expected-coins").innerText) || 0;
     if (actual < 0) return alert("Jumlah koin tidak valid.");
@@ -531,9 +535,7 @@ document.getElementById("coin-action-type").addEventListener("change", function(
     if(this.value === "jammed") noteCont.style.display = "block"; else noteCont.style.display = "none";
 });
 
-function openCoinManagement() {
-    document.getElementById("manage-coin-qty").value = ""; document.getElementById("manage-coin-note").value = ""; document.getElementById("coin-management-modal").classList.remove("hidden");
-}
+function openCoinManagement() { document.getElementById("manage-coin-qty").value = ""; document.getElementById("manage-coin-note").value = ""; document.getElementById("coin-management-modal").classList.remove("hidden"); }
 
 function submitCoinManagement() {
     const qty = Number(document.getElementById("manage-coin-qty").value);
@@ -639,17 +641,20 @@ function applyVoidAftermath(order) {
                 mem.spent = Math.max(0, (mem.spent || 0) - order.grandTotal); 
                 let kBal = mem.points || 0; let fAvail = mem.freeCoins || 0;
                 kBal -= (order.coinsEarned || 0); fAvail += (order.coinsRedeemed || 0);
-                while (kBal < 0) { kBal += 10; fAvail -= 1; }
-                mem.points = kBal; mem.freeCoins = Math.max(0, fAvail);
-                memberStore.put(mem); 
+                while (kBal < 0) { kBal += window.loyaltyTarget; fAvail -= 1; }
+                
+                if (order.redeemedPromos) {
+                    order.redeemedPromos.forEach(rp => { if (rp.source === 'stored') { mem.storedRewards[rp.item] = (mem.storedRewards[rp.item] || 0) + rp.qty; } });
+                }
+
+                mem.points = kBal; mem.freeCoins = Math.max(0, fAvail); memberStore.put(mem); 
             } 
         };
     }
     tx.oncomplete = () => { renderProductGrid(); };
-    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed, internalCoinsUsed: order.internalCoinsUsed, cashRefund: order.cashAmount } }) });
+    if (navigator.onLine) fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "executeVoidAftermath", data: { orderId: order.orderId, customerPhone: order.customerPhone, amount: order.grandTotal, itemsToReturn: itemsToReturn, coinsEarned: order.coinsEarned, coinsRedeemed: order.coinsRedeemed, internalCoinsUsed: order.internalCoinsUsed, cashRefund: order.cashAmount, redeemedPromos: order.redeemedPromos } }) });
 }
 
-// UPDATE: Perhitungan Laci Menggabungkan Cloud dan Offline
 function calculateLiveDrawer(callback) {
     let liveDrawer = window.masterDrawerBalance || 0; 
     let tx = db.transaction(["orders", "cash_drops", "expenses"], "readonly");
@@ -752,7 +757,7 @@ async function runBackgroundSync() {
     if (!navigator.onLine || isSyncing) return;
     isSyncing = true; 
     try {
-        let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members", "coin_retrievals", "ticket_coins"], "readonly");
+        let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members", "coin_retrievals", "ticket_coins", "promo_claims"], "readonly");
         
         let orders = await new Promise(res => tx.objectStore("orders").getAll().onsuccess = e => res(e.target.result));
         for (const order of orders) {
@@ -804,12 +809,20 @@ async function runBackgroundSync() {
                 try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncTicketCoins", data: tc }) }); if ((await r.json()).status === "Success") { tc.syncStatus = "Synced"; db.transaction(["ticket_coins"], "readwrite").objectStore("ticket_coins").put(tc); } } catch(e) {}
             }
         }
+
+        let promoClaims = await new Promise(res => tx.objectStore("promo_claims").getAll().onsuccess = e => res(e.target.result));
+        for (const claim of promoClaims) {
+            if (claim.syncStatus === "Pending") {
+                try { let r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "syncPromoClaim", data: claim }) }); if ((await r.json()).status === "Success") { db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").delete(claim.claimId); } } catch(e) {} 
+            }
+        }
+
     } finally { isSyncing = false; }
 }
 
 window.onload = async () => { 
     await initDB(); 
     await syncMasterData(); 
-    window.setInterval(runBackgroundSync, 5000); // Tembak antrean setiap 5 detik (Sangat cepat & aman karena antrean hanya data kecil)
-    window.setInterval(syncMasterData, 30000); // Tarik stok & menu dari server setiap 30 detik
+    window.setInterval(runBackgroundSync, 5000); 
+    window.setInterval(syncMasterData, 30000); 
 };
