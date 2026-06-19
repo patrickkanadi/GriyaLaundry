@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxLfrUoCplYPUKJTbj_EUtXT2NDcU067bS8qHnapbC9g9Wr6CubXGrPJAtFKW2ti9Ts/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 24; 
+const DB_VERSION = 25; // Bumped version for hard cache clear
 let db;
 
 // MULTI-ANTREAN STATE MANAGEMENT
@@ -19,6 +19,18 @@ let currentVoidTarget = { type: null, id: null };
 let isMenuLocked = true; let isSyncing = false; 
 let activeCustomerProfile = null; let activeCoinPrice = 10000;
 window.loyaltyTarget = 10; window.globalPromos = [];
+
+// BLUETOOTH PRINTER STATE
+let btDevice = null;
+let btCharacteristic = null;
+
+// SHA-256 Crypto Helper
+async function hashString(str) {
+    const msgUint8 = new TextEncoder().encode(str);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 function formatWIB(dateString) { return new Date(dateString).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') + ' WIB'; }
 function formatTimeOnlyWIB(dateString) { return new Date(dateString).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, hour: '2-digit', minute: '2-digit' }) + ' WIB'; }
@@ -55,23 +67,89 @@ function initDB() {
     });
 }
 
-function attemptLogin() {
-    const pin = document.getElementById("cashier-pin").value.trim();
-    db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = (e) => {
-        const staff = e.target.result;
+// DIRECT WEB BLUETOOTH PRINTING ENGINE
+async function connectBluetoothPrinter() {
+    try {
+        btDevice = await navigator.bluetooth.requestDevice({
+            filters: [{ services: [0x18F0] }],
+            optionalServices: [0x18F0]
+        });
+        const server = await btDevice.gatt.connect();
+        const service = await server.getPrimaryService(0x18F0);
+        btCharacteristic = await service.getCharacteristic(0x2AF1);
+        
+        const btn = document.getElementById("btn-printer");
+        if(btn) {
+            btn.innerText = "🖨️ Printer: Terhubung";
+            btn.style.background = "#2ecc71";
+            btn.style.borderColor = "#2ecc71";
+        }
+    } catch (err) {
+        console.error("Bluetooth Error:", err);
+        alert("Gagal terhubung ke printer Bluetooth. Pastikan bluetooth menyala dan printer dihidupkan.");
+    }
+}
+
+async function sendToPrinter(payloadUint8) {
+    if (!btCharacteristic) {
+        alert("Printer belum terhubung! Silakan klik tombol 'Printer: Offline' di atas terlebih dahulu.");
+        return;
+    }
+    const chunkSize = 20; // BLE Limit
+    for (let i = 0; i < payloadUint8.length; i += chunkSize) {
+        const chunk = payloadUint8.slice(i, i + chunkSize);
+        await btCharacteristic.writeValue(chunk);
+        await new Promise(r => setTimeout(r, 10)); // Prevent buffer overflow
+    }
+}
+
+// SMART LOGIN & FAIL-SAFE AUTHENTICATION
+async function attemptLogin() {
+    const pinInput = document.getElementById("cashier-pin");
+    const rawPin = pinInput.value.trim();
+    if (!rawPin) return;
+
+    const loginBtn = document.getElementById("btn-login");
+    loginBtn.disabled = true;
+    loginBtn.innerText = "Memverifikasi...";
+
+    try {
+        const hashedPin = await hashString(rawPin);
+
+        const verifyPin = () => {
+            return new Promise((resolve) => {
+                db.transaction(["staff"], "readonly").objectStore("staff").get(hashedPin).onsuccess = (e) => resolve(e.target.result);
+            });
+        };
+
+        let staff = await verifyPin();
+
+        // Fail-Safe Trigger
+        if (!staff) {
+            document.getElementById("login-network-text").innerText = "Menarik data server...";
+            await syncMasterData(); // Pull fresh DB silently
+            staff = await verifyPin(); // Check local DB again
+        }
+
         if (staff) {
-            db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(pin).onsuccess = (shiftReq) => {
+            db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(hashedPin).onsuccess = (shiftReq) => {
                 const activeShift = shiftReq.target.result;
-                currentCashier = staff.name; currentPin = staff.pin;
+                currentCashier = staff.name; currentPin = hashedPin;
                 if (activeShift) { currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime; } 
-                else { currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString(); db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: pin, shiftId: currentShiftId, loginTime: currentLoginTime}); }
+                else { currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString(); db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: hashedPin, shiftId: currentShiftId, loginTime: currentLoginTime}); }
                 document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden"); 
                 document.getElementById("display-cashier").innerText = currentCashier;
                 document.getElementById("main-workspace-wrapper").classList.remove("hidden");
                 syncMasterData(); lockMenu(); 
             };
-        } else { alert("PIN Salah! Data tidak ditemukan."); }
-    };
+        } else { 
+            alert("PIN Salah! Data tidak ditemukan."); 
+        }
+    } finally {
+        loginBtn.disabled = false;
+        loginBtn.innerText = "Masuk / Buka Shift";
+        pinInput.value = "";
+    }
 }
 
 function switchWorkspace(type) {
@@ -90,31 +168,23 @@ function switchWorkspace(type) {
 
 window.switchAntrean = function(index) {
     if (currentAntreanIndex === index) return;
-
-    // 1. Simpan Status Antrean Saat Ini
     antreans[currentAntreanIndex].cart = [...currentCart];
     antreans[currentAntreanIndex].profile = activeCustomerProfile ? {...activeCustomerProfile} : null;
     antreans[currentAntreanIndex].isLocked = isMenuLocked;
     antreans[currentAntreanIndex].phoneInput = document.getElementById("cust-phone").value;
     antreans[currentAntreanIndex].nameInput = document.getElementById("cust-name").value;
-
-    // 2. Pindah Index
     currentAntreanIndex = index;
-
-    // 3. Muat Status Antrean Baru
     currentCart = [...antreans[currentAntreanIndex].cart];
     activeCustomerProfile = antreans[currentAntreanIndex].profile ? {...antreans[currentAntreanIndex].profile} : null;
     isMenuLocked = antreans[currentAntreanIndex].isLocked;
     document.getElementById("cust-phone").value = antreans[currentAntreanIndex].phoneInput;
     document.getElementById("cust-name").value = antreans[currentAntreanIndex].nameInput;
 
-    // 4. Update UI Tab
     document.querySelectorAll(".antrean-btn").forEach((btn, i) => {
         if (i === index) { btn.classList.add("active"); btn.style.background = "#fff"; btn.style.color = "#2980b9"; } 
         else { btn.classList.remove("active"); btn.style.background = "#bdc3c7"; btn.style.color = "#fff"; }
     });
 
-    // 5. Update Status Kunci Menu
     if (isMenuLocked) {
         document.getElementById("customer-input-section").classList.remove("hidden"); 
         document.getElementById("active-customer-banner").classList.add("hidden");
@@ -141,7 +211,6 @@ window.switchAntrean = function(index) {
             document.getElementById("promo-indicator").classList.remove("hidden");
         } else { document.getElementById("promo-indicator").classList.add("hidden"); }
     }
-    
     document.getElementById("autocomplete-results").classList.add("hidden");
     renderCart();
 }
@@ -155,13 +224,11 @@ function lockMenu() {
     document.getElementById("cust-phone").value = ""; 
     document.getElementById("cust-name").value = ""; 
     currentCart = []; 
-    
     antreans[currentAntreanIndex].cart = [];
     antreans[currentAntreanIndex].profile = null;
     antreans[currentAntreanIndex].isLocked = true;
     antreans[currentAntreanIndex].phoneInput = "";
     antreans[currentAntreanIndex].nameInput = "";
-
     renderCart(); document.getElementById("promo-indicator").classList.add("hidden");
 }
 
@@ -174,7 +241,6 @@ function unlockMenu(isGuest) {
         if (phone.length < 5) return alert("Harap masukkan Nomor WhatsApp yang valid terlebih dahulu."); 
     }
 
-    // CEK VALIDASI GANDA: Pelanggan yang sama tidak boleh dibuka di 2 antrean berbeda
     let isDuplicate = false;
     for (let i = 0; i < antreans.length; i++) {
         if (i === currentAntreanIndex) continue;
@@ -194,13 +260,10 @@ function unlockMenu(isGuest) {
 }
 
 window.selectMember = function(phone) {
-    // CEK VALIDASI GANDA SAAT AUTOCOMPLETE DIPILIH
     for (let i = 0; i < antreans.length; i++) {
         if (i === currentAntreanIndex) continue;
         let otherPhone = antreans[i].profile ? antreans[i].profile.phone : (antreans[i].isLocked ? "" : antreans[i].phoneInput);
-        if (!antreans[i].isLocked && otherPhone === phone) {
-            return alert("⚠️ Pelanggan ini sedang dilayani di Antrean " + (i+1) + ". Silakan selesaikan atau batalkan antrean tersebut terlebih dahulu.");
-        }
+        if (!antreans[i].isLocked && otherPhone === phone) { return alert("⚠️ Pelanggan ini sedang dilayani di Antrean " + (i+1) + "."); }
     }
 
     db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
@@ -502,46 +565,89 @@ async function finalizeOrder(shouldPrint) {
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     if (requiresProcessing) { activeLaundryTickets.unshift(orderPayload); document.getElementById("ticket-count").innerText = activeLaundryTickets.length; }
     
-    if (shouldPrint) { await buildPrintableReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + free + totalPiutang), 0, payString, newPoints, newFree); window.print(); }
+    if (shouldPrint) { await buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + free + totalPiutang), 0, payString, newPoints, newFree); }
     closeReview(); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
 
-async function getDynamicSettings() { return new Promise(res => { let req = db.transaction(["settings"], "readonly").objectStore("settings").getAll(); req.onsuccess = e => { let s = {}; e.target.result.forEach(row => s[row.key] = row.value); res(s); }; }); }
+// ESC/POS FORMATTING HELPER
+function formatEscPosLine(left, right, isBig) {
+    const maxLen = isBig ? 16 : 32;
+    const leftStr = String(left);
+    const rightStr = String(right);
+    const spaceNeeded = maxLen - (leftStr.length + rightStr.length);
 
-async function buildPrintableReceipt(orderId, order, deposit, remaining, payMethod, newPoints, newFree) {
+    if (spaceNeeded > 0) {
+        return leftStr + " ".repeat(spaceNeeded) + rightStr;
+    } else {
+        const paddingNeeded = maxLen - rightStr.length;
+        const padStr = paddingNeeded > 0 ? " ".repeat(paddingNeeded) : "";
+        return leftStr + "\n" + padStr + rightStr;
+    }
+}
+
+// RAW ESC/POS BLUETOOTH PRINT GENERATOR
+async function buildEscPosReceipt(orderId, order, deposit, remaining, payMethod, newPoints, newFree) {
     const settings = await getDynamicSettings();
     const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; const h2 = settings["Header_2"] || ""; const h3 = settings["Header_3"] || ""; 
     const f1 = settings["Footer_1"] || "TERIMA KASIH"; const f2 = settings["Footer_2"] || ""; const f3 = settings["Footer_3"] || ""; 
     
-    const dateStr = formatWIB(new Date().toISOString());
-    const printArea = document.getElementById("printable-area"); 
-    
-    let itemsHtml = "";
+    const CMD_INIT = "\x1B\x40";
+    const CMD_CENTER = "\x1B\x61\x01";
+    const CMD_LEFT = "\x1B\x61\x00";
+    const CMD_BOLD_ON = "\x1B\x45\x01";
+    const CMD_BOLD_OFF = "\x1B\x45\x00";
+    const CMD_BIG = "\x1B!\x11";
+    const CMD_NORMAL = "\x1B!\x00";
+    const CMD_CUT = "\x1D\x56\x41\x10";
+
+    let receipt = CMD_INIT;
+    receipt += CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
+    if(h2) receipt += h2 + "\n";
+    if(h3) receipt += h3 + "\n";
+    receipt += formatWIB(new Date().toISOString()) + "\n";
+    receipt += "--------------------------------\n";
+    receipt += CMD_LEFT;
+    receipt += "Nota: " + orderId + "\n";
+    receipt += "Plgn: " + order.customerName + "\n";
+    receipt += "Ksr : " + currentCashier + "\n";
+    receipt += "--------------------------------\n";
+
     order.items.forEach(item => {
-        const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty; const lineTotal = item.qty * item.originalPrice;
-        itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 2px;"><span>${qtyDisplay}x ${item.name}</span><span>${lineTotal.toLocaleString('id-ID')}</span></div>`;
+        const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
+        const lineTotal = (item.qty * item.originalPrice).toLocaleString('id-ID');
+        const leftStr = `${qtyDisplay}x ${item.name}`;
+        receipt += formatEscPosLine(leftStr, lineTotal, false) + "\n";
     });
-    
-    let poinHtml = "";
-    if (order.customerPhone && order.customerPhone !== "-") {
-        poinHtml = `<div style="margin-top:10px; padding-top:5px; border-top:1px dashed #000; font-size:11px; text-align:center;"><strong>-- INFO POIN LAUNDRY --</strong><br>Sisa Poin: ${newPoints}/${window.loyaltyTarget}<br>Koin Gratis Tersedia: ${newFree}</div>`;
+
+    receipt += "--------------------------------\n";
+    receipt += formatEscPosLine("Subtotal", order.subtotal.toLocaleString('id-ID'), false) + "\n";
+    receipt += CMD_BOLD_ON + CMD_BIG + formatEscPosLine("TOTAL", order.grandTotal.toLocaleString('id-ID'), true) + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
+    receipt += "\n";
+    receipt += formatEscPosLine(`Tercatat(${payMethod})`, deposit.toLocaleString('id-ID'), false) + "\n";
+
+    if (order.hotelPiutangAmount > 0 || order.tamuPiutangAmount > 0) {
+        receipt += CMD_BOLD_ON + formatEscPosLine("TOTAL PIUTANG", (order.hotelPiutangAmount + order.tamuPiutangAmount).toLocaleString('id-ID'), false) + "\n" + CMD_BOLD_OFF;
+    } else {
+        receipt += CMD_BOLD_ON + formatEscPosLine("STATUS", "LUNAS", false) + "\n" + CMD_BOLD_OFF;
     }
 
-    printArea.innerHTML = `
-        <div style="text-align:center; margin-bottom:10px;"><h2 style="margin:0;">${h1}</h2>${h2 ? `<div style="font-size:10px;">${h2}</div>` : ''}${h3 ? `<div style="font-size:10px;">${h3}</div>` : ''}<div style="font-size:10px; margin-top:5px;">${dateStr}</div></div>
-        <div style="border-top:1px dashed #000; border-bottom:1px dashed #000; padding:5px 0; margin-bottom:5px; font-size: 11px;"><div>Nota: ${orderId}</div><div>Pelanggan: ${order.customerName}</div><div>Kasir: ${currentCashier}</div></div>
-        ${itemsHtml}
-        <div style="border-top:1px dashed #000; margin-top:10px; padding-top:5px;">
-            <div style="display:flex; justify-content:space-between; font-size:11px;"><span>Subtotal:</span><span>Rp ${order.subtotal.toLocaleString('id-ID')}</span></div>
-            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:14px; margin-top:5px; border-bottom: 1px solid #000; padding-bottom: 5px;"><span>TOTAL:</span><span>Rp ${order.grandTotal.toLocaleString('id-ID')}</span></div>
-        </div>
-        <div style="margin-top:5px; font-size:11px;">
-            <div style="display:flex; justify-content:space-between;"><span>Tercatat (${payMethod}):</span><span>Rp ${deposit.toLocaleString('id-ID')}</span></div>
-            ${order.hotelPiutangAmount > 0 || order.tamuPiutangAmount > 0 ? `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>TOTAL PIUTANG:</span><span>Rp ${(order.hotelPiutangAmount + order.tamuPiutangAmount).toLocaleString('id-ID')}</span></div>` : `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top: 5px;"><span>STATUS:</span><span>LUNAS</span></div>`}
-        </div>
-        ${poinHtml}
-        <div style="text-align:center; margin-top:15px; font-weight:bold; font-size: 12px;">${f1}</div>${f2 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f2}</div>` : ''}${f3 ? `<div style="text-align:center; margin-top:2px; font-size: 10px;">${f3}</div>` : ''}
-    `;
+    if (order.customerPhone && order.customerPhone !== "-") {
+        receipt += "--------------------------------\n";
+        receipt += CMD_CENTER + "-- INFO POIN LAUNDRY --\n";
+        receipt += "Sisa Poin: " + newPoints + "/" + window.loyaltyTarget + "\n";
+        receipt += "Koin Gratis Tersedia: " + newFree + "\n";
+    }
+
+    receipt += "--------------------------------\n";
+    receipt += CMD_CENTER + CMD_BOLD_ON + f1 + "\n" + CMD_BOLD_OFF;
+    if(f2) receipt += f2 + "\n";
+    if(f3) receipt += f3 + "\n";
+    receipt += "\n\n\n\n"; // Feed paper before cut
+    receipt += CMD_CUT;
+
+    const encoder = new TextEncoder();
+    const payload = encoder.encode(receipt);
+    await sendToPrinter(payload);
 }
 
 function renderActiveTickets() {
@@ -707,10 +813,13 @@ function submitRemoteVoid() {
 }
 
 async function confirmAdminVoid() {
-    const pin = document.getElementById("admin-void-pin").value; if (!pin) return alert("Harap masukkan PIN Admin.");
-    const settings = await getDynamicSettings(); const masterPin = String(settings["Master_PIN"]); const isMaster = (pin === masterPin);
+    const rawPin = document.getElementById("admin-void-pin").value.trim();
+    if (!rawPin) return alert("Harap masukkan PIN Admin.");
+    const hashedPin = await hashString(rawPin);
     
-    db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = (e) => {
+    const settings = await getDynamicSettings(); const masterPinHash = String(settings["Master_PIN"]); const isMaster = (hashedPin === masterPinHash);
+    
+    db.transaction(["staff"], "readonly").objectStore("staff").get(hashedPin).onsuccess = (e) => {
         const staff = e.target.result; const isAdmin = (staff && staff.role.toLowerCase() === 'admin');
         if (isMaster || isAdmin) {
             const authName = isMaster ? "Master Admin" : staff.name; const type = currentVoidTarget.type; const id = currentVoidTarget.id; const storeName = type === 'orders' ? "orders" : "expenses";
@@ -876,9 +985,7 @@ async function executeFinalLogout(netCash) {
     if (navigator.onLine) {
         if(document.getElementById("network-text")) document.getElementById("network-text").innerText = `Mengirim Laporan Shift...`;
         try {
-            let r = await fetch(API_URL, {
-                method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncShiftReport", data: shiftPayload })
-            });
+            let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncShiftReport", data: shiftPayload }) });
             if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(shiftPayload.shiftId); }
         } catch(e) {}
     }
