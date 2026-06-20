@@ -316,9 +316,11 @@ async function syncMasterData() {
             window.globalPromos = result.data.promos || [];
             
             // DRAWER FEATURE TOGGLE
-            window.enableDrawerTracking = result.data.settings["Enable_Drawer_Tracking"] !== "FALSE";
+            window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
             const btnDrawer = document.getElementById("btn-drawer");
-            if (btnDrawer) btnDrawer.style.display = window.enableDrawerTracking ? "inline-block" : "none";
+            const btnExpense = document.getElementById("btn-expense");
+            if (btnDrawer) btnDrawer.style.display = window.enableDrawerTracking ? "" : "none";
+            if (btnExpense) btnExpense.style.display = window.enableDrawerTracking ? "" : "none";
             
             const tx = db.transaction(["staff", "menu", "settings", "members", "expense_categories"], "readwrite");
             tx.onerror = (event) => { console.error("Database Transaction Error:", event.target.error); };
