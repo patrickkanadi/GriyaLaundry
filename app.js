@@ -318,9 +318,8 @@ async function syncMasterData() {
             // DRAWER FEATURE TOGGLE
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
             const btnDrawer = document.getElementById("btn-drawer");
-            const btnExpense = document.getElementById("btn-expense");
             if (btnDrawer) btnDrawer.style.display = window.enableDrawerTracking ? "" : "none";
-            if (btnExpense) btnExpense.style.display = window.enableDrawerTracking ? "" : "none";
+            // Tombol Pengeluaran sengaja tidak di-hide di sini agar kasir tetap bisa mencatat pengeluaran
             
             const tx = db.transaction(["staff", "menu", "settings", "members", "expense_categories"], "readwrite");
             tx.onerror = (event) => { console.error("Database Transaction Error:", event.target.error); };
