@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxLfrUoCplYPUKJTbj_EUtXT2NDcU067bS8qHnapbC9g9Wr6CubXGrPJAtFKW2ti9Ts/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 27; 
+const DB_VERSION = 28; // Version ditaikkan untuk hard refresh
 let db;
 
 let antreans = [
@@ -272,10 +272,11 @@ async function syncMasterData() {
         if (result.status === "Success") {
             window.masterDrawerBalance = result.masterDrawerBalance || 0; window.loyaltyTarget = result.data.loyaltyTarget || 10; window.globalPromos = result.data.promos || [];
             
+            // FIX: Hanya menyembunyikan laci uang, BUKAN pengeluaran.
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
-            const btnDrawer = document.getElementById("btn-drawer"); const btnExpense = document.getElementById("btn-expense");
+            const btnDrawer = document.getElementById("btn-drawer");
             if (btnDrawer) btnDrawer.style.display = window.enableDrawerTracking ? "" : "none";
-            if (btnExpense) btnExpense.style.display = window.enableDrawerTracking ? "" : "none";
+            // Tombol pengeluaran tetap utuh agar kasir selalu bisa input
             
             const tx = db.transaction(["staff", "menu", "settings", "members", "expense_categories"], "readwrite");
             tx.onerror = (event) => { console.error("Database Transaction Error:", event.target.error); };
@@ -390,14 +391,50 @@ function addToCart(item, qty) {
     renderCart();
 }
 
+// LOGIKA UPDATE QUANTITY BARU DARI DALAM CART
+window.updateCartItemQty = function(itemId, delta) {
+    let existing = currentCart.find(i => i.itemId === itemId);
+    if (existing) {
+        existing.qty += delta;
+        
+        // Logika Minimum Order Quantity (MOQ)
+        if (existing.hasMoq && existing.moqQty > 0) {
+            if (existing.qty > 0 && existing.qty < existing.moqQty) {
+                if (delta < 0) existing.qty = 0; // Jika kurangi di bawah MOQ, hapus item
+                else existing.qty = existing.moqQty; // Jika tambah dari 0, loncat ke MOQ
+            }
+        }
+
+        if (existing.qty <= 0) {
+            currentCart = currentCart.filter(i => i.itemId !== itemId);
+        }
+        renderCart();
+    }
+};
+
+// RENDER CART DIPERBARUI DENGAN TOMBOL PLUS/MINUS (+ / -)
 function renderCart() {
     const container = document.getElementById("cart-items"); container.innerHTML = ""; let total = 0;
     currentCart.forEach(item => {
-        const lineTotal = item.qty * item.price; total += lineTotal; const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
-        container.innerHTML += `<div class="cart-item"><div><span class="cart-qty">${qtyDisplay}</span> ${item.name}</div><strong>Rp ${lineTotal.toLocaleString('id-ID')}</strong></div>`;
+        const lineTotal = item.qty * item.price; total += lineTotal; 
+        const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
+        
+        container.innerHTML += `
+        <div class="cart-item" style="display:flex; flex-direction:column; align-items:stretch; gap:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="font-weight:bold;">${item.name}</div>
+                <strong style="color:#2c3e50;">Rp ${lineTotal.toLocaleString('id-ID')}</strong>
+            </div>
+            <div style="display:flex; align-items:center; background:#ecf0f1; border-radius:6px; overflow:hidden; width:max-content; border:1px solid #bdc3c7;">
+                <button onclick="updateCartItemQty('${item.itemId}', -1)" style="border:none; background:#e74c3c; color:white; width:35px; height:30px; cursor:pointer; font-weight:bold; font-size:16px;">-</button>
+                <span style="width:45px; text-align:center; font-weight:bold; font-size:14px;">${qtyDisplay}</span>
+                <button onclick="updateCartItemQty('${item.itemId}', 1)" style="border:none; background:#2ecc71; color:white; width:35px; height:30px; cursor:pointer; font-weight:bold; font-size:16px;">+</button>
+            </div>
+        </div>`;
     });
     document.getElementById("cart-total").innerText = `Rp ${total.toLocaleString('id-ID')}`; window.cartSubtotal = total; window.cartGrandTotal = total;
 }
+
 function clearCart() { lockMenu(); }
 
 function reviewOrder() {
