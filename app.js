@@ -3,7 +3,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbxLfrUoCplYPUKJTbj_EUtX
 // ^^^ JANGAN LUPA UBAH BARIS INI ^^^
 
 const DB_NAME = "Buffet_POS_DB";
-const DB_VERSION = 32; 
+const DB_VERSION = 33; 
 let db;
 
 let currentCategory = ""; 
@@ -104,7 +104,7 @@ function restoreUnpaidTables() {
 }
 
 // ---------------------------------------------------------
-// LOGIN & SESSION MANAGEMENT
+// LOGIN & SESSION MANAGEMENT (AUTO-SYNC ON FAIL)
 // ---------------------------------------------------------
 async function attemptLogin() {
     const pinInput = String(document.getElementById("cashier-pin").value).trim();
@@ -540,7 +540,7 @@ function cancelTable() {
     if (activeOrders.length === 0) return;
     if (confirm("⚠️ PERINGATAN: Apakah Anda yakin ingin membatalkan pesanan dan menghapus meja ini sepenuhnya?")) { 
         activeOrders.splice(currentOrderIndex, 1); 
-        currentOrderIndex = 0; // Kembalikan fokus ke tab pertama (jika ada)
+        currentOrderIndex = 0; 
         activePlateIndex = 0;
         preserveUnpaidTables(); 
         renderCustomerTabs(); 
@@ -577,20 +577,22 @@ function updateQty(plateIndex, itemIndex, delta) {
     preserveUnpaidTables(); renderCartUI();
 }
 
+// PERBAIKAN: Memunculkan Bilah Info Meja Aktif
 function renderCartUI() {
     const container = document.getElementById("plates-container"); container.innerHTML = ""; 
     const header = document.getElementById("active-table-header");
 
     if (activeOrders.length === 0) {
-        header.classList.add("hidden");
+        if(header) header.classList.add("hidden");
         container.innerHTML = `<div style="text-align:center; padding:40px; color:#bdc3c7; font-size:16px;">Belum ada meja aktif.</div>`;
         document.getElementById("cart-subtotal").innerText = "Rp 0"; document.getElementById("cart-tax").innerText = "Rp 0"; document.getElementById("cart-total").innerText = "Rp 0";
         return;
     }
     
-    header.classList.remove("hidden");
+    if(header) header.classList.remove("hidden");
     const currentOrder = activeOrders[currentOrderIndex];
-    document.getElementById("active-table-name").innerText = currentOrder.customerName && currentOrder.customerName !== "Walk-in" ? `${currentOrder.name} (${currentOrder.customerName})` : currentOrder.name;
+    const nameEl = document.getElementById("active-table-name");
+    if(nameEl) nameEl.innerText = currentOrder.customerName && currentOrder.customerName !== "Walk-in" ? `${currentOrder.name} (${currentOrder.customerName})` : currentOrder.name;
 
     let subtotal = 0; 
     currentOrder.plates.forEach((plate, index) => {
@@ -782,13 +784,23 @@ async function finalizePayment(shouldPrint) {
         receiptText += `Kasir:     ${currentCashier}\n`;
         receiptText += "--------------------------------\n";
         
+        // PERBAIKAN: Cetak Diskon Per Item
         currentOrder.plates.forEach(plate => {
             if(plate.items.length > 0) {
                 receiptText += BOLD_ON + `Piring ${plate.plateId}\n` + BOLD_OFF;
                 plate.items.forEach(item => {
                     let itemName = `${item.qty}x ${item.name}`;
-                    let itemPrice = (item.qty * item.originalPrice).toLocaleString('id-ID'); 
-                    receiptText += formatLine(itemName, itemPrice, false);
+                    let itemOrigTotal = item.qty * item.originalPrice;
+                    let itemEffectiveTotal = item.qty * item.price;
+                    let itemDiscount = itemOrigTotal - itemEffectiveTotal;
+
+                    // Tampilkan Harga Asli terlebih dahulu
+                    receiptText += formatLine(itemName, itemOrigTotal.toLocaleString('id-ID'), false);
+                    
+                    // Jika ada diskon menu, cetak di bawahnya
+                    if (itemDiscount > 0) {
+                        receiptText += formatLine("  Diskon Item:", "-" + itemDiscount.toLocaleString('id-ID'), false);
+                    }
                 });
             }
         });
@@ -981,6 +993,16 @@ function viewPastShift(shiftId) {
             };
         } else { populateShiftModal(s, true); }
     };
+}
+
+// TOMBOL CETAK SHIFT
+function printCurrentShift() {
+    printShiftReport(currentShiftId);
+}
+function printPastShiftFromModal() {
+    if(window.currentShiftData && window.currentShiftData.shiftId) {
+        printShiftReport(window.currentShiftData.shiftId);
+    }
 }
 
 function populateShiftModal(s, isPast) {
@@ -1234,7 +1256,7 @@ async function printToBluetooth(receiptText) {
 }
 
 // ============================================================================
-// 🖨️ FITUR CETAK ULANG & LAPORAN SHIFT
+// 🖨️ FITUR CETAK ULANG & LAPORAN SHIFT (REPRINT & SHIFT REPORT)
 // ============================================================================
 async function reprintOrder(orderId) {
     db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = async (e) => {
@@ -1286,8 +1308,14 @@ async function reprintOrder(orderId) {
                 receiptText += BOLD_ON + `Piring ${plate.plateId}\n` + BOLD_OFF;
                 plate.items.forEach(item => {
                     let itemName = `${item.qty}x ${item.name}`;
-                    let itemPrice = (item.qty * item.originalPrice).toLocaleString('id-ID'); 
-                    receiptText += formatLine(itemName, itemPrice, false);
+                    let itemOrigTotal = item.qty * item.originalPrice;
+                    let itemEffectiveTotal = item.qty * item.price;
+                    let itemDiscount = itemOrigTotal - itemEffectiveTotal;
+
+                    receiptText += formatLine(itemName, itemOrigTotal.toLocaleString('id-ID'), false);
+                    if (itemDiscount > 0) {
+                        receiptText += formatLine("  Diskon Item:", "-" + itemDiscount.toLocaleString('id-ID'), false);
+                    }
                 });
             }
         });
