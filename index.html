@@ -164,6 +164,7 @@
                 <span class="dot-online" id="network-dot"></span><span id="network-text" style="margin-right: 10px;">Memuat...</span>
                 <button class="btn-top hidden" id="btn-install" style="background:#2980b9; border-color:#2980b9;" onclick="installPWA()">📲 Install App</button>
                 <button class="btn-top" id="btn-printer" style="background:#bdc3c7; border-color:#bdc3c7;" onclick="connectBluetoothPrinter()">🖨️ Printer: Offline</button>
+                <button class="btn-top" style="background:#2980b9; border-color:#2980b9;" onclick="openEditMember()">✏️ Edit WA</button>
                 <button class="btn-top" style="background:#34495e; border-color:#34495e;" onclick="manualPushSync()">🔄 Sinkron</button>
                 <button class="btn-top" style="background:#f1c40f; border-color:#f1c40f; color:#856404;" onclick="openCoinManagement()">🪙 Koin</button>
                 <button class="btn-top" id="btn-drawer" style="background:#16a085; border-color:#16a085;" onclick="openCashDrop(false)">🏦 Laci Uang</button>
@@ -203,7 +204,6 @@
                                 <span style="font-size:12px; color:#7f8c8d; font-weight:normal; margin-left:5px;" id="active-cust-phone"></span>
                             </div>
                             <div style="display:flex; gap:10px;">
-                                <button onclick="openEditMember()" style="background:#2980b9; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">✏️ Edit WA</button>
                                 <button onclick="openLotteryModal()" style="background:#8e44ad; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">🎫 Pilih Undian</button>
                                 <button onclick="lockMenu()" style="background:#e74c3c; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">Ganti / Kunci</button>
                             </div>
@@ -247,8 +247,8 @@
     <div id="edit-member-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:350px;">
             <h2 style="margin-top:0;">✏️ Edit Nomor WA</h2>
-            <div class="form-box"><label>Nomor Lama</label><input type="text" id="edit-old-phone" readonly style="background:#eee; color:#7f8c8d;"></div>
-            <div class="form-box"><label>Nomor Baru</label><input type="number" id="edit-new-phone" placeholder="Contoh: 0812345678"></div>
+            <div class="form-box"><label>Nomor Lama (yang salah)</label><input type="number" id="edit-old-phone" placeholder="Contoh: 0812345678" style="background:#fff; color:#333;"></div>
+            <div class="form-box"><label>Nomor Baru (yang benar)</label><input type="number" id="edit-new-phone" placeholder="Contoh: 0812345678"></div>
             <div style="display:flex; gap:10px; margin-top: 20px;">
                 <button onclick="document.getElementById('edit-member-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; border:none; background:#bdc3c7; font-weight:bold;">Batal</button>
                 <button onclick="submitEditMember()" style="flex:1; padding:15px; border-radius:8px; border:none; background:#2980b9; color:white; font-weight:bold;">Update</button>
