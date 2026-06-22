@@ -203,7 +203,8 @@
                                 <span style="font-size:12px; color:#7f8c8d; font-weight:normal; margin-left:5px;" id="active-cust-phone"></span>
                             </div>
                             <div style="display:flex; gap:10px;">
-                                <button onclick="openLotteryModal()" style="background:#8e44ad; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">🎫 Input Undian</button>
+                                <button onclick="openEditMember()" style="background:#2980b9; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">✏️ Edit WA</button>
+                                <button onclick="openLotteryModal()" style="background:#8e44ad; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">🎫 Pilih Undian</button>
                                 <button onclick="lockMenu()" style="background:#e74c3c; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">Ganti / Kunci</button>
                             </div>
                         </div>
@@ -243,14 +244,27 @@
         </div>
     </div>
 
+    <div id="edit-member-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width:350px;">
+            <h2 style="margin-top:0;">✏️ Edit Nomor WA</h2>
+            <div class="form-box"><label>Nomor Lama</label><input type="text" id="edit-old-phone" readonly style="background:#eee; color:#7f8c8d;"></div>
+            <div class="form-box"><label>Nomor Baru</label><input type="number" id="edit-new-phone" placeholder="Contoh: 0812345678"></div>
+            <div style="display:flex; gap:10px; margin-top: 20px;">
+                <button onclick="document.getElementById('edit-member-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; border:none; background:#bdc3c7; font-weight:bold;">Batal</button>
+                <button onclick="submitEditMember()" style="flex:1; padding:15px; border-radius:8px; border:none; background:#2980b9; color:white; font-weight:bold;">Update</button>
+            </div>
+        </div>
+    </div>
+
     <div id="lottery-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:350px; text-align:center;">
-            <h2 style="margin-top:0; color:#8e44ad;">🎫 Klaim Undian</h2>
-            <p style="color:#7f8c8d; font-size:14px; margin-bottom:20px;">Masukkan kode rahasia dari kertas undian yang diambil pelanggan.</p>
-            <input type="text" id="lottery-code-input" placeholder="Misal: GRATIS-KOIN" style="width:100%; padding:15px; font-size:20px; font-weight:bold; text-align:center; text-transform:uppercase; border:2px solid #bdc3c7; border-radius:8px; margin-bottom:20px;">
+            <h2 style="margin-top:0; color:#8e44ad;">🎫 Persiapkan Undian</h2>
+            <p style="color:#7f8c8d; font-size:14px; margin-bottom:20px;">Pilih promo yang diambil pelanggan. Hadiah akan diklaim secara otomatis <strong style="color:#c0392b;">setelah checkout pembayaran selesai</strong>.</p>
+            <select id="lottery-select" style="width:100%; padding:15px; font-size:16px; font-weight:bold; border:2px solid #bdc3c7; border-radius:8px; margin-bottom:20px;">
+                </select>
             <div style="display:flex; gap:10px;">
                 <button onclick="document.getElementById('lottery-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#ecf0f1;">Batal</button>
-                <button onclick="submitLotteryCode()" style="flex:2; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#8e44ad; color:white;">Simpan ke Profil</button>
+                <button onclick="submitLotteryCode()" style="flex:2; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#8e44ad; color:white;">Siapkan Promo</button>
             </div>
         </div>
     </div>
@@ -445,7 +459,7 @@
                 </div>
             </div>
             <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 15px;">
-                <div style="font-size: 14px; font-weight: bold; color: #155724; text-transform: uppercase;">Uang Tunai Seharusnya di Laci</div>
+                <div id="sr-net-title" style="font-size: 14px; font-weight: bold; color: #155724; text-transform: uppercase;">Uang Tunai Seharusnya di Laci</div>
                 <div id="sr-net" style="font-size: 32px; font-weight: bold; color: #155724; margin-top: 5px;">Rp 0</div>
             </div>
             <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left;">
