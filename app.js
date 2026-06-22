@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxLfrUoCplYPUKJTbj_EUtXT2NDcU067bS8qHnapbC9g9Wr6CubXGrPJAtFKW2ti9Ts/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 28; // Version ditaikkan untuk hard refresh
+const DB_VERSION = 29; 
 let db;
 
 let antreans = [
@@ -229,23 +229,49 @@ window.selectMember = function(phone) {
 };
 
 function openEditMember() {
-    if(!activeCustomerProfile || activeCustomerProfile.phone === "-") return;
-    document.getElementById("edit-old-phone").value = activeCustomerProfile.phone; document.getElementById("edit-new-phone").value = "";
+    let prefill = (activeCustomerProfile && activeCustomerProfile.phone !== "-") ? activeCustomerProfile.phone : "";
+    document.getElementById("edit-old-phone").value = prefill; 
+    document.getElementById("edit-new-phone").value = "";
     document.getElementById("edit-member-modal").classList.remove("hidden");
 }
 
 function submitEditMember() {
-    let oldPhone = document.getElementById("edit-old-phone").value; let newPhone = document.getElementById("edit-new-phone").value.trim();
+    let oldPhone = document.getElementById("edit-old-phone").value.trim(); 
+    let newPhone = document.getElementById("edit-new-phone").value.trim();
+    
+    if(oldPhone.length < 5) return alert("Nomor lama tidak valid.");
     if(newPhone.length < 5) return alert("Nomor baru tidak valid.");
 
-    db.transaction(["phone_updates"], "readwrite").objectStore("phone_updates").add({ id: "UPD-" + Date.now(), oldPhone: oldPhone, newPhone: newPhone, syncStatus: "Pending" });
-    activeCustomerProfile.phone = newPhone; document.getElementById("active-cust-phone").innerText = `(${newPhone})`;
-    document.getElementById("cust-phone").value = newPhone; antreans[currentAntreanIndex].phoneInput = newPhone;
-    
-    let tx = db.transaction(["members"], "readwrite"); let store = tx.objectStore("members");
-    store.delete(oldPhone); store.put(activeCustomerProfile);
+    db.transaction(["members"], "readonly").objectStore("members").get(oldPhone).onsuccess = (e) => {
+        let member = e.target.result;
+        if (!member) return alert("Nomor lama tidak ditemukan di database pelanggan. Coba periksa kembali.");
 
-    document.getElementById("edit-member-modal").classList.add("hidden"); alert("Nomor WhatsApp berhasil diupdate!"); runBackgroundSync();
+        db.transaction(["phone_updates"], "readwrite").objectStore("phone_updates").add({ id: "UPD-" + Date.now(), oldPhone: oldPhone, newPhone: newPhone, syncStatus: "Pending" });
+        
+        member.phone = newPhone;
+        let tx = db.transaction(["members"], "readwrite"); 
+        let store = tx.objectStore("members");
+        store.delete(oldPhone); 
+        store.put(member);
+
+        if (activeCustomerProfile && activeCustomerProfile.phone === oldPhone) {
+            activeCustomerProfile.phone = newPhone; 
+            document.getElementById("active-cust-phone").innerText = `(${newPhone})`;
+            document.getElementById("cust-phone").value = newPhone; 
+            antreans[currentAntreanIndex].phoneInput = newPhone;
+        }
+
+        antreans.forEach(a => {
+            if (a.profile && a.profile.phone === oldPhone) {
+                a.profile.phone = newPhone;
+                a.phoneInput = newPhone;
+            }
+        });
+
+        document.getElementById("edit-member-modal").classList.add("hidden"); 
+        alert("Nomor WhatsApp berhasil diupdate!"); 
+        runBackgroundSync();
+    };
 }
 
 async function manualPushSync() {
@@ -272,11 +298,10 @@ async function syncMasterData() {
         if (result.status === "Success") {
             window.masterDrawerBalance = result.masterDrawerBalance || 0; window.loyaltyTarget = result.data.loyaltyTarget || 10; window.globalPromos = result.data.promos || [];
             
-            // FIX: Hanya menyembunyikan laci uang, BUKAN pengeluaran.
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
-            const btnDrawer = document.getElementById("btn-drawer");
+            const btnDrawer = document.getElementById("btn-drawer"); const btnExpense = document.getElementById("btn-expense");
             if (btnDrawer) btnDrawer.style.display = window.enableDrawerTracking ? "" : "none";
-            // Tombol pengeluaran tetap utuh agar kasir selalu bisa input
+            if (btnExpense) btnExpense.style.display = window.enableDrawerTracking ? "" : "none";
             
             const tx = db.transaction(["staff", "menu", "settings", "members", "expense_categories"], "readwrite");
             tx.onerror = (event) => { console.error("Database Transaction Error:", event.target.error); };
@@ -391,28 +416,20 @@ function addToCart(item, qty) {
     renderCart();
 }
 
-// LOGIKA UPDATE QUANTITY BARU DARI DALAM CART
 window.updateCartItemQty = function(itemId, delta) {
     let existing = currentCart.find(i => i.itemId === itemId);
     if (existing) {
         existing.qty += delta;
-        
-        // Logika Minimum Order Quantity (MOQ)
         if (existing.hasMoq && existing.moqQty > 0) {
             if (existing.qty > 0 && existing.qty < existing.moqQty) {
-                if (delta < 0) existing.qty = 0; // Jika kurangi di bawah MOQ, hapus item
-                else existing.qty = existing.moqQty; // Jika tambah dari 0, loncat ke MOQ
+                if (delta < 0) existing.qty = 0; else existing.qty = existing.moqQty; 
             }
         }
-
-        if (existing.qty <= 0) {
-            currentCart = currentCart.filter(i => i.itemId !== itemId);
-        }
+        if (existing.qty <= 0) { currentCart = currentCart.filter(i => i.itemId !== itemId); }
         renderCart();
     }
 };
 
-// RENDER CART DIPERBARUI DENGAN TOMBOL PLUS/MINUS (+ / -)
 function renderCart() {
     const container = document.getElementById("cart-items"); container.innerHTML = ""; let total = 0;
     currentCart.forEach(item => {
