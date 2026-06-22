@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxLfrUoCplYPUKJTbj_EUtXT2NDcU067bS8qHnapbC9g9Wr6CubXGrPJAtFKW2ti9Ts/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 29; 
+const DB_VERSION = 30; // Version bump for hard refresh
 let db;
 
 let antreans = [
@@ -468,13 +468,13 @@ function reviewOrder() {
         }
 
         if (activeCustomerProfile.storedRewards) {
-            for (const [itemName, qtyOwned] of Object.entries(activeCustomerProfile.storedRewards)) {
+            for (const [rewardName, qtyOwned] of Object.entries(activeCustomerProfile.storedRewards)) {
                 if (qtyOwned > 0) {
-                    let cartItem = currentCart.find(i => i.name === itemName);
+                    let cartItem = currentCart.find(i => i.name === rewardName || i.subCategory === rewardName || i.category === rewardName);
                     if (cartItem) {
                         promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                            <div><strong style="color:#8e44ad;">🎫 Hadiah Undian: ${itemName}</strong><br><small style="color:#8e44ad;">Tersedia di Profil: ${qtyOwned}</small></div>
-                            <input type="number" class="promo-input" data-type="stored" data-item="${itemName}" data-price="${cartItem.originalPrice}" value="0" max="${Math.min(qtyOwned, cartItem.qty)}" min="0" oninput="applyPromo()" style="width:70px; padding:8px; font-weight:bold; text-align:center; border: 2px solid #9b59b6;">
+                            <div><strong style="color:#8e44ad;">🎫 Hadiah Undian: ${rewardName}</strong><br><small style="color:#8e44ad;">Berlaku untuk: ${cartItem.name} (Tersedia: ${qtyOwned})</small></div>
+                            <input type="number" class="promo-input" data-type="stored" data-item="${rewardName}" data-price="${cartItem.originalPrice}" value="0" max="${Math.min(qtyOwned, cartItem.qty)}" min="0" oninput="applyPromo()" style="width:70px; padding:8px; font-weight:bold; text-align:center; border: 2px solid #9b59b6;">
                         </div>`;
                     }
                 }
