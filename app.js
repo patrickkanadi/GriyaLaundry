@@ -1281,9 +1281,65 @@ async function runBackgroundSync() {
     } finally { isSyncing = false; }
 }
 
+// --- JALANKAN CHECK EXPIRED SHIFTS SECARA OTOMATIS ---
+function checkExpiredShifts() {
+    if (!db) return;
+    db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").getAll().onsuccess = (e) => {
+        let activeShifts = e.target.result;
+        let now = Date.now();
+        activeShifts.forEach(shift => {
+            let loginTime = new Date(shift.loginTime).getTime();
+            if (now - loginTime > 12 * 60 * 60 * 1000) { 
+                performAutoClose(shift);
+            }
+        });
+    };
+}
+
+function performAutoClose(shift) {
+    let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0; let tTransfer = 0; let hPiu = 0; let tPiu = 0; let tFree = 0; let tExpense = 0; let foodSummary = {};
+    db.transaction(["orders", "expenses"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
+        const validOrders = e.target.result.filter(o => o.shiftId === shift.shiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
+        validOrders.forEach(o => {
+            tOrders++; if(o.customerPhone && o.customerPhone !== "-") tCust++; tOmset += o.grandTotal;
+            tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tTransfer += (o.transferAmount || 0); 
+            hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0); 
+            if (o.items) o.items.forEach(i => { if(!foodSummary[i.name]) foodSummary[i.name] = 0; foodSummary[i.name] += i.qty; });
+        });
+        db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = (ex) => {
+            const shiftExpenses = ex.target.result.filter(exp => exp.shiftId === shift.shiftId && exp.status === "Active"); 
+            shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
+            
+            let netCash = Math.max(0, tCash - tExpense);
+            const shiftPayload = {
+                shiftId: shift.shiftId, timestamp: new Date().toISOString(), cashier: shift.cashierName || "System", loginTime: shift.loginTime, logoutTime: new Date().toISOString(), 
+                totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer, totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree,
+                totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary, meterToken: 0, meterPasca: 0, closeNote: "System Auto-Closed (>12h Expired)", syncStatus: "Pending"
+            };
+
+            let txW = db.transaction(["local_shift_history", "shift_reports", "active_shifts", "cash_drops"], "readwrite");
+            txW.objectStore("local_shift_history").add(shiftPayload);
+            txW.objectStore("shift_reports").add(shiftPayload);
+            
+            if (!window.enableDrawerTracking) {
+                txW.objectStore("cash_drops").add({ dropId: "DRP-" + Date.now() + Math.floor(Math.random()*100), timestamp: new Date().toISOString(), cashier: shift.cashierName || "System", shiftId: shift.shiftId, toAdmin: netCash, toBank: 0, leftInDrawer: 0, notes: "[Ke Admin] Auto-Close Shift > 12 Jam", syncStatus: "Pending" });
+            }
+            
+            txW.objectStore("active_shifts").delete(shift.pin);
+
+            if (shift.shiftId === currentShiftId) {
+                alert("⚠️ Shift Anda telah kadaluarsa (lebih dari 12 jam) dan ditutup otomatis oleh sistem.");
+                window.location.reload();
+            }
+        };
+    };
+}
+
 window.onload = async () => { 
     await initDB(); 
     await syncMasterData(); 
     window.setInterval(runBackgroundSync, 5000); 
     window.setInterval(syncMasterData, 30000); 
+    window.setInterval(checkExpiredShifts, 60000); // Mengecek shift kadaluarsa tiap 1 menit
+    setTimeout(checkExpiredShifts, 3000); 
 };
