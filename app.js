@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxLfrUoCplYPUKJTbj_EUtXT2NDcU067bS8qHnapbC9g9Wr6CubXGrPJAtFKW2ti9Ts/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 30; // Version bump for hard refresh
+const DB_VERSION = 31; // Version ditaikkan agar langsung refresh
 let db;
 
 let antreans = [
@@ -298,10 +298,10 @@ async function syncMasterData() {
         if (result.status === "Success") {
             window.masterDrawerBalance = result.masterDrawerBalance || 0; window.loyaltyTarget = result.data.loyaltyTarget || 10; window.globalPromos = result.data.promos || [];
             
+            // FIX TERBARU: HANYA sembunyikan Laci Uang. Pengeluaran dibiarkan utuh.
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
-            const btnDrawer = document.getElementById("btn-drawer"); const btnExpense = document.getElementById("btn-expense");
+            const btnDrawer = document.getElementById("btn-drawer"); 
             if (btnDrawer) btnDrawer.style.display = window.enableDrawerTracking ? "" : "none";
-            if (btnExpense) btnExpense.style.display = window.enableDrawerTracking ? "" : "none";
             
             const tx = db.transaction(["staff", "menu", "settings", "members", "expense_categories"], "readwrite");
             tx.onerror = (event) => { console.error("Database Transaction Error:", event.target.error); };
