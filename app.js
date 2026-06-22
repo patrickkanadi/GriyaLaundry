@@ -3,7 +3,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbxLfrUoCplYPUKJTbj_EUtX
 // ^^^ JANGAN LUPA UBAH BARIS INI ^^^
 
 const DB_NAME = "Buffet_POS_DB";
-const DB_VERSION = 31; 
+const DB_VERSION = 32; 
 let db;
 
 let currentCategory = ""; 
@@ -104,7 +104,7 @@ function restoreUnpaidTables() {
 }
 
 // ---------------------------------------------------------
-// LOGIN & SESSION MANAGEMENT (AUTO-SYNC ON FAIL)
+// LOGIN & SESSION MANAGEMENT
 // ---------------------------------------------------------
 async function attemptLogin() {
     const pinInput = String(document.getElementById("cashier-pin").value).trim();
@@ -458,22 +458,8 @@ function renderCustomerTabs() {
     activeOrders.forEach((order, index) => {
         const btn = document.createElement("button"); 
         btn.className = `cust-tab ${index === currentOrderIndex ? "active" : ""}`;
-        const tabText = order.customerName && order.customerName !== "Walk-in" ? `${order.name} (${order.customerName})` : order.name;
-        
-        if (index === currentOrderIndex) {
-            btn.innerHTML = `<span>${tabText}</span> <span class="edit-tab-btn" title="Edit Info Pelanggan">✏️</span>`;
-            btn.onclick = (e) => { 
-                if(e.target.closest('.edit-tab-btn')) {
-                    openEditCustomerModal();
-                    return;
-                }
-                currentOrderIndex = index; activePlateIndex = 0; renderCustomerTabs(); renderCartUI(); 
-            };
-        } else {
-            btn.innerText = tabText;
-            btn.onclick = () => { currentOrderIndex = index; activePlateIndex = 0; renderCustomerTabs(); renderCartUI(); };
-        }
-        
+        btn.innerText = order.customerName && order.customerName !== "Walk-in" ? `${order.name} (${order.customerName})` : order.name;
+        btn.onclick = () => { currentOrderIndex = index; activePlateIndex = 0; renderCustomerTabs(); renderCartUI(); };
         container.appendChild(btn);
     });
     const addBtn = document.createElement("button"); addBtn.className = "cust-tab"; addBtn.innerText = "+ Tambah Meja"; addBtn.onclick = openAddTableModal;
@@ -508,7 +494,7 @@ function confirmAddTable() {
     runBackgroundSync();
 }
 
-// EDIT INFO PELANGGAN MODAL
+// ✏️ EDIT INFO PELANGGAN
 function openEditCustomerModal() {
     if (activeOrders.length === 0) return;
     const order = activeOrders[currentOrderIndex];
@@ -546,10 +532,20 @@ function saveCustomerInfo() {
     activeOrders[currentOrderIndex].customerName = name;
     activeOrders[currentOrderIndex].customerPhone = phone || "Walk-in";
     
-    preserveUnpaidTables(); 
-    closeEditCustomerModal(); 
-    renderCustomerTabs(); 
-    runBackgroundSync();
+    preserveUnpaidTables(); closeEditCustomerModal(); renderCustomerTabs(); renderCartUI(); runBackgroundSync();
+}
+
+// 🗑️ BATAL MEJA SEPENUHNYA
+function cancelTable() {
+    if (activeOrders.length === 0) return;
+    if (confirm("⚠️ PERINGATAN: Apakah Anda yakin ingin membatalkan pesanan dan menghapus meja ini sepenuhnya?")) { 
+        activeOrders.splice(currentOrderIndex, 1); 
+        currentOrderIndex = 0; // Kembalikan fokus ke tab pertama (jika ada)
+        activePlateIndex = 0;
+        preserveUnpaidTables(); 
+        renderCustomerTabs(); 
+        renderCartUI(); 
+    }
 }
 
 function loadSettingsForCart() {
@@ -580,14 +576,23 @@ function updateQty(plateIndex, itemIndex, delta) {
     if (item.qty <= 0) activeOrders[currentOrderIndex].plates[plateIndex].items.splice(itemIndex, 1);
     preserveUnpaidTables(); renderCartUI();
 }
+
 function renderCartUI() {
     const container = document.getElementById("plates-container"); container.innerHTML = ""; 
+    const header = document.getElementById("active-table-header");
+
     if (activeOrders.length === 0) {
+        header.classList.add("hidden");
         container.innerHTML = `<div style="text-align:center; padding:40px; color:#bdc3c7; font-size:16px;">Belum ada meja aktif.</div>`;
         document.getElementById("cart-subtotal").innerText = "Rp 0"; document.getElementById("cart-tax").innerText = "Rp 0"; document.getElementById("cart-total").innerText = "Rp 0";
         return;
     }
-    let subtotal = 0; const currentOrder = activeOrders[currentOrderIndex];
+    
+    header.classList.remove("hidden");
+    const currentOrder = activeOrders[currentOrderIndex];
+    document.getElementById("active-table-name").innerText = currentOrder.customerName && currentOrder.customerName !== "Walk-in" ? `${currentOrder.name} (${currentOrder.customerName})` : currentOrder.name;
+
+    let subtotal = 0; 
     currentOrder.plates.forEach((plate, index) => {
         const plateBox = document.createElement("div"); plateBox.className = "plate-box";
         if (index === activePlateIndex) { plateBox.style.borderColor = "#3498db"; plateBox.style.borderWidth = "2px"; plateBox.style.background = "#f4fbff"; }
@@ -622,6 +627,7 @@ function renderCartUI() {
     document.getElementById("cart-tax").innerText = `Rp ${taxAmount.toLocaleString('id-ID')}`;
     document.getElementById("cart-total").innerText = `Rp ${grandTotal.toLocaleString('id-ID')}`;
 }
+
 function addNewPlate() {
     activeOrders[currentOrderIndex].plates.push({ plateId: activeOrders[currentOrderIndex].plates.length + 1, items: [] });
     activePlateIndex = activeOrders[currentOrderIndex].plates.length - 1; 
@@ -629,7 +635,7 @@ function addNewPlate() {
 }
 function clearTable() {
     if (activeOrders.length === 0) return;
-    if (confirm("Apakah Anda yakin ingin mengosongkan pesanan meja ini?")) { activeOrders[currentOrderIndex].plates = [{ plateId: 1, items: [] }]; preserveUnpaidTables(); renderCartUI(); }
+    if (confirm("Apakah Anda yakin ingin mengosongkan semua pesanan di piring meja ini?")) { activeOrders[currentOrderIndex].plates = [{ plateId: 1, items: [] }]; preserveUnpaidTables(); renderCartUI(); }
 }
 function reviewOrder() {
     if (activeOrders.length === 0) return;
