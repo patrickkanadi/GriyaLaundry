@@ -1,6 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxLfrUoCplYPUKJTbj_EUtXT2NDcU067bS8qHnapbC9g9Wr6CubXGrPJAtFKW2ti9Ts/exec"; 
 const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 31; // Version ditaikkan agar langsung refresh
+const DB_VERSION = 32; // Version ditaikkan agar langsung refresh
 let db;
 
 let antreans = [
@@ -66,6 +66,22 @@ function initDB() {
     });
 }
 
+// -------------------------------------------------------------
+// HELPER SETTINGS UNTUK PRINTER (Diperlukan oleh fungsi Print)
+// -------------------------------------------------------------
+function getDynamicSettings() {
+    return new Promise((resolve) => {
+        let settings = {};
+        db.transaction(["settings"], "readonly").objectStore("settings").getAll().onsuccess = (e) => {
+            if (e.target.result) { e.target.result.forEach(s => { settings[s.key] = s.value; }); }
+            resolve(settings);
+        };
+    });
+}
+
+// -------------------------------------------------------------
+// MODUL BLUETOOTH PRINTER
+// -------------------------------------------------------------
 async function connectBluetoothPrinter() {
     try {
         btDevice = await navigator.bluetooth.requestDevice({ filters: [{ services: [0x18F0] }], optionalServices: [0x18F0] });
@@ -87,6 +103,187 @@ async function sendToPrinter(payloadUint8) {
     }
 }
 
+function formatEscPosLine(left, right, isBig) {
+    const maxLen = isBig ? 16 : 32;
+    const leftStr = String(left);
+    const rightStr = String(right);
+    const spaceNeeded = maxLen - (leftStr.length + rightStr.length);
+
+    if (spaceNeeded > 0) {
+        return leftStr + " ".repeat(spaceNeeded) + rightStr;
+    } else {
+        const paddingNeeded = maxLen - rightStr.length;
+        const padStr = paddingNeeded > 0 ? " ".repeat(paddingNeeded) : "";
+        return leftStr + "\n" + padStr + rightStr;
+    }
+}
+
+async function buildEscPosReceipt(orderId, order, deposit, remaining, payMethod, newPoints, newFree) {
+    const settings = await getDynamicSettings();
+    const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; const h2 = settings["Header_2"] || ""; const h3 = settings["Header_3"] || ""; 
+    const f1 = settings["Footer_1"] || "TERIMA KASIH"; const f2 = settings["Footer_2"] || ""; const f3 = settings["Footer_3"] || ""; 
+    
+    const CMD_INIT = "\x1B\x40";
+    const CMD_CENTER = "\x1B\x61\x01";
+    const CMD_LEFT = "\x1B\x61\x00";
+    const CMD_BOLD_ON = "\x1B\x45\x01";
+    const CMD_BOLD_OFF = "\x1B\x45\x00";
+    const CMD_BIG = "\x1B!\x11";
+    const CMD_NORMAL = "\x1B!\x00";
+    const CMD_CUT = "\x1D\x56\x41\x10";
+
+    let receipt = CMD_INIT;
+    receipt += CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
+    if(h2) receipt += h2 + "\n";
+    if(h3) receipt += h3 + "\n";
+    receipt += formatWIB(order.timestamp || new Date().toISOString()) + "\n";
+    receipt += "--------------------------------\n";
+    receipt += CMD_LEFT;
+    receipt += "Nota: " + orderId + "\n";
+    receipt += "Plgn: " + order.customerName + "\n";
+    receipt += "Ksr : " + order.cashier + "\n";
+    receipt += "--------------------------------\n";
+
+    order.items.forEach(item => {
+        const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
+        const lineTotal = (item.qty * item.originalPrice).toLocaleString('id-ID');
+        const leftStr = `${qtyDisplay}x ${item.name.substring(0,18)}`;
+        receipt += formatEscPosLine(leftStr, lineTotal, false) + "\n";
+    });
+
+    receipt += "--------------------------------\n";
+    receipt += formatEscPosLine("Subtotal", order.subtotal.toLocaleString('id-ID'), false) + "\n";
+    if (order.discounts && order.discounts > 0) {
+        receipt += formatEscPosLine("Diskon", "-" + order.discounts.toLocaleString('id-ID'), false) + "\n";
+    }
+    receipt += CMD_BOLD_ON + CMD_BIG + formatEscPosLine("TOTAL", order.grandTotal.toLocaleString('id-ID'), true) + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
+    receipt += "\n";
+    receipt += formatEscPosLine(`Tercatat(${payMethod})`, deposit.toLocaleString('id-ID'), false) + "\n";
+
+    let piutangCount = (order.hotelPiutangAmount || 0) + (order.tamuPiutangAmount || 0);
+    if (piutangCount > 0) {
+        receipt += CMD_BOLD_ON + formatEscPosLine("TOTAL PIUTANG", piutangCount.toLocaleString('id-ID'), false) + "\n" + CMD_BOLD_OFF;
+    } else {
+        receipt += CMD_BOLD_ON + formatEscPosLine("STATUS", "LUNAS", false) + "\n" + CMD_BOLD_OFF;
+    }
+
+    if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in") {
+        receipt += "--------------------------------\n";
+        receipt += CMD_CENTER + "-- INFO POIN LAUNDRY --\n";
+        receipt += "Sisa Poin: " + newPoints + "/" + window.loyaltyTarget + "\n";
+        receipt += "Koin Gratis Tersedia: " + newFree + "\n";
+    }
+
+    receipt += "--------------------------------\n";
+    receipt += CMD_CENTER + CMD_BOLD_ON + f1 + "\n" + CMD_BOLD_OFF;
+    if(f2) receipt += f2 + "\n";
+    if(f3) receipt += f3 + "\n";
+    receipt += "\n\n\n\n"; 
+    receipt += CMD_CUT;
+
+    const encoder = new TextEncoder();
+    const payload = encoder.encode(receipt);
+    await sendToPrinter(payload);
+}
+
+async function buildShiftReportReceipt(data) {
+    const settings = await getDynamicSettings();
+    const h1 = settings["Header_1"] || "GRIYA LAUNDRY";
+    
+    const CMD_INIT = "\x1B\x40";
+    const CMD_CENTER = "\x1B\x61\x01";
+    const CMD_LEFT = "\x1B\x61\x00";
+    const CMD_BOLD_ON = "\x1B\x45\x01";
+    const CMD_BOLD_OFF = "\x1B\x45\x00";
+    const CMD_BIG = "\x1B!\x11";
+    const CMD_NORMAL = "\x1B!\x00";
+    const CMD_CUT = "\x1D\x56\x41\x10";
+
+    let r = CMD_INIT;
+    r += CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
+    r += "LAPORAN TUTUP SHIFT\n";
+    r += "--------------------------------\n";
+    r += CMD_LEFT;
+    r += "ID Shift: " + data.shiftId + "\n";
+    r += "Kasir   : " + data.cashier + "\n";
+    r += "Login   : " + formatTimeOnlyWIB(data.loginTime) + "\n";
+    r += "Logout  : " + formatTimeOnlyWIB(data.logoutTime) + "\n";
+    r += "--------------------------------\n";
+    r += formatEscPosLine("Total Nota", data.totalOrders, false) + "\n";
+    r += formatEscPosLine("Total Pelanggan", data.totalCustomers, false) + "\n";
+    r += "--------------------------------\n";
+    r += CMD_BOLD_ON + "PENERIMAAN KASIR:" + CMD_BOLD_OFF + "\n";
+    r += formatEscPosLine("Tunai / Cash", data.totalCash.toLocaleString('id-ID'), false) + "\n";
+    r += formatEscPosLine("QRIS", data.totalQris.toLocaleString('id-ID'), false) + "\n";
+    r += formatEscPosLine("Transfer Bank", data.totalTransfer.toLocaleString('id-ID'), false) + "\n";
+    r += "--------------------------------\n";
+    r += CMD_BOLD_ON + "PIUTANG & PENGELUARAN:" + CMD_BOLD_OFF + "\n";
+    r += formatEscPosLine("Piutang Hotel", data.totalHotelPiutang.toLocaleString('id-ID'), false) + "\n";
+    r += formatEscPosLine("Piutang Tamu", data.totalTamuPiutang.toLocaleString('id-ID'), false) + "\n";
+    r += formatEscPosLine("Pengeluaran Laci", data.totalExpenses.toLocaleString('id-ID'), false) + "\n";
+    r += "--------------------------------\n";
+    r += CMD_BOLD_ON + "RANGKUMAN AKHIR:" + CMD_BOLD_OFF + "\n";
+    r += formatEscPosLine("Omset Kotor", data.totalOmset.toLocaleString('id-ID'), false) + "\n";
+    r += "\n";
+    
+    let laciTitle = window.enableDrawerTracking ? "SALDO LACI" : "SETOR ADMIN";
+    r += CMD_BOLD_ON + formatEscPosLine(laciTitle, data.netCash.toLocaleString('id-ID'), false) + CMD_BOLD_OFF + "\n";
+    
+    if (data.foodSummary && Object.keys(data.foodSummary).length > 0) {
+        r += "--------------------------------\n";
+        r += CMD_CENTER + "RINGKASAN ITEM TERJUAL\n" + CMD_LEFT;
+        for (const [name, qty] of Object.entries(data.foodSummary)) {
+            let qtyStr = (qty % 1 !== 0) ? Number(qty).toFixed(2) : String(qty);
+            r += formatEscPosLine(qtyStr + "x " + name.substring(0,25), "", false) + "\n";
+        }
+    }
+    
+    r += "\n\n\n\n"; 
+    r += CMD_CUT;
+
+    const encoder = new TextEncoder();
+    const payload = encoder.encode(r);
+    await sendToPrinter(payload);
+}
+
+// -------------------------------------------------------------
+// FITUR REPRINT DARI HISTORY
+// -------------------------------------------------------------
+async function reprintOrder(orderId) {
+    if (!btCharacteristic) return alert("Printer belum terhubung! Silakan hubungkan dari menu atas.");
+    
+    db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = async (e) => {
+        const order = e.target.result;
+        if (!order) return alert("Data order tidak ditemukan di memori lokal.");
+        
+        const deposit = (order.cashAmount || 0) + (order.qrisAmount || 0) + (order.transferAmount || 0) + (order.freeAmount || 0) + (order.hotelPiutangAmount || 0) + (order.tamuPiutangAmount || 0);
+        
+        if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in") {
+            db.transaction(["members"], "readonly").objectStore("members").get(order.customerPhone).onsuccess = async (me) => {
+                let mem = me.target.result;
+                let pts = mem ? mem.points : 0;
+                let fre = mem ? mem.freeCoins : 0;
+                await buildEscPosReceipt(order.orderId + " (COPY)", order, deposit, 0, order.paymentMethod, pts, fre);
+            };
+        } else {
+            await buildEscPosReceipt(order.orderId + " (COPY)", order, deposit, 0, order.paymentMethod, 0, 0);
+        }
+    };
+}
+
+async function printShiftReportFromHistory(shiftId) {
+    if (!btCharacteristic) return alert("Printer belum terhubung! Silakan hubungkan dari menu atas.");
+    
+    db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").get(shiftId).onsuccess = async (e) => {
+        let shiftData = e.target.result;
+        if (!shiftData) return alert("Data laporan shift ini tidak ditemukan di memori lokal tablet ini.");
+        await buildShiftReportReceipt(shiftData);
+    };
+}
+
+// -------------------------------------------------------------
+// APLIKASI UTAMA
+// -------------------------------------------------------------
 async function attemptLogin() {
     const pinInput = document.getElementById("cashier-pin"); const rawPin = pinInput.value.trim();
     if (!rawPin) return;
@@ -298,7 +495,6 @@ async function syncMasterData() {
         if (result.status === "Success") {
             window.masterDrawerBalance = result.masterDrawerBalance || 0; window.loyaltyTarget = result.data.loyaltyTarget || 10; window.globalPromos = result.data.promos || [];
             
-            // FIX TERBARU: HANYA sembunyikan Laci Uang. Pengeluaran dibiarkan utuh.
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
             const btnDrawer = document.getElementById("btn-drawer"); 
             if (btnDrawer) btnDrawer.style.display = window.enableDrawerTracking ? "" : "none";
@@ -608,85 +804,6 @@ async function finalizeOrder(shouldPrint) {
     closeReview(); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
 
-function formatEscPosLine(left, right, isBig) {
-    const maxLen = isBig ? 16 : 32;
-    const leftStr = String(left);
-    const rightStr = String(right);
-    const spaceNeeded = maxLen - (leftStr.length + rightStr.length);
-
-    if (spaceNeeded > 0) {
-        return leftStr + " ".repeat(spaceNeeded) + rightStr;
-    } else {
-        const paddingNeeded = maxLen - rightStr.length;
-        const padStr = paddingNeeded > 0 ? " ".repeat(paddingNeeded) : "";
-        return leftStr + "\n" + padStr + rightStr;
-    }
-}
-
-async function buildEscPosReceipt(orderId, order, deposit, remaining, payMethod, newPoints, newFree) {
-    const settings = await getDynamicSettings();
-    const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; const h2 = settings["Header_2"] || ""; const h3 = settings["Header_3"] || ""; 
-    const f1 = settings["Footer_1"] || "TERIMA KASIH"; const f2 = settings["Footer_2"] || ""; const f3 = settings["Footer_3"] || ""; 
-    
-    const CMD_INIT = "\x1B\x40";
-    const CMD_CENTER = "\x1B\x61\x01";
-    const CMD_LEFT = "\x1B\x61\x00";
-    const CMD_BOLD_ON = "\x1B\x45\x01";
-    const CMD_BOLD_OFF = "\x1B\x45\x00";
-    const CMD_BIG = "\x1B!\x11";
-    const CMD_NORMAL = "\x1B!\x00";
-    const CMD_CUT = "\x1D\x56\x41\x10";
-
-    let receipt = CMD_INIT;
-    receipt += CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
-    if(h2) receipt += h2 + "\n";
-    if(h3) receipt += h3 + "\n";
-    receipt += formatWIB(new Date().toISOString()) + "\n";
-    receipt += "--------------------------------\n";
-    receipt += CMD_LEFT;
-    receipt += "Nota: " + orderId + "\n";
-    receipt += "Plgn: " + order.customerName + "\n";
-    receipt += "Ksr : " + currentCashier + "\n";
-    receipt += "--------------------------------\n";
-
-    order.items.forEach(item => {
-        const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
-        const lineTotal = (item.qty * item.originalPrice).toLocaleString('id-ID');
-        const leftStr = `${qtyDisplay}x ${item.name}`;
-        receipt += formatEscPosLine(leftStr, lineTotal, false) + "\n";
-    });
-
-    receipt += "--------------------------------\n";
-    receipt += formatEscPosLine("Subtotal", order.subtotal.toLocaleString('id-ID'), false) + "\n";
-    receipt += CMD_BOLD_ON + CMD_BIG + formatEscPosLine("TOTAL", order.grandTotal.toLocaleString('id-ID'), true) + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
-    receipt += "\n";
-    receipt += formatEscPosLine(`Tercatat(${payMethod})`, deposit.toLocaleString('id-ID'), false) + "\n";
-
-    if (order.hotelPiutangAmount > 0 || order.tamuPiutangAmount > 0) {
-        receipt += CMD_BOLD_ON + formatEscPosLine("TOTAL PIUTANG", (order.hotelPiutangAmount + order.tamuPiutangAmount).toLocaleString('id-ID'), false) + "\n" + CMD_BOLD_OFF;
-    } else {
-        receipt += CMD_BOLD_ON + formatEscPosLine("STATUS", "LUNAS", false) + "\n" + CMD_BOLD_OFF;
-    }
-
-    if (order.customerPhone && order.customerPhone !== "-") {
-        receipt += "--------------------------------\n";
-        receipt += CMD_CENTER + "-- INFO POIN LAUNDRY --\n";
-        receipt += "Sisa Poin: " + newPoints + "/" + window.loyaltyTarget + "\n";
-        receipt += "Koin Gratis Tersedia: " + newFree + "\n";
-    }
-
-    receipt += "--------------------------------\n";
-    receipt += CMD_CENTER + CMD_BOLD_ON + f1 + "\n" + CMD_BOLD_OFF;
-    if(f2) receipt += f2 + "\n";
-    if(f3) receipt += f3 + "\n";
-    receipt += "\n\n\n\n"; 
-    receipt += CMD_CUT;
-
-    const encoder = new TextEncoder();
-    const payload = encoder.encode(receipt);
-    await sendToPrinter(payload);
-}
-
 function renderActiveTickets() {
     const grid = document.getElementById("ticket-grid-container"); grid.innerHTML = "";
     activeLaundryTickets.forEach((ticket) => {
@@ -780,8 +897,9 @@ function renderHistoryList(type) {
             if(shiftOrders.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada order di shift ini.</div>`;
             shiftOrders.forEach(o => {
                 let badge = o.orderStatus === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : o.orderStatus === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">${o.orderStatus}</span>`; 
-                let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Batal/Void</button>` : '';
-                container.innerHTML += `<div class="history-row"><div><strong>${o.customerName}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(o.timestamp)} | Rp ${o.grandTotal.toLocaleString('id-ID')}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
+                let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Batal</button>` : '';
+                let printBtn = `<button onclick="reprintOrder('${o.orderId}')" style="background:#3498db; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;" title="Cetak Ulang Nota">🖨️</button>`;
+                container.innerHTML += `<div class="history-row"><div><strong>${o.customerName}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(o.timestamp)} | Rp ${o.grandTotal.toLocaleString('id-ID')}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${printBtn} ${btn}</div></div>`;
             });
         };
     } else if (type === 'expenses') {
@@ -797,9 +915,10 @@ function renderHistoryList(type) {
     } else if (type === 'shifts') {
         db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").getAll().onsuccess = (e) => {
             const shifts = e.target.result.reverse();
-            if(shifts.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada histori shift di tablet ini.</div>`;
+            if(shifts.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada histori shift di memori lokal.</div>`;
             shifts.forEach(s => {
-                container.innerHTML += `<div class="history-row"><div><strong>Shift: ${s.shiftId}</strong><br><small style="color:#7f8c8d;">Kasir: ${s.cashier} | Keluar: ${formatWIB(s.logoutTime)}</small></div><div style="text-align:right;"><strong>Omset: Rp ${s.totalOmset.toLocaleString('id-ID')}</strong><br><small style="color:#27ae60;">Uang Tunai Laci: Rp ${s.netCash.toLocaleString('id-ID')}</small></div></div>`;
+                let printBtn = `<button onclick="printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold; height:fit-content;">🖨️ Cetak</button>`;
+                container.innerHTML += `<div class="history-row" style="align-items:flex-start;"><div><strong>Shift: ${s.shiftId}</strong><br><small style="color:#7f8c8d;">Kasir: ${s.cashier} | Keluar: ${formatWIB(s.logoutTime)}</small></div><div style="display:flex; gap:15px; text-align:right;"><div><strong>Omset: Rp ${s.totalOmset.toLocaleString('id-ID')}</strong><br><small style="color:#27ae60;">Uang Tunai: Rp ${s.netCash.toLocaleString('id-ID')}</small></div> ${printBtn}</div></div>`;
             });
         };
     }
