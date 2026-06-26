@@ -606,11 +606,14 @@ async function submitLotteryCode() {
     let code = document.getElementById("lottery-select").value;
     if (!code) return alert("Silakan pilih salah satu promo dari kotak dropdown!");
 
-    let todayStr = new Date().toISOString().substring(0,10);
+    // Build the date exactly as YYYY-MM-DD in local time
+    let d = new Date();
+    let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
     
     let hasPending = await new Promise(resolve => {
         db.transaction(["promo_claims"], "readonly").objectStore("promo_claims").getAll().onsuccess = e => {
             let claims = e.target.result;
+            // Check if there is an unsynced claim today
             let found = claims.some(c => c.phone === activeCustomerProfile.phone && String(c.timestamp).startsWith(todayStr));
             resolve(found);
         };
@@ -836,10 +839,14 @@ async function finalizeOrder(shouldPrint) {
             let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
             if (promo) {
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
-                let todayStr = new Date().toISOString().substring(0,10);
+                
+                // Build local timezone date to lock the profile
+                let d = new Date();
+                let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
+                
                 db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({
-                    claimId: "CLM-" + Date.now(), timestamp: new Date().toISOString(), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier, syncStatus: "Pending"
+                    claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier, shiftId: currentShiftId, syncStatus: "Pending"
                 });
             }
         }
