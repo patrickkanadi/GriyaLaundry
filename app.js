@@ -1396,9 +1396,8 @@ async function runBackgroundSync() {
     if (!navigator.onLine || isSyncing) return;
     isSyncing = true; 
     try {
-        let tx = db.transaction(["orders", "cash_drops", "shift_reports", "expenses", "void_requests", "unsynced_members", "coin_retrievals", "ticket_coins", "promo_claims", "phone_updates"], "readonly");
-        
-        let orders = await new Promise(res => tx.objectStore("orders").getAll().onsuccess = e => res(e.target.result));
+        // 1. Sync Orders
+        let orders = await new Promise(res => db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = e => res(e.target.result));
         for (const order of orders) {
             if (order.syncStatus === "Pending") {
                 order.syncStatus = "Syncing"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order);
@@ -1410,22 +1409,26 @@ async function runBackgroundSync() {
             }
         }
         
-        let drops = await new Promise(res => tx.objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
+        // 2. Sync Cash Drops
+        let drops = await new Promise(res => db.transaction(["cash_drops"], "readonly").objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
         for (const drop of drops) {
             if (drop.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncCashDrop", data: drop }) }); if ((await r.json()).status === "Success") { drop.syncStatus = "Synced"; db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").put(drop); } } catch(e) {} }
         }
         
-        let reports = await new Promise(res => tx.objectStore("shift_reports").getAll().onsuccess = e => res(e.target.result));
+        // 3. Sync Shift Reports
+        let reports = await new Promise(res => db.transaction(["shift_reports"], "readonly").objectStore("shift_reports").getAll().onsuccess = e => res(e.target.result));
         for (const report of reports) {
             if (report.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncShiftReport", data: report }) }); if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId); } } catch(e) {} }
         }
 
-        let expenses = await new Promise(res => tx.objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
+        // 4. Sync Expenses
+        let expenses = await new Promise(res => db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
         for (const exp of expenses) {
             if (exp.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncExpense", data: exp }) }); if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); } } catch(e) {} }
         }
 
-        let voids = await new Promise(res => tx.objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
+        // 5. Sync Void Requests
+        let voids = await new Promise(res => db.transaction(["void_requests"], "readonly").objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
         for (const req of voids) {
             try {
                 const actionType = req.type === 'orders' ? "requestOrderVoid" : "requestExpenseVoid"; const payload = req.type === 'orders' ? { orderId: req.id, status: req.status, authName: req.authName } : { expenseId: req.id, status: req.status, authName: req.authName };
@@ -1433,17 +1436,20 @@ async function runBackgroundSync() {
             } catch(e) {}
         }
 
-        let members = await new Promise(res => tx.objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
+        // 6. Sync Members
+        let members = await new Promise(res => db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
         for (const mem of members) {
             try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncMember", data: mem }) }); if ((await r.json()).status === "Success") { db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone); } } catch(e) {}
         }
 
-        let phoneUpds = await new Promise(res => tx.objectStore("phone_updates").getAll().onsuccess = e => res(e.target.result));
+        // 7. Sync Phone Updates
+        let phoneUpds = await new Promise(res => db.transaction(["phone_updates"], "readonly").objectStore("phone_updates").getAll().onsuccess = e => res(e.target.result));
         for (const upd of phoneUpds) {
             try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "updateMemberPhone", data: upd }) }); if ((await r.json()).status === "Success") { db.transaction(["phone_updates"], "readwrite").objectStore("phone_updates").delete(upd.id); } } catch(e) {}
         }
         
-        let coinRets = await new Promise(res => tx.objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
+        // 8. Sync Coin Retrievals
+        let coinRets = await new Promise(res => db.transaction(["coin_retrievals"], "readonly").objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
         for (const ret of coinRets) {
             if (ret.syncStatus === "Pending") {
                 let actionCode = ret.notes && ret.notes.includes("Macet") ? "syncCoinJammed" : "syncCoinRetrieval";
@@ -1451,14 +1457,16 @@ async function runBackgroundSync() {
             }
         }
 
-        let ticketCoins = await new Promise(res => tx.objectStore("ticket_coins").getAll().onsuccess = e => res(e.target.result));
+        // 9. Sync Ticket Coins
+        let ticketCoins = await new Promise(res => db.transaction(["ticket_coins"], "readonly").objectStore("ticket_coins").getAll().onsuccess = e => res(e.target.result));
         for (const tc of ticketCoins) {
             if (tc.syncStatus === "Pending") {
                 try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncTicketCoins", data: tc }) }); if ((await r.json()).status === "Success") { tc.syncStatus = "Synced"; db.transaction(["ticket_coins"], "readwrite").objectStore("ticket_coins").put(tc); } } catch(e) {}
             }
         }
 
-        let promoClaims = await new Promise(res => tx.objectStore("promo_claims").getAll().onsuccess = e => res(e.target.result));
+        // 10. Sync Promo Claims
+        let promoClaims = await new Promise(res => db.transaction(["promo_claims"], "readonly").objectStore("promo_claims").getAll().onsuccess = e => res(e.target.result));
         for (const claim of promoClaims) {
             if (claim.syncStatus === "Pending") {
                 try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncPromoClaim", data: claim }) }); if ((await r.json()).status === "Success") { db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").delete(claim.claimId); } } catch(e) {} 
