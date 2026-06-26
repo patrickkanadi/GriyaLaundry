@@ -85,7 +85,7 @@ async function connectBluetoothPrinter() {
         btCharacteristic = await service.getCharacteristic(0x2AF1);
         const btn = document.getElementById("btn-printer");
         if(btn) { btn.innerText = "🖨️ Printer: Terhubung"; btn.style.background = "#2ecc71"; btn.style.borderColor = "#2ecc71"; }
-    } catch (err) { alert("Gagal terhubung ke printer Bluetooth. Pastikan bluetooth menyala dan printer dihidupkan."); }
+    } catch (err) { alert("Gagal terhubung ke printer Bluetooth. Pastikan bluetooth menyala and printer dihidupkan."); }
 }
 
 async function sendToPrinter(payloadUint8) {
@@ -1318,7 +1318,6 @@ function openShiftReport() {
                 
                 document.getElementById("sr-net").innerText = `Rp ${finalExpectedCash.toLocaleString('id-ID')}`; 
                 
-                // FIXED: Injected logic loop to render product metrics directly inside the view dashboard
                 let itemsHtml = "";
                 for (const [name, qty] of Object.entries(foodSummary)) {
                     let qtyDisplay = qty % 1 !== 0 ? Number(qty).toFixed(2) : qty;
@@ -1419,7 +1418,7 @@ function performAutoClose(shift) {
             txW.objectStore("active_shifts").delete(shift.pin);
 
             if (shift.shiftId === currentShiftId) {
-                alert("⚠️ Shift Anda telah kadaluarsa (lebih dari 12 jam) and ditutup otomatis oleh sistem.");
+                alert("⚠️ Shift Anda telah kadaluarsa (lebih dari 12 jam) dan ditutup otomatis oleh sistem.");
                 window.location.reload();
             }
         };
