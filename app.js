@@ -321,11 +321,13 @@ window.switchAntrean = function(index) {
         document.getElementById("customer-input-section").classList.add("hidden"); document.getElementById("active-customer-banner").classList.remove("hidden");
         document.getElementById("glass-overlay").style.opacity = "0"; document.getElementById("glass-overlay").style.pointerEvents = "none";
         
+        let d = new Date();
+        let todayStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, '0') + "-" + String(d.getDate()).padStart(2, '0');
         const lotteryBtn = document.getElementById("btn-trigger-lottery");
         if (lotteryBtn) {
-            if (activeCustomerProfile && (activeCustomerProfile.lastClaimDate || activeCustomerProfile.isNoWA)) {
+            if (activeCustomerProfile && (activeCustomerProfile.lastClaimDate === todayStr || activeCustomerProfile.isNoWA)) {
                 lotteryBtn.disabled = true;
-                lotteryBtn.innerText = "🎫 Sudah Klaim / Tidak Valid";
+                lotteryBtn.innerText = "🎫 Sudah Klaim Hari Ini";
             } else {
                 lotteryBtn.disabled = false;
                 lotteryBtn.innerText = "🎫 Pilih Undian";
@@ -1315,6 +1317,14 @@ function openShiftReport() {
                 if(titleEl) titleEl.innerText = window.enableDrawerTracking ? "Uang Tunai Seharusnya di Laci" : "Setoran Tunai Bersih ke Admin";
                 
                 document.getElementById("sr-net").innerText = `Rp ${finalExpectedCash.toLocaleString('id-ID')}`; 
+                
+                let itemsHtml = "";
+                for (const [name, qty] of Object.entries(foodSummary)) {
+                    let qtyDisplay = qty % 1 !== 0 ? Number(qty).toFixed(2) : qty;
+                    itemsHtml += `<div class="revenue-row"><span>• ${name}</span> <strong>${qtyDisplay}x</strong></div>`;
+                }
+                document.getElementById("sr-items-summary").innerHTML = itemsHtml || '<div style="color:#7f8c8d; text-align:center; padding:5px;">Belum ada item terjual</div>';
+                
                 document.getElementById("shift-report-modal").classList.remove("hidden");
                 
                 window.currentShiftData = { totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer, totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, net: finalExpectedCash, foodSummary };
@@ -1408,7 +1418,7 @@ function performAutoClose(shift) {
             txW.objectStore("active_shifts").delete(shift.pin);
 
             if (shift.shiftId === currentShiftId) {
-                alert("⚠️ Shift Anda telah kadaluarsa (lebih dari 12 jam) and ditutup otomatis oleh sistem.");
+                alert("⚠️ Shift Anda telah kadaluarsa (lebih dari 12 jam) dan ditutup otomatis oleh sistem.");
                 window.location.reload();
             }
         };
