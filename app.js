@@ -1318,6 +1318,7 @@ function openShiftReport() {
                 
                 document.getElementById("sr-net").innerText = `Rp ${finalExpectedCash.toLocaleString('id-ID')}`; 
                 
+                // FIXED: Injected logic loop to render product metrics directly inside the view dashboard
                 let itemsHtml = "";
                 for (const [name, qty] of Object.entries(foodSummary)) {
                     let qtyDisplay = qty % 1 !== 0 ? Number(qty).toFixed(2) : qty;
@@ -1418,7 +1419,7 @@ function performAutoClose(shift) {
             txW.objectStore("active_shifts").delete(shift.pin);
 
             if (shift.shiftId === currentShiftId) {
-                alert("⚠️ Shift Anda telah kadaluarsa (lebih dari 12 jam) dan ditutup otomatis oleh sistem.");
+                alert("⚠️ Shift Anda telah kadaluarsa (lebih dari 12 jam) and ditutup otomatis oleh sistem.");
                 window.location.reload();
             }
         };
