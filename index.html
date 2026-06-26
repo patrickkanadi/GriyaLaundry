@@ -22,7 +22,7 @@
         .btn-top { margin-left: 8px; padding: 6px 12px; cursor: pointer; border: 1px solid white; color: white; border-radius: 4px; font-weight: bold; }
         
         #workspace-tabs { display: flex; background: #ecf0f1; padding: 10px 20px 0 20px; overflow-x: auto; white-space: nowrap; }
-        .ws-tab { padding: 10px 20px; border: none; background: #bdc3c7; border-radius: 8px 8px 0 0; font-weight: bold; font-size: 14px; cursor: pointer; margin-right: 5px; flex-shrink: 0; }
+        .ws-tab { padding: 12px 25px; border: none; background: #bdc3c7; border-radius: 8px 8px 0 0; font-weight: bold; font-size: 16px; cursor: pointer; margin-right: 5px; flex-shrink: 0; }
         .ws-tab.active { background: white; color: #2980b9; border-top: 3px solid #3498db; }
 
         #main-workspace-wrapper { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
@@ -33,9 +33,9 @@
         #command-bar { background: #fff; padding: 15px; border-bottom: 2px solid #ecf0f1; position: relative; z-index: 30;}
         #customer-input-section { display: flex; width: 100%; gap: 10px; align-items: center; }
         .input-group { flex: 1; display: flex; gap: 10px; }
-        .input-group input { flex: 1; padding: 10px; font-size: 14px; border: 2px solid #bdc3c7; border-radius: 8px; min-width: 0; }
+        .input-group input { flex: 1; padding: 12px; font-size: 16px; border: 2px solid #bdc3c7; border-radius: 8px; min-width: 0; }
         .btn-action-group { display: flex; gap: 10px; flex: 1; }
-        .btn-action-group button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; }
+        .btn-action-group button { flex: 1; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; }
         
         #active-customer-banner { display: flex; justify-content: space-between; align-items: center; background: #e8f4f8; padding: 12px 20px; border-radius: 8px; border: 1px solid #bce8f1; width: 100%; }
 
@@ -49,48 +49,47 @@
         #glass-overlay { position: absolute; top: 75px; left: 0; width: 100%; height: calc(100% - 75px); background: rgba(255,255,255,0.8); backdrop-filter: blur(5px); z-index: 20; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; transition: opacity 0.3s; padding: 20px; }
         
         .category-tabs { display: flex; background: #ecf0f1; padding: 10px; gap: 10px; overflow-x: auto; white-space: nowrap; }
-        .cat-btn { padding: 10px 15px; border: none; background: white; border-radius: 8px; font-weight: bold; cursor: pointer; white-space: nowrap; flex-shrink: 0; font-size: 14px;}
+        .cat-btn { padding: 15px 20px; border: none; background: white; border-radius: 8px; font-weight: bold; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
         .cat-btn.active { background: #3498db; color: white; }
         
-        #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); gap: 10px; padding: 15px; overflow-y: auto; background: #f8f9fa; flex: 1; align-content: start; }
-        .product-card { background: #fff; border: 1px solid #eee; border-radius: 8px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.05); padding: 10px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.1s, box-shadow 0.1s;}
+        #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 20px; overflow-y: auto; background: #f8f9fa; flex: 1; align-content: start; }
+        .product-card { background: #fff; border: 1px solid #eee; border-radius: 12px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.05); padding: 15px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.1s, box-shadow 0.1s;}
         .product-card:active { transform: scale(0.96); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .product-card h4 { font-size: 14px; margin-top:0; margin-bottom: 3px; }
-        .price-badge { background: #e8f4f8; color: #2980b9; font-weight: bold; padding: 4px 8px; border-radius: 20px; display: inline-block; margin-top: 5px; font-size: 13px;}
+        .price-badge { background: #e8f4f8; color: #2980b9; font-weight: bold; padding: 6px 12px; border-radius: 20px; display: inline-block; margin-top: 10px;}
 
         #cart-section { flex: 4; display: flex; flex-direction: column; background: #fdfbf7; }
-        #cart-header { padding: 10px 15px; background: #2c3e50; color: white; font-weight: bold; text-align: center; display: flex; justify-content: space-between; align-items: center; font-size: 14px;}
+        #cart-header { padding: 15px; background: #2c3e50; color: white; font-weight: bold; text-align: center; display: flex; justify-content: space-between; align-items: center;}
         #promo-indicator { background: #f1c40f; color: #856404; font-size: 12px; padding: 4px 8px; border-radius: 12px; font-weight: bold; }
         #cart-items { flex: 1; padding: 15px; overflow-y: auto; }
-        .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed #ccc; font-size: 14px; }
+        .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px dashed #ccc; font-size: 15px; }
         .cart-qty { font-weight: bold; background: #3498db; color: white; padding: 4px 8px; border-radius: 6px; margin-right: 10px; }
         
-        #checkout-panel { padding: 15px; border-top: 2px dashed #ccc; background: #fff; box-shadow: 0 -4px 10px rgba(0,0,0,0.03); }
-        .grand-total { font-size: 20px; font-weight: bold; color: #e74c3c; display: flex; justify-content: space-between;}
-        .btn-pay { background: #27ae60; color: white; padding: 12px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; }
+        #checkout-panel { padding: 20px; border-top: 2px dashed #ccc; background: #fff; box-shadow: 0 -4px 10px rgba(0,0,0,0.03); }
+        .grand-total { font-size: 24px; font-weight: bold; color: #e74c3c; display: flex; justify-content: space-between;}
+        .btn-pay { background: #27ae60; color: white; padding: 15px; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 15px; }
 
         #active-tickets-workspace { flex: 1; padding: 20px; background: #f4f7f6; overflow-y: auto; }
         .ticket-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
-        .ticket-card { background: white; padding: 12px; border-radius: 8px; border-left: 5px solid #f39c12; box-shadow: 0 2px 8px rgba(0,0,0,0.1); font-size: 13px;}
+        .ticket-card { background: white; padding: 15px; border-radius: 8px; border-left: 5px solid #f39c12; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .ticket-card.ready { border-left-color: #2ecc71; }
         .ticket-header { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        .ticket-btn { padding: 8px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 8px; color: white; text-align: center; font-size: 13px;}
+        .ticket-btn { padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; color: white; text-align: center; }
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 10px;}
-        .modal-content { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 95vh; overflow-y: auto; width: 100%; max-width: 450px; }
+        .modal-content { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 95vh; overflow-y: auto; width: 100%; max-width: 450px; }
         .modal-large { max-width: 750px; }
         
         .numpad-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px; }
         .num-btn { padding: 15px; font-size: 20px; font-weight: bold; border: 1px solid #ddd; background: #f9f9f9; border-radius: 8px; cursor: pointer; }
         
-        .form-box { margin-bottom: 12px; }
+        .form-box { margin-bottom: 15px; }
         .form-box label { display: block; font-weight: bold; margin-bottom: 5px; color: #2c3e50; font-size:14px; }
-        .form-box input, .form-box select { width: 100%; padding: 10px; font-size: 14px; border: 2px solid #bdc3c7; border-radius: 6px; background: white; }
+        .form-box input, .form-box select { width: 100%; padding: 12px; font-size: 16px; border: 2px solid #bdc3c7; border-radius: 6px; background: white; }
 
         .split-pay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; }
 
         .history-list { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; margin-top: 15px; }
-        .history-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; background: white; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 14px;}
+        .history-row { display: flex; justify-content: space-between; padding: 12px 15px; border-bottom: 1px solid #eee; background: white; align-items: center; flex-wrap: wrap; gap: 10px;}
         .history-row:last-child { border-bottom: none; }
         .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
         .status-paid { background: #d4edda; color: #155724; }
@@ -117,13 +116,31 @@
             .input-group { flex-direction: column; width: 100%; gap: 10px; }
             .btn-action-group { width: 100%; }
             #active-customer-banner { flex-direction: column; gap: 10px; align-items: stretch; text-align: center; }
-            #product-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); padding: 10px; gap: 10px; }
-            #cart-items { padding: 10px; }
-            .modal-content { width: 100%; padding: 15px; }
+            
+            /* Tighter UI Adjustments for Tablets */
+            .cat-btn { padding: 10px 15px; font-size: 14px; }
+            .product-card { padding: 10px; border-radius: 8px; }
+            .product-card h4 { font-size: 14px; margin-bottom: 3px; }
+            #product-grid { gap: 10px; padding: 15px; grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); }
+            .price-badge { font-size: 13px; padding: 4px 8px; margin-top: 5px; }
+            #cart-header { padding: 10px 15px; font-size: 14px; }
+            .cart-item { padding: 8px 0; font-size: 14px; }
+            #checkout-panel { padding: 15px; }
+            .grand-total { font-size: 20px; }
+            .btn-pay { padding: 12px; font-size: 16px; margin-top: 10px; }
+            .modal-content { padding: 20px; } 
+            .form-box { margin-bottom: 12px; }
+            .form-box input, .form-box select { padding: 10px; font-size: 14px; border-width: 1px; }
+            .input-group input { padding: 10px; font-size: 14px; }
+            .btn-action-group button { padding: 10px; font-size: 13px; }
+            .ws-tab { padding: 10px 20px; font-size: 14px; }
+            .ticket-card { padding: 12px; font-size: 13px; }
+            .ticket-btn { padding: 8px; font-size: 13px; margin-top: 8px; }
+            .history-row { padding: 10px; font-size: 14px; }
+            
             .numpad-grid { gap: 5px; margin-bottom: 10px; }
             .num-btn { padding: 12px; font-size: 18px; }
             .split-pay-grid { grid-template-columns: 1fr; gap: 8px; padding: 10px; }
-            .form-box label { font-size: 12px; }
             .stats-grid { grid-template-columns: 1fr; }
             .ticket-grid { grid-template-columns: 1fr; }
             #glass-overlay h1 { font-size: 32px; }
@@ -234,7 +251,6 @@
         </div>
     </div>
 
-    <!-- MODAL EDIT MEMBER -->
     <div id="edit-member-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:350px;">
             <h2 style="margin-top:0;">✏️ Edit Nomor WA</h2>
@@ -247,14 +263,12 @@
         </div>
     </div>
 
-    <!-- MODAL LOTTERY -->
     <div id="lottery-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:350px; text-align:center;">
             <h2 style="margin-top:0; color:#8e44ad;">🎫 Persiapkan Undian</h2>
             <p style="color:#7f8c8d; font-size:14px; margin-bottom:20px;">Pilih promo yang diambil pelanggan. Hadiah akan diklaim otomatis <strong style="color:#c0392b;">setelah checkout selesai</strong>.</p>
             <select id="lottery-select" onchange="updateLotteryDesc()" style="width:100%; padding:15px; font-size:16px; font-weight:bold; border:2px solid #bdc3c7; border-radius:8px; margin-bottom:15px;">
-                <!-- Opsi diisi otomatis via JS -->
-            </select>
+                </select>
             <div id="lottery-desc"></div>
             <div style="display:flex; gap:10px;">
                 <button onclick="document.getElementById('lottery-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#ecf0f1;">Batal</button>
@@ -263,7 +277,6 @@
         </div>
     </div>
 
-    <!-- TICKET DONE MODAL -->
     <div id="ticket-done-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:400px; text-align:center;">
             <h2 style="margin-top:0; color:#2980b9;">✅ Selesai Cuci</h2>
@@ -283,7 +296,6 @@
         </div>
     </div>
 
-    <!-- NUMPAD MODAL -->
     <div id="numpad-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:320px; text-align:center;">
             <h3 id="numpad-title" style="margin-top:0; color:#2980b9;">Masukkan Berat/Jumlah</h3>
@@ -301,7 +313,6 @@
         </div>
     </div>
 
-    <!-- COIN MANAGEMENT MODAL -->
     <div id="coin-management-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:400px; text-align:center;">
             <h2 style="margin-top:0; color:#856404;">🪙 Manajemen Koin Fisik</h2>
@@ -327,7 +338,6 @@
         </div>
     </div>
 
-    <!-- REVIEW MODAL -->
     <div id="review-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <h2 style="margin-top:0; border-bottom:2px solid #eee; padding-bottom:10px;">🧾 Rincian Pembayaran</h2>
@@ -366,7 +376,6 @@
         </div>
     </div>
 
-    <!-- SETTLEMENT MODAL -->
     <div id="settlement-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">💳 Pelunasan Pengambilan</h2>
@@ -383,7 +392,6 @@
         </div>
     </div>
 
-    <!-- EXPENSE MODAL -->
     <div id="expense-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">💸 Catat Pengeluaran Laci</h2>
@@ -397,7 +405,6 @@
         </div>
     </div>
 
-    <!-- HISTORY MODAL -->
     <div id="history-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <h2 style="margin-top:0;">📋 Riwayat Sistem</h2>
@@ -411,10 +418,8 @@
         </div>
     </div>
 
-    <!-- VOID ADMIN MODAL -->
     <div id="admin-void-modal" class="modal-overlay hidden"><div class="modal-content" style="text-align:center;"><h2 style="margin-top:0; color:#e74c3c;">⚠️ Pembatalan Transaksi</h2><input type="password" id="admin-void-pin" placeholder="PIN Admin" inputmode="numeric" style="font-size:24px; text-align:center; margin-bottom:15px; width:100%; padding:10px; border:2px solid #bdc3c7; border-radius:8px;"><div style="display:flex; gap:10px; flex-wrap:wrap;"><button onclick="document.getElementById('admin-void-modal').classList.add('hidden')" style="flex:1; min-width:80px; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold;">Batal</button><button onclick="submitRemoteVoid()" style="flex:1; min-width:100px; padding:15px; background:#f39c12; color:white; border:none; border-radius:8px; font-weight:bold;">Request</button><button onclick="confirmAdminVoid()" style="flex:1; min-width:100px; padding:15px; background:#e74c3c; color:white; border:none; border-radius:8px; font-weight:bold;">Insta-Void</button></div></div></div>
 
-    <!-- CASH DROP MODAL -->
     <div id="cash-drop-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 id="cash-drop-title" style="margin-top:0;">🏦 Simpan / Tarik Uang Laci</h2>
@@ -438,7 +443,6 @@
         </div>
     </div>
     
-    <!-- SHIFT REPORT MODAL -->
     <div id="shift-report-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <div style="text-align: center; margin-bottom: 20px;"><h2 style="margin:0; color: #2c3e50;">📊 Laporan Akhir Shift</h2><p style="color: #7f8c8d; margin: 5px 0 0 0;">Harap pastikan semua angka sudah benar sebelum Logout.</p></div>
@@ -481,7 +485,6 @@
         </div>
     </div>
 
-    <!-- ORDER DETAIL MODAL -->
     <div id="order-detail-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">🧾 Detail Transaksi</h2>
@@ -495,7 +498,6 @@
         </div>
     </div>
 
-    <!-- SHIFT DETAIL MODAL -->
     <div id="shift-detail-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">📊 Detail Shift</h2>
