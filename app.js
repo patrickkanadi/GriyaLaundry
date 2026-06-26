@@ -22,6 +22,7 @@ window.enableDrawerTracking = true;
 
 let btDevice = null;
 let btCharacteristic = null;
+let printShiftOnLogout = false;
 
 async function hashString(str) {
     const msgUint8 = new TextEncoder().encode(str);
@@ -175,7 +176,7 @@ async function buildEscPosReceipt(orderId, order, deposit, remaining, payMethod,
         receipt += CMD_BOLD_ON + formatEscPosLine("STATUS", "LUNAS", false) + "\n" + CMD_BOLD_OFF;
     }
 
-    if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in") {
+    if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in" && !order.customerPhone.startsWith("999")) {
         receipt += "--------------------------------\n";
         receipt += CMD_CENTER + "-- INFO POIN LAUNDRY --\n";
         receipt += "Sisa Poin: " + newPoints + "/" + window.loyaltyTarget + "\n";
@@ -316,7 +317,7 @@ window.switchAntrean = function(index) {
     } else {
         let pName = activeCustomerProfile ? activeCustomerProfile.name : (document.getElementById("cust-name").value || "Walk-in");
         let pPhone = activeCustomerProfile ? activeCustomerProfile.phone : document.getElementById("cust-phone").value;
-        document.getElementById("active-cust-name").innerText = pName; document.getElementById("active-cust-phone").innerText = (pPhone && pPhone !== "-") ? `(${pPhone})` : "";
+        document.getElementById("active-cust-name").innerText = pName; document.getElementById("active-cust-phone").innerText = (pPhone && pPhone !== "-" && !pPhone.startsWith("999")) ? `(${pPhone})` : "";
         document.getElementById("customer-input-section").classList.add("hidden"); document.getElementById("active-customer-banner").classList.remove("hidden");
         document.getElementById("glass-overlay").style.opacity = "0"; document.getElementById("glass-overlay").style.pointerEvents = "none";
         updatePromoIndicator();
@@ -355,13 +356,55 @@ function lockMenu() {
     renderCart(); document.getElementById("promo-indicator").classList.add("hidden");
 }
 
+function proceedToUnlock(phone, name) {
+    document.getElementById("active-cust-name").innerText = name; 
+    document.getElementById("active-cust-phone").innerText = (phone !== "-" && !phone.startsWith("999")) ? `(${phone})` : "";
+    document.getElementById("customer-input-section").classList.add("hidden"); 
+    document.getElementById("active-customer-banner").classList.remove("hidden");
+    isMenuLocked = false; 
+    document.getElementById("glass-overlay").style.opacity = "0"; 
+    setTimeout(() => { document.getElementById("glass-overlay").style.pointerEvents = "none"; }, 300);
+
+    antreans[currentAntreanIndex].isLocked = false; 
+    antreans[currentAntreanIndex].phoneInput = phone;
+    antreans[currentAntreanIndex].nameInput = name; 
+    antreans[currentAntreanIndex].profile = activeCustomerProfile ? {...activeCustomerProfile} : null;
+    
+    updatePromoIndicator();
+    document.getElementById("autocomplete-results").classList.add("hidden"); 
+    renderCart();
+}
+
 function unlockMenu(isGuest) {
-    let phone = "-"; let name = "Walk-in";
+    let phone = "-"; 
+    let name = "Walk-in";
+    
     if (isGuest) { 
-        document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; activeCustomerProfile = null; 
+        document.getElementById("cust-phone").value = ""; 
+        document.getElementById("cust-name").value = "Walk-in"; 
+        activeCustomerProfile = null; 
     } else { 
-        phone = document.getElementById("cust-phone").value.trim(); name = document.getElementById("cust-name").value.trim() || "Pelanggan"; 
-        if (phone.length < 5) return alert("Harap masukkan Nomor WhatsApp yang valid terlebih dahulu."); 
+        phone = document.getElementById("cust-phone").value.trim(); 
+        name = document.getElementById("cust-name").value.trim() || "Pelanggan"; 
+        
+        if (phone.length < 5) {
+            let confirm1 = confirm("Apakah pelanggan tidak bersedia memberikan Nomor WhatsApp?");
+            if (confirm1) {
+                let confirm2 = confirm("Konfirmasi ulang: Daftarkan pelanggan tanpa nomor WhatsApp? (Sistem akan membuatkan ID otomatis dan disimpan ke database)");
+                if (confirm2) {
+                    phone = "999" + Date.now().toString().slice(-7); 
+                    document.getElementById("cust-phone").value = phone;
+                    if (!document.getElementById("cust-name").value.trim()) {
+                        name = "Pelanggan Tanpa WA";
+                        document.getElementById("cust-name").value = name;
+                    }
+                } else {
+                    return;
+                }
+            } else {
+                return; 
+            }
+        } 
     }
 
     let isDuplicate = false;
@@ -372,12 +415,27 @@ function unlockMenu(isGuest) {
     }
     if (isDuplicate) return alert("⚠️ Pelanggan ini sedang dilayani di Antrean lain. Silakan selesaikan atau batalkan transaksi di antrean tersebut terlebih dahulu.");
 
-    document.getElementById("active-cust-name").innerText = name; document.getElementById("active-cust-phone").innerText = phone !== "-" ? `(${phone})` : "";
-    document.getElementById("customer-input-section").classList.add("hidden"); document.getElementById("active-customer-banner").classList.remove("hidden");
-    isMenuLocked = false; document.getElementById("glass-overlay").style.opacity = "0"; setTimeout(() => { document.getElementById("glass-overlay").style.pointerEvents = "none"; }, 300);
-
-    antreans[currentAntreanIndex].isLocked = false; antreans[currentAntreanIndex].phoneInput = phone;
-    antreans[currentAntreanIndex].nameInput = name; antreans[currentAntreanIndex].profile = activeCustomerProfile ? {...activeCustomerProfile} : null;
+    if (!isGuest) {
+        db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
+            if (e.target.result) {
+                activeCustomerProfile = e.target.result;
+            } else {
+                activeCustomerProfile = { 
+                    phone: phone, 
+                    name: name, 
+                    points: 0, 
+                    freeCoins: 0, 
+                    spent: 0, 
+                    storedRewards: {}, 
+                    lastClaimDate: "",
+                    isNoWA: phone.startsWith("999")
+                };
+            }
+            proceedToUnlock(phone, name);
+        };
+    } else {
+        proceedToUnlock(phone, name);
+    }
 }
 
 window.selectMember = function(phone) {
@@ -396,7 +454,7 @@ window.selectMember = function(phone) {
 };
 
 function openEditMember() {
-    let prefill = (activeCustomerProfile && activeCustomerProfile.phone !== "-") ? activeCustomerProfile.phone : "";
+    let prefill = (activeCustomerProfile && activeCustomerProfile.phone !== "-" && !activeCustomerProfile.isNoWA) ? activeCustomerProfile.phone : "";
     document.getElementById("edit-old-phone").value = prefill; 
     document.getElementById("edit-new-phone").value = "";
     document.getElementById("edit-member-modal").classList.remove("hidden");
@@ -520,21 +578,47 @@ function saveMemberToDB(profile) {
 }
 
 function openLotteryModal() {
-    if (!activeCustomerProfile) return alert("Harap pilih profil pelanggan terlebih dahulu untuk mendaftarkan undian.");
-    const select = document.getElementById("lottery-select"); select.innerHTML = '<option value="">-- Pilih Promo Undian --</option>';
+    if (!activeCustomerProfile) return alert("Harap pilih profil pelanggan terlebih dahulu.");
+    
+    if (activeCustomerProfile.isNoWA) {
+        return alert("⚠️ Pelanggan tanpa WhatsApp valid tidak dapat didaftarkan dalam program undian.");
+    }
+
+    const select = document.getElementById("lottery-select"); 
+    select.innerHTML = '<option value="">-- Pilih Promo Undian --</option>';
     window.globalPromos.forEach(p => { if(p.weeklyQuota === 0 || p.usedQuota < p.weeklyQuota) { select.innerHTML += `<option value="${p.code}">${p.code} (${p.rewardItem})</option>`; } });
+    document.getElementById("lottery-desc").innerHTML = "";
     document.getElementById("lottery-modal").classList.remove("hidden");
 }
 
-function submitLotteryCode() {
+window.updateLotteryDesc = function() {
+    let code = document.getElementById("lottery-select").value;
+    let descDiv = document.getElementById("lottery-desc");
+    if(!code) { descDiv.innerHTML = ""; return; }
+    let promo = window.globalPromos.find(p => p.code === code);
+    if(promo) {
+        descDiv.innerHTML = `<div style="padding:10px; background:#e8f4f8; border-radius:6px; color:#2980b9; font-weight:bold; margin-bottom:15px; text-align:left;">🎁 <strong>Insentif:</strong> Mendapatkan ${promo.rewardQty}x ${promo.rewardItem}</div>`;
+    }
+};
+
+async function submitLotteryCode() {
     if (!activeCustomerProfile) return alert("Pilih pelanggan terlebih dahulu!");
     let code = document.getElementById("lottery-select").value;
     if (!code) return alert("Silakan pilih salah satu promo dari kotak dropdown!");
 
     let todayStr = new Date().toISOString().substring(0,10);
-    if (activeCustomerProfile.lastClaimDate === todayStr) {
+    
+    let hasPending = await new Promise(resolve => {
+        db.transaction(["promo_claims"], "readonly").objectStore("promo_claims").getAll().onsuccess = e => {
+            let claims = e.target.result;
+            let found = claims.some(c => c.phone === activeCustomerProfile.phone && String(c.timestamp).startsWith(todayStr));
+            resolve(found);
+        };
+    });
+
+    if (activeCustomerProfile.lastClaimDate === todayStr || hasPending) {
         document.getElementById("lottery-modal").classList.add("hidden");
-        return alert("⚠️ Pelanggan ini sudah mengklaim undian hari ini. (Batas 1 klaim per hari)");
+        return alert("⚠️ Pelanggan ini sudah mengklaim undian hari ini. (Batas maksimal 1 klaim per hari)");
     }
 
     let promo = window.globalPromos.find(p => p.code === code);
@@ -626,10 +710,28 @@ function reviewOrder() {
     let promoHtml = "";
     if (activeCustomerProfile) {
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
-        if (activeCustomerProfile.freeCoins > 0 && cartCoins > 0) {
+        
+        let availableFree = activeCustomerProfile.freeCoins || 0;
+        let tempPoints = activeCustomerProfile.points || 0;
+        let maxRedeemable = 0;
+        
+        for (let i = 0; i < cartCoins; i++) {
+            if (availableFree > 0) { 
+                maxRedeemable++; 
+                availableFree--; 
+            } else { 
+                tempPoints++; 
+                if (tempPoints >= window.loyaltyTarget) { 
+                    availableFree++; 
+                    tempPoints -= window.loyaltyTarget; 
+                } 
+            }
+        }
+
+        if (maxRedeemable > 0) {
             promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <div><strong style="color:#856404;">🎁 Koin Gratis (Loyalty)</strong><br><small style="color:#856404;">Tersedia di Profil: ${activeCustomerProfile.freeCoins}</small></div>
-                <input type="number" class="promo-input" data-type="loyalty" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${Math.min(activeCustomerProfile.freeCoins, cartCoins)}" min="0" oninput="applyPromo()" style="width:70px; padding:8px; font-weight:bold; text-align:center;">
+                <div><strong style="color:#856404;">🎁 Koin Gratis (Loyalty)</strong><br><small style="color:#856404;">Bisa klaim: ${maxRedeemable} (Poin awal: ${activeCustomerProfile.points})</small></div>
+                <input type="number" class="promo-input" data-type="loyalty" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="${maxRedeemable}" max="${maxRedeemable}" min="0" oninput="applyPromo()" style="width:70px; padding:8px; font-weight:bold; text-align:center;">
             </div>`;
         }
 
@@ -654,7 +756,10 @@ function reviewOrder() {
     document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-transfer").value = 0;
     document.getElementById("pay-hotel-piutang").value = 0; document.getElementById("pay-tamu-piutang").value = 0; document.getElementById("pay-free").value = 0;
     let internalCoinBox = document.getElementById("internal-coins"); if(internalCoinBox) internalCoinBox.value = 0;
-    window.cartGrandTotal = window.cartSubtotal; document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
+    window.cartGrandTotal = window.cartSubtotal; 
+    
+    document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
+    document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
     
     applyPromo(); document.getElementById("review-modal").classList.remove("hidden");
 }
@@ -694,7 +799,7 @@ async function finalizeOrder(shouldPrint) {
     if (remaining > 0) return alert("⚠️ PEMBAYARAN DITOLAK:\nSisa Kurang Bayar harus Rp 0.");
     if (totalPiutang > 0 && !requiresProcessing) return alert("⚠️ PEMBAYARAN DITOLAK:\nPiutang HANYA berlaku untuk Tiket Drop-off.");
     if (totalPiutang > 0 && !hasHotelItem) return alert("⚠️ PEMBAYARAN DITOLAK:\nPiutang HANYA berlaku untuk item dalam kategori Hotel.");
-    if (totalPiutang > 0 && (!custPhone || custPhone === "-")) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda WAJIB memasukkan nomor WhatsApp pelanggan untuk mencatat Piutang.");
+    if (totalPiutang > 0 && (!custPhone || custPhone === "-")) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda WAJIB memasukkan nomor pelanggan untuk mencatat Piutang.");
 
     let payMethods = []; if(cash > 0) payMethods.push("Tunai"); if(qris > 0) payMethods.push("QRIS"); if(transfer > 0) payMethods.push("Trf.Bank"); if(hotelPiutang > 0) payMethods.push("Piutang(B2B)"); if(tamuPiutang > 0) payMethods.push("Piutang(Tamu)"); if(free > 0) payMethods.push("Gratis");
     const payString = payMethods.length > 0 ? payMethods.join("+") : "Belum Bayar";
@@ -715,7 +820,7 @@ async function finalizeOrder(shouldPrint) {
     let newPoints = 0; let newFree = 0;
     
     if (custPhone !== "-") {
-        if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {}, lastClaimDate: "" };
+        if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {}, lastClaimDate: "", isNoWA: custPhone.startsWith("999") };
         activeCustomerProfile.spent += window.cartGrandTotal;
         let currentPoints = activeCustomerProfile.points || 0; let currentFree = activeCustomerProfile.freeCoins || 0;
         
@@ -820,7 +925,7 @@ window.reprintOrder = async function(orderId) {
         const order = e.target.result;
         if (!order) return alert("Data order tidak ditemukan di memori lokal.");
         const deposit = (order.cashAmount || 0) + (order.qrisAmount || 0) + (order.transferAmount || 0) + (order.freeAmount || 0) + (order.hotelPiutangAmount || 0) + (order.tamuPiutangAmount || 0);
-        if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in") {
+        if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in" && !order.customerPhone.startsWith("999")) {
             db.transaction(["members"], "readonly").objectStore("members").get(order.customerPhone).onsuccess = async (me) => {
                 let mem = me.target.result; let pts = mem ? mem.points : 0; let fre = mem ? mem.freeCoins : 0;
                 await buildEscPosReceipt(order.orderId + " (COPY)", order, deposit, 0, order.paymentMethod, pts, fre);
@@ -923,6 +1028,30 @@ function saveExpense() {
 
 function openHistoryModal() { document.getElementById("history-modal").classList.remove("hidden"); renderHistoryList('orders'); }
 
+window.viewShiftDetails = function(shiftId) {
+    db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").get(shiftId).onsuccess = (e) => {
+        let s = e.target.result;
+        if (!s) return alert("Data tidak ditemukan.");
+
+        let foodHtml = "";
+        if(s.foodSummary) {
+            for(const [name, qty] of Object.entries(s.foodSummary)) { foodHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:4px 0;"><span>${name}</span> <strong>${qty}x</strong></div>`; }
+        }
+
+        document.getElementById("sd-id").innerText = s.shiftId;
+        document.getElementById("sd-login").innerText = formatTimeOnlyWIB(s.loginTime);
+        document.getElementById("sd-logout").innerText = formatTimeOnlyWIB(s.logoutTime);
+        document.getElementById("sd-omset").innerText = `Rp ${(s.totalOmset||0).toLocaleString('id-ID')}`;
+        document.getElementById("sd-cash").innerText = `Rp ${(s.totalCash||0).toLocaleString('id-ID')}`;
+        document.getElementById("sd-qris").innerText = `Rp ${(s.totalQris||0).toLocaleString('id-ID')}`;
+        document.getElementById("sd-transfer").innerText = `Rp ${(s.totalTransfer||0).toLocaleString('id-ID')}`;
+        document.getElementById("sd-net").innerText = `Rp ${(s.netCash||0).toLocaleString('id-ID')}`;
+        document.getElementById("sd-food").innerHTML = foodHtml || "Tidak ada item terjual";
+
+        document.getElementById("shift-detail-modal").classList.remove("hidden");
+    };
+};
+
 function renderHistoryList(type) {
     const container = document.getElementById("history-container"); container.innerHTML = "";
     if (type === 'orders') {
@@ -950,11 +1079,12 @@ function renderHistoryList(type) {
         };
     } else if (type === 'shifts') {
         db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").getAll().onsuccess = (e) => {
-            const shifts = e.target.result.reverse();
-            if(shifts.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada histori shift di memori lokal.</div>`;
+            const shifts = e.target.result.filter(s => s.cashier === currentCashier).reverse();
+            if(shifts.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada histori shift Anda di memori lokal.</div>`;
             shifts.forEach(s => {
+                let detailBtn = `<button onclick="viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold; height:fit-content; margin-right:5px;">👁️ Detail</button>`;
                 let printBtn = `<button onclick="printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold; height:fit-content;">🖨️ Cetak</button>`;
-                container.innerHTML += `<div class="history-row" style="align-items:flex-start;"><div><strong>Shift: ${s.shiftId}</strong><br><small style="color:#7f8c8d;">Kasir: ${s.cashier} | Keluar: ${formatWIB(s.logoutTime)}</small></div><div style="display:flex; gap:15px; text-align:right;"><div><strong>Omset: Rp ${s.totalOmset.toLocaleString('id-ID')}</strong><br><small style="color:#27ae60;">Uang Tunai: Rp ${s.netCash.toLocaleString('id-ID')}</small></div> ${printBtn}</div></div>`;
+                container.innerHTML += `<div class="history-row" style="align-items:flex-start;"><div><strong>Shift: ${s.shiftId}</strong><br><small style="color:#7f8c8d;">Kasir: ${s.cashier} | Keluar: ${formatWIB(s.logoutTime)}</small></div><div style="display:flex; text-align:right; align-items:center;"><div><strong style="margin-right:15px;">Omset: Rp ${s.totalOmset.toLocaleString('id-ID')}</strong></div> ${detailBtn} ${printBtn}</div></div>`;
             });
         };
     }
@@ -1161,7 +1291,8 @@ function openShiftReport() {
     };
 }
 
-function initiateLogoutSequence() { 
+function initiateLogoutSequence(shouldPrint) { 
+    printShiftOnLogout = shouldPrint;
     const meterT = document.getElementById("meter-token").value; const meterP = document.getElementById("meter-pasca").value;
     if (meterT === "" || meterP === "") return alert("⚠️ ERROR: Wajib mengisi kedua Meteran Listrik sebelum mengakhiri Shift.");
     window.currentShiftData.meterToken = Number(meterT); window.currentShiftData.meterPasca = Number(meterP);
@@ -1184,6 +1315,10 @@ async function executeFinalLogout(netCash) {
         totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalTransfer: data.totalTransfer, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree,
         totalExpenses: data.totalExpenses, netCash: netCash, foodSummary: data.foodSummary, meterToken: data.meterToken, meterPasca: data.meterPasca, syncStatus: "Pending"
     };
+
+    if (printShiftOnLogout && btCharacteristic) {
+        try { await buildShiftReportReceipt(shiftPayload); } catch(e) { console.error("Printer error during logout:", e); }
+    }
 
     db.transaction(["local_shift_history"], "readwrite").objectStore("local_shift_history").add(shiftPayload);
     db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").add(shiftPayload);
