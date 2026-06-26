@@ -320,6 +320,18 @@ window.switchAntrean = function(index) {
         document.getElementById("active-cust-name").innerText = pName; document.getElementById("active-cust-phone").innerText = (pPhone && pPhone !== "-" && !pPhone.startsWith("999")) ? `(${pPhone})` : "";
         document.getElementById("customer-input-section").classList.add("hidden"); document.getElementById("active-customer-banner").classList.remove("hidden");
         document.getElementById("glass-overlay").style.opacity = "0"; document.getElementById("glass-overlay").style.pointerEvents = "none";
+        
+        const lotteryBtn = document.getElementById("btn-trigger-lottery");
+        if (lotteryBtn) {
+            if (activeCustomerProfile && (activeCustomerProfile.lastClaimDate || activeCustomerProfile.isNoWA)) {
+                lotteryBtn.disabled = true;
+                lotteryBtn.innerText = "🎫 Sudah Klaim / Tidak Valid";
+            } else {
+                lotteryBtn.disabled = false;
+                lotteryBtn.innerText = "🎫 Pilih Undian";
+            }
+        }
+        
         updatePromoIndicator();
     }
     document.getElementById("autocomplete-results").classList.add("hidden"); renderCart();
@@ -369,6 +381,22 @@ function proceedToUnlock(phone, name) {
     antreans[currentAntreanIndex].phoneInput = phone;
     antreans[currentAntreanIndex].nameInput = name; 
     antreans[currentAntreanIndex].profile = activeCustomerProfile ? {...activeCustomerProfile} : null;
+    
+    let d = new Date();
+    let todayStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, '0') + "-" + String(d.getDate()).padStart(2, '0');
+    const lotteryBtn = document.getElementById("btn-trigger-lottery");
+
+    if (lotteryBtn) {
+        if (activeCustomerProfile && (activeCustomerProfile.lastClaimDate === todayStr || activeCustomerProfile.isNoWA)) {
+            lotteryBtn.disabled = true;
+            lotteryBtn.innerText = "🎫 Sudah Klaim Hari Ini";
+            lotteryBtn.title = "Pelanggan ini sudah mengambil jatah undian untuk hari ini.";
+        } else {
+            lotteryBtn.disabled = false;
+            lotteryBtn.innerText = "🎫 Pilih Undian";
+            lotteryBtn.title = "";
+        }
+    }
     
     updatePromoIndicator();
     document.getElementById("autocomplete-results").classList.add("hidden"); 
@@ -606,14 +634,12 @@ async function submitLotteryCode() {
     let code = document.getElementById("lottery-select").value;
     if (!code) return alert("Silakan pilih salah satu promo dari kotak dropdown!");
 
-    // Build the date exactly as YYYY-MM-DD in local time
     let d = new Date();
     let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
     
     let hasPending = await new Promise(resolve => {
         db.transaction(["promo_claims"], "readonly").objectStore("promo_claims").getAll().onsuccess = e => {
             let claims = e.target.result;
-            // Check if there is an unsynced claim today
             let found = claims.some(c => c.phone === activeCustomerProfile.phone && String(c.timestamp).startsWith(todayStr));
             resolve(found);
         };
@@ -840,7 +866,6 @@ async function finalizeOrder(shouldPrint) {
             if (promo) {
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
                 
-                // Build local timezone date to lock the profile
                 let d = new Date();
                 let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
@@ -1383,7 +1408,7 @@ function performAutoClose(shift) {
             txW.objectStore("active_shifts").delete(shift.pin);
 
             if (shift.shiftId === currentShiftId) {
-                alert("⚠️ Shift Anda telah kadaluarsa (lebih dari 12 jam) dan ditutup otomatis oleh sistem.");
+                alert("⚠️ Shift Anda telah kadaluarsa (lebih dari 12 jam) and ditutup otomatis oleh sistem.");
                 window.location.reload();
             }
         };
@@ -1396,7 +1421,6 @@ async function runBackgroundSync() {
     if (!navigator.onLine || isSyncing) return;
     isSyncing = true; 
     try {
-        // 1. Sync Orders
         let orders = await new Promise(res => db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = e => res(e.target.result));
         for (const order of orders) {
             if (order.syncStatus === "Pending") {
@@ -1409,25 +1433,21 @@ async function runBackgroundSync() {
             }
         }
         
-        // 2. Sync Cash Drops
         let drops = await new Promise(res => db.transaction(["cash_drops"], "readonly").objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
         for (const drop of drops) {
             if (drop.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncCashDrop", data: drop }) }); if ((await r.json()).status === "Success") { drop.syncStatus = "Synced"; db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").put(drop); } } catch(e) {} }
         }
         
-        // 3. Sync Shift Reports
         let reports = await new Promise(res => db.transaction(["shift_reports"], "readonly").objectStore("shift_reports").getAll().onsuccess = e => res(e.target.result));
         for (const report of reports) {
             if (report.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncShiftReport", data: report }) }); if ((await r.json()).status === "Success") { db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId); } } catch(e) {} }
         }
 
-        // 4. Sync Expenses
         let expenses = await new Promise(res => db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
         for (const exp of expenses) {
             if (exp.syncStatus === "Pending") { try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncExpense", data: exp }) }); if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); } } catch(e) {} }
         }
 
-        // 5. Sync Void Requests
         let voids = await new Promise(res => db.transaction(["void_requests"], "readonly").objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
         for (const req of voids) {
             try {
@@ -1436,19 +1456,16 @@ async function runBackgroundSync() {
             } catch(e) {}
         }
 
-        // 6. Sync Members
         let members = await new Promise(res => db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
         for (const mem of members) {
             try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "syncMember", data: mem }) }); if ((await r.json()).status === "Success") { db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone); } } catch(e) {}
         }
 
-        // 7. Sync Phone Updates
         let phoneUpds = await new Promise(res => db.transaction(["phone_updates"], "readonly").objectStore("phone_updates").getAll().onsuccess = e => res(e.target.result));
         for (const upd of phoneUpds) {
             try { let r = await fetch(API_URL, { method: 'POST', mode: 'cors', redirect: 'follow', body: JSON.stringify({ action: "updateMemberPhone", data: upd }) }); if ((await r.json()).status === "Success") { db.transaction(["phone_updates"], "readwrite").objectStore("phone_updates").delete(upd.id); } } catch(e) {}
         }
         
-        // 8. Sync Coin Retrievals
         let coinRets = await new Promise(res => db.transaction(["coin_retrievals"], "readonly").objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
         for (const ret of coinRets) {
             if (ret.syncStatus === "Pending") {
@@ -1457,7 +1474,6 @@ async function runBackgroundSync() {
             }
         }
 
-        // 9. Sync Ticket Coins
         let ticketCoins = await new Promise(res => db.transaction(["ticket_coins"], "readonly").objectStore("ticket_coins").getAll().onsuccess = e => res(e.target.result));
         for (const tc of ticketCoins) {
             if (tc.syncStatus === "Pending") {
@@ -1465,7 +1481,6 @@ async function runBackgroundSync() {
             }
         }
 
-        // 10. Sync Promo Claims
         let promoClaims = await new Promise(res => db.transaction(["promo_claims"], "readonly").objectStore("promo_claims").getAll().onsuccess = e => res(e.target.result));
         for (const claim of promoClaims) {
             if (claim.syncStatus === "Pending") {
