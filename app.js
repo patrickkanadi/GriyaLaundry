@@ -85,7 +85,7 @@ async function connectBluetoothPrinter() {
         btCharacteristic = await service.getCharacteristic(0x2AF1);
         const btn = document.getElementById("btn-printer");
         if(btn) { btn.innerText = "🖨️ Printer: Terhubung"; btn.style.background = "#2ecc71"; btn.style.borderColor = "#2ecc71"; }
-    } catch (err) { alert("Gagal terhubung ke printer Bluetooth. Pastikan bluetooth menyala and printer dihidupkan."); }
+    } catch (err) { alert("Gagal terhubung ke printer Bluetooth. Pastikan bluetooth menyala dan printer dihidupkan."); }
 }
 
 async function sendToPrinter(payloadUint8) {
@@ -977,6 +977,43 @@ window.printShiftReportFromHistory = async function(shiftId) {
     };
 };
 
+// NEW FUNCTION: Direct thermal print module for active dashboard layout preview tracking
+async function printCurrentShiftReport() {
+    if (!btCharacteristic) return alert("Printer belum terhubung! Silakan hubungkan dari menu atas.");
+    const data = window.currentShiftData;
+    if (!data) return alert("Data ringkasan shift tidak tersedia.");
+    
+    const meterT = Number(document.getElementById("meter-token").value) || 0;
+    const meterP = Number(document.getElementById("meter-pasca").value) || 0;
+    
+    const tempPayload = {
+        shiftId: currentShiftId,
+        cashier: currentCashier,
+        loginTime: currentLoginTime,
+        logoutTime: new Date().toISOString(),
+        totalCustomers: data.totalCustomers,
+        totalOrders: data.totalOrders,
+        totalOmset: data.totalOmset,
+        totalCash: data.totalCash,
+        totalQris: data.totalQris,
+        totalTransfer: data.totalTransfer,
+        totalHotelPiutang: data.totalHotelPiutang,
+        totalTamuPiutang: data.totalTamuPiutang,
+        totalFree: data.totalFree,
+        totalExpenses: data.totalExpenses,
+        netCash: data.net,
+        foodSummary: data.foodSummary,
+        meterToken: meterT,
+        meterPasca: meterP
+    };
+    try {
+        await buildShiftReportReceipt(tempPayload);
+        alert("Laporan berhasil dikirim ke printer!");
+    } catch(e) {
+        alert("Gagal mencetak: " + e.toString());
+    }
+}
+
 function renderActiveTickets() {
     const grid = document.getElementById("ticket-grid-container"); grid.innerHTML = "";
     activeLaundryTickets.forEach((ticket) => {
@@ -1399,7 +1436,7 @@ function performAutoClose(shift) {
             if (o.items) o.items.forEach(i => { if(!foodSummary[i.name]) foodSummary[i.name] = 0; foodSummary[i.name] += i.qty; });
         });
         db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = (ex) => {
-            const shiftExpenses = ex.target.result.filter(exp => exp.shiftId === shift.shiftId && exp.status === "Active"); 
+            const shiftExpenses = ex.target.result.filter(exp => exp.shiftId === currentShiftId && exp.status === "Active"); 
             shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
             
             let netCash = Math.max(0, tCash - tExpense);
