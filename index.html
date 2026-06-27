@@ -261,6 +261,7 @@
         </div>
     </div>
 
+    <!-- MODAL EDIT MEMBER -->
     <div id="edit-member-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:350px;">
             <h2 style="margin-top:0;">✏️ Edit Nomor WA</h2>
@@ -273,12 +274,14 @@
         </div>
     </div>
 
+    <!-- MODAL LOTTERY -->
     <div id="lottery-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:350px; text-align:center;">
             <h2 style="margin-top:0; color:#8e44ad;">🎫 Persiapkan Undian</h2>
             <p style="color:#7f8c8d; font-size:14px; margin-bottom:20px;">Pilih promo yang diambil pelanggan. Hadiah akan diklaim otomatis <strong style="color:#c0392b;">setelah checkout selesai</strong>.</p>
             <select id="lottery-select" onchange="updateLotteryDesc()" style="width:100%; padding:15px; font-size:16px; font-weight:bold; border:2px solid #bdc3c7; border-radius:8px; margin-bottom:15px;">
-                </select>
+                <!-- Opsi diisi otomatis via JS -->
+            </select>
             <div id="lottery-desc"></div>
             <div style="display:flex; gap:10px;">
                 <button onclick="document.getElementById('lottery-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; border:none; font-weight:bold; background:#ecf0f1;">Batal</button>
@@ -287,6 +290,7 @@
         </div>
     </div>
 
+    <!-- TICKET DONE MODAL -->
     <div id="ticket-done-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:400px; text-align:center;">
             <h2 style="margin-top:0; color:#2980b9;">✅ Selesai Cuci</h2>
@@ -306,6 +310,7 @@
         </div>
     </div>
 
+    <!-- NUMPAD MODAL -->
     <div id="numpad-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:320px; text-align:center;">
             <h3 id="numpad-title" style="margin-top:0; color:#2980b9;">Masukkan Berat/Jumlah</h3>
@@ -323,6 +328,7 @@
         </div>
     </div>
 
+    <!-- COIN MANAGEMENT MODAL -->
     <div id="coin-management-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width:400px; text-align:center;">
             <h2 style="margin-top:0; color:#856404;">🪙 Manajemen Koin Fisik</h2>
@@ -348,6 +354,7 @@
         </div>
     </div>
 
+    <!-- REVIEW MODAL -->
     <div id="review-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <h2 style="margin-top:0; border-bottom:2px solid #eee; padding-bottom:10px;">🧾 Rincian Pembayaran</h2>
@@ -386,6 +393,7 @@
         </div>
     </div>
 
+    <!-- SETTLEMENT MODAL -->
     <div id="settlement-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">💳 Pelunasan Pengambilan</h2>
@@ -402,6 +410,7 @@
         </div>
     </div>
 
+    <!-- EXPENSE MODAL -->
     <div id="expense-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">💸 Catat Pengeluaran Laci</h2>
@@ -415,6 +424,7 @@
         </div>
     </div>
 
+    <!-- HISTORY MODAL -->
     <div id="history-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <h2 style="margin-top:0;">📋 Riwayat Sistem</h2>
@@ -428,8 +438,10 @@
         </div>
     </div>
 
+    <!-- VOID ADMIN MODAL -->
     <div id="admin-void-modal" class="modal-overlay hidden"><div class="modal-content" style="text-align:center;"><h2 style="margin-top:0; color:#e74c3c;">⚠️ Pembatalan Transaksi</h2><input type="password" id="admin-void-pin" placeholder="PIN Admin" inputmode="numeric" style="font-size:24px; text-align:center; margin-bottom:15px; width:100%; padding:10px; border:2px solid #bdc3c7; border-radius:8px;"><div style="display:flex; gap:10px; flex-wrap:wrap;"><button onclick="document.getElementById('admin-void-modal').classList.add('hidden')" style="flex:1; min-width:80px; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold;">Batal</button><button onclick="submitRemoteVoid()" style="flex:1; min-width:100px; padding:15px; background:#f39c12; color:white; border:none; border-radius:8px; font-weight:bold;">Request</button><button onclick="confirmAdminVoid()" style="flex:1; min-width:100px; padding:15px; background:#e74c3c; color:white; border:none; border-radius:8px; font-weight:bold;">Insta-Void</button></div></div></div>
 
+    <!-- CASH DROP MODAL -->
     <div id="cash-drop-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 id="cash-drop-title" style="margin-top:0;">🏦 Simpan / Tarik Uang Laci</h2>
@@ -453,6 +465,7 @@
         </div>
     </div>
     
+    <!-- SHIFT REPORT MODAL -->
     <div id="shift-report-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <div style="text-align: center; margin-bottom: 20px;"><h2 style="margin:0; color: #2c3e50;">📊 Laporan Akhir Shift</h2><p style="color: #7f8c8d; margin: 5px 0 0 0;">Harap pastikan semua angka sudah benar sebelum Logout.</p></div>
@@ -476,7 +489,7 @@
                     <div class="revenue-row"><span>Pengeluaran Laci</span> <strong id="sr-expense" style="color:#e67e22;">Rp 0</strong></div>
                 </div>
                 <div class="revenue-breakdown" style="grid-column: span 2; margin-top: 5px;">
-                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">📦 Ringkasan Item Terjual (Shift Ini)</div>
+                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">🍔 Makanan Terjual</div>
                     <div id="sr-items-summary" style="max-height: 140px; overflow-y: auto; font-size: 14px; display: flex; flex-direction: column; gap: 4px;"></div>
                 </div>
             </div>
@@ -491,14 +504,16 @@
                     <div><label style="font-size: 12px; font-weight: bold; color: #856404;">Meteran Pasca (Total kWh)</label><input type="number" id="meter-pasca" placeholder="Misal: 14500" step="0.01" style="width: 100%; padding: 10px; border: 1px solid #ffeeba; border-radius: 4px; margin-top: 5px;"></div>
                 </div>
             </div>
-            <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button onclick="document.getElementById('shift-report-modal').classList.add('hidden')" style="flex:1; padding:15px; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Kembali</button>
-                <button onclick="initiateLogoutSequence(false)" style="flex:1; padding:15px; background:#c0392b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Akhiri Tanpa Cetak</button>
-                <button onclick="initiateLogoutSequence(true)" style="flex:2; padding:15px; background:#27ae60; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">🖨️ Cetak & Akhiri Shift</button>
+            <!-- FIXED: Shift action deck structured to reflect separated layouts matching verified attachment verbatim -->
+            <div style="display:flex; gap:10px;">
+                <button onclick="document.getElementById('shift-report-modal').classList.add('hidden')" style="flex:1; padding:12px; border:none; border-radius:8px; font-weight:bold; background:#f1f5f7; color:#2c3e50; cursor:pointer; font-size:14px;">Tutup</button>
+                <button onclick="printCurrentShiftReport()" style="flex:1.2; padding:12px; background:#27ae60; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; gap:6px;">🖨️ Cetak Laporan</button>
+                <button onclick="initiateLogoutSequence(false)" style="flex:1.5; padding:12px; background:#c0392b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px;">Akhiri Shift & Keluar</button>
             </div>
         </div>
     </div>
 
+    <!-- ORDER DETAIL MODAL -->
     <div id="order-detail-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">🧾 Detail Transaksi</h2>
@@ -512,6 +527,7 @@
         </div>
     </div>
 
+    <!-- SHIFT DETAIL MODAL -->
     <div id="shift-detail-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 style="margin-top:0;">📊 Detail Shift</h2>
