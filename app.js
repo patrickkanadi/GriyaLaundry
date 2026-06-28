@@ -517,8 +517,10 @@ function submitEditMember() {
     let oldPhone = document.getElementById("edit-old-phone").value.trim(); 
     let newPhone = document.getElementById("edit-new-phone").value.trim();
     
-    if(oldPhone.length < 5) return alert("Nomor lama tidak valid.");
-    if(newPhone.length < 5) return alert("Nomor baru tidak valid.");
+    // FIXED: Changed validation from length < 5 to simple presence checks 
+    // to allow placeholder IDs like 001, 002, or custom tracking tokens
+    if (!oldPhone) return alert("Nomor lama tidak boleh kosong.");
+    if (!newPhone) return alert("Nomor baru tidak boleh kosong.");
 
     db.transaction(["members"], "readonly").objectStore("members").get(oldPhone).onsuccess = (e) => {
         let member = e.target.result;
