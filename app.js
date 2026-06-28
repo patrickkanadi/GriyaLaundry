@@ -248,12 +248,25 @@ function updatePromoIndicator() {
 }
 
 function lockMenu() {
-    isMenuLocked = true; activeCustomerProfile = null; 
+    isMenuLocked = true; 
+    activeCustomerProfile = null; 
+    
+    // PEMBERSIHAN DINI: Hapus input form dinamis transaksi lama agar kalkulasi tidak macet
+    let promoContainer = document.getElementById("dynamic-promo-section") || document.getElementById("review-promo-section");
+    if (promoContainer) {
+        promoContainer.innerHTML = "";
+    }
+    
+    // Paksa angka form diskon kembali ke angka 0 mutlak
+    if (document.getElementById("pay-free")) document.getElementById("pay-free").value = 0;
+
     document.getElementById("customer-input-section").classList.remove("hidden");
     document.getElementById("active-customer-banner").classList.add("hidden");
     document.getElementById("glass-overlay").style.opacity = "1";
     document.getElementById("glass-overlay").style.pointerEvents = "auto";
-    document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "";
+    document.getElementById("cust-phone").value = ""; 
+    document.getElementById("cust-name").value = "";
+    
     currentCart = []; 
     antreans[currentAntreanIndex] = { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "", pendingPromoCode: null };
     renderCart();
