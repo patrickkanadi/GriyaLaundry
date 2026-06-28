@@ -1437,21 +1437,22 @@ window.openShiftReport = function() {
             foodHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:4px 0;"><span>${name}</span> <strong>${qtyDisplay}x</strong></div>`;
         }
 
-        // Distribusikan data kalkulasi langsung ke elemen-elemen rincian penutupan modal di layar
-        if (document.getElementById("sd-id")) document.getElementById("sd-id").innerText = currentShiftId;
-        if (document.getElementById("sd-login")) document.getElementById("sd-login").innerText = formatTimeOnlyWIB(currentLoginTime);
-        if (document.getElementById("sd-logout")) document.getElementById("sd-logout").innerText = "Saat Ini (Aktif)";
-        if (document.getElementById("sd-omset")) document.getElementById("sd-omset").innerText = "Rp " + totalOmset.toLocaleString('id-ID');
-        if (document.getElementById("sd-cash")) document.getElementById("sd-cash").innerText = "Rp " + totalCash.toLocaleString('id-ID');
-        if (document.getElementById("sd-qris")) document.getElementById("sd-qris").innerText = "Rp " + totalQris.toLocaleString('id-ID');
-        if (document.getElementById("sd-transfer")) document.getElementById("sd-transfer").innerText = "Rp " + totalTransfer.toLocaleString('id-ID');
-        if (document.getElementById("sd-net")) document.getElementById("sd-net").innerText = "Rp " + netCash.toLocaleString('id-ID');
-        if (document.getElementById("sd-food")) document.getElementById("sd-food").innerHTML = foodHtml || "Belum ada item terjual pada shift ini";
+        // Pastikan blok ini ada di bagian akhir fungsi window.openShiftReport di App.js Anda
+if (document.getElementById("sd-id")) document.getElementById("sd-id").innerText = currentShiftId;
+if (document.getElementById("sd-login")) document.getElementById("sd-login").innerText = formatWIB(currentLoginTime);
+if (document.getElementById("sd-logout")) document.getElementById("sd-logout").innerText = "Saat Ini (Aktif)";
+if (document.getElementById("sd-cash")) document.getElementById("sd-cash").innerText = "Rp " + totalCash.toLocaleString('id-ID');
+if (document.getElementById("sd-qris")) document.getElementById("sd-qris").innerText = "Rp " + totalQris.toLocaleString('id-ID');
+if (document.getElementById("sd-transfer")) document.getElementById("sd-transfer").innerText = "Rp " + totalTransfer.toLocaleString('id-ID');
+if (document.getElementById("sd-hotel-piutang")) document.getElementById("sd-hotel-piutang").innerText = "Rp " + totalHotelPiutang.toLocaleString('id-ID');
+if (document.getElementById("sd-tamu-piutang")) document.getElementById("sd-tamu-piutang").innerText = "Rp " + totalTamuPiutang.toLocaleString('id-ID');
+if (document.getElementById("sd-expenses")) document.getElementById("sd-expenses").innerText = "Rp " + totalExpenses.toLocaleString('id-ID');
+if (document.getElementById("sd-omset")) document.getElementById("sd-omset").innerText = "Rp " + totalOmset.toLocaleString('id-ID');
+if (document.getElementById("sd-net")) document.getElementById("sd-net").innerText = "Rp " + netCash.toLocaleString('id-ID');
+if (document.getElementById("sd-food")) document.getElementById("sd-food").innerHTML = foodHtml || "Belum ada item terjual pada shift ini";
 
-        // Tampilkan modal ringkasan shift penutupan ke kasir
-        let modal = document.getElementById("shift-detail-modal");
-        if (modal) {
-            modal.classList.remove("hidden");
+let modal = document.getElementById("shift-detail-modal");
+if (modal) modal.classList.remove("hidden");
         } else {
             // Fallback jika id modal tidak ditemukan di index.html
             alert(`Ringkasan Shift Kasir:\n\nOmset: Rp ${totalOmset.toLocaleString('id-ID')}\nTunai: Rp ${totalCash.toLocaleString('id-ID')}\nQRIS: Rp ${totalQris.toLocaleString('id-ID')}\nTransfer: Rp ${totalTransfer.toLocaleString('id-ID')}\nPengeluaran Laci: Rp ${totalExpenses.toLocaleString('id-ID')}`);
