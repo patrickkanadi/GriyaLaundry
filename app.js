@@ -1176,38 +1176,56 @@ window.viewShiftDetails = function(shiftId) {
 };
 
 function renderHistoryList(type) {
-    const container = document.getElementById("history-container"); container.innerHTML = "";
+    const container = document.getElementById("history-container"); 
+    container.innerHTML = "";
+    
+    // Grab tab elements safely
+    const btnOrders = document.getElementById("btn-hist-orders");
+    const btnExpenses = document.getElementById("btn-hist-expenses");
+    const btnShifts = document.getElementById("btn-hist-shifts");
+    
+    // Reset all tab button styles to neutral white
+    if(btnOrders) { btnOrders.style.background = "#fff"; btnOrders.style.color = "#333"; btnOrders.style.borderColor = "#ddd"; }
+    if(btnExpenses) { btnExpenses.style.background = "#fff"; btnExpenses.style.color = "#333"; btnExpenses.style.borderColor = "#ddd"; }
+    if(btnShifts) { btnShifts.style.background = "#fff"; btnShifts.style.color = "#333"; btnShifts.style.borderColor = "#ddd"; }
+    
+    // Highlight the explicitly active view context dynamically
+    if (type === 'orders' && btnOrders) { btnOrders.style.background = "#2980b9"; btnOrders.style.color = "#fff"; btnOrders.style.borderColor = "#2980b9"; }
+    if (type === 'expenses' && btnExpenses) { btnExpenses.style.background = "#e67e22"; btnExpenses.style.color = "#fff"; btnExpenses.style.borderColor = "#e67e22"; }
+    if (type === 'shifts' && btnShifts) { btnShifts.style.background = "#8e44ad"; btnShifts.style.color = "#fff"; btnShifts.style.borderColor = "#8e44ad"; }
+
     if (type === 'orders') {
         db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
             const shiftOrders = e.target.result.filter(o => o.shiftId === currentShiftId).reverse(); 
-            if(shiftOrders.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada order di shift ini.</div>`;
+            if(shiftOrders.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center; font-size:13px; color:#7f8c8d;">Belum ada order di shift ini.</div>`;
             shiftOrders.forEach(o => {
                 let badge = o.orderStatus === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : o.orderStatus === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">${o.orderStatus}</span>`; 
-                let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;" title="Batalkan Transaksi">Batal</button>` : '';
-                let printBtn = `<button onclick="reprintOrder('${o.orderId}')" style="background:#3498db; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;" title="Cetak Ulang Nota">🖨️</button>`;
-                let detailBtn = `<button onclick="viewOrderDetails('${o.orderId}')" style="background:#f39c12; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;" title="Lihat Detail Rincian">👁️ Detail</button>`;
+                let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:12px;" title="Batalkan Transaksi">Batal</button>` : '';
+                let printBtn = `<button onclick="reprintOrder('${o.orderId}')" style="background:#3498db; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:12px;" title="Cetak Ulang Nota">🖨️</button>`;
+                let detailBtn = `<button onclick="viewOrderDetails('${o.orderId}')" style="background:#f39c12; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:12px;" title="Lihat Detail Rincian">👁️ Detail</button>`;
                 
-                container.innerHTML += `<div class="history-row"><div><strong>${o.customerName}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(o.timestamp)} | Rp ${o.grandTotal.toLocaleString('id-ID')}</small></div><div style="display:flex; align-items:center; gap:8px;">${badge} ${detailBtn} ${printBtn} ${btn}</div></div>`;
+                container.innerHTML += `<div class="history-row" style="font-size:13px;"><div><strong>${o.customerName}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(o.timestamp)} | Rp ${o.grandTotal.toLocaleString('id-ID')}</small></div><div style="display:flex; align-items:center; gap:8px;">${badge} ${detailBtn} ${printBtn} ${btn}</div></div>`;
             });
         };
     } else if (type === 'expenses') {
         db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = (e) => {
             const shiftExpenses = e.target.result.filter(exp => exp.shiftId === currentShiftId).reverse();
-            if(shiftExpenses.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada pengeluaran dicatat.</div>`;
+            if(shiftExpenses.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center; font-size:13px; color:#7f8c8d;">Belum ada pengeluaran dicatat.</div>`;
             shiftExpenses.forEach(exp => {
                 let badge = exp.status === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : exp.status === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">Aktif</span>`;
-                let btn = (exp.status !== "Voided" && exp.status !== "Void Pending") ? `<button onclick="requestVoid('expenses', '${exp.expenseId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Batal</button>` : '';
-                container.innerHTML += `<div class="history-row"><div><strong>${exp.category}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(exp.timestamp)} | Rp ${exp.amount.toLocaleString('id-ID')}</small><br><small>${exp.description}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
+                let btn = (exp.status !== "Voided" && exp.status !== "Void Pending") ? `<button onclick="requestVoid('expenses', '${exp.expenseId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:12px;">Batal</button>` : '';
+                container.innerHTML += `<div class="history-row" style="font-size:13px;"><div><strong>${exp.category}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(exp.timestamp)} | Rp ${exp.amount.toLocaleString('id-ID')}</small><br><small>${exp.description}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
             });
         };
     } else if (type === 'shifts') {
         db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").getAll().onsuccess = (e) => {
-            const shifts = e.target.result.filter(s => s.cashier === currentCashier).reverse();
-            if(shifts.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada histori shift Anda di memori lokal.</div>`;
+            // FIXED: Enforce a strict whitespace-trimmed, case-insensitive string comparison gate
+            const shifts = e.target.result.filter(s => s.cashier && currentCashier && s.cashier.trim().toLowerCase() === currentCashier.trim().toLowerCase()).reverse();
+            if(shifts.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center; font-size:13px; color:#7f8c8d;">Belum ada histori shift Anda di memori lokal.</div>`;
             shifts.forEach(s => {
-                let detailBtn = `<button onclick="viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold; height:fit-content; margin-right:5px;">👁️ Detail</button>`;
-                let printBtn = `<button onclick="printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold; height:fit-content;">🖨️ Cetak</button>`;
-                container.innerHTML += `<div class="history-row" style="align-items:flex-start;"><div><strong>Shift: ${s.shiftId}</strong><br><small style="color:#7f8c8d;">Kasir: ${s.cashier} | Keluar: ${formatWIB(s.logoutTime)}</small></div><div style="display:flex; text-align:right; align-items:center;"><div><strong style="margin-right:15px;">Omset: Rp ${s.totalOmset.toLocaleString('id-ID')}</strong></div> ${detailBtn} ${printBtn}</div></div>`;
+                let detailBtn = `<button onclick="viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px;">👁️ Detail</button>`;
+                let printBtn = `<button onclick="printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px;">🖨️ Cetak</button>`;
+                container.innerHTML += `<div class="history-row" style="align-items:flex-start; font-size:13px;"><div><strong>Shift: ${s.shiftId}</strong><br><small style="color:#7f8c8d;">Kasir: ${s.cashier} | Keluar: ${formatWIB(s.logoutTime)}</small></div><div style="display:flex; text-align:right; align-items:center; gap:4px;"><div><strong style="margin-right:10px;">Omset: Rp ${s.totalOmset.toLocaleString('id-ID')}</strong></div> ${detailBtn} ${printBtn}</div></div>`;
             });
         };
     }
