@@ -912,14 +912,34 @@ async function finalizeOrder(shouldPrint) {
         }
     });
 
+    // --- FIXED: SMART DYNAMIC VALIDATION GATE ---
     if (activeCustomerProfile) {
-        let availableFreePoints = activeCustomerProfile.freeCoins || 0;
-        if (redeemedLoyaltyCoins > availableFreePoints) {
-            return alert(`⚠️ SINKRONISASI PONT GA KLAIM GA VALID:\nPelanggan hanya memiliki jatah ${availableFreePoints} koin gratis, tetapi input rincian mencoba mengklaim ${redeemedLoyaltyCoins} koin.`);
+        // Recalculate dynamic limit specifically for the strict verification check
+        let cartCoinsForValidation = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
+        let tempAvailFree = activeCustomerProfile.freeCoins || 0;
+        let tempPts = activeCustomerProfile.points || 0;
+        let trueMaxRedeemable = 0;
+        
+        for (let i = 0; i < cartCoinsForValidation; i++) {
+            if (tempAvailFree > 0) { 
+                trueMaxRedeemable++; 
+                tempAvailFree--; 
+            } else { 
+                tempPts++; 
+                if (tempPts >= window.loyaltyTarget) { 
+                    tempAvailFree++; 
+                    tempPts -= window.loyaltyTarget; 
+                } 
+            }
+        }
+
+        if (redeemedLoyaltyCoins > trueMaxRedeemable) {
+            return alert(`⚠️ KLAIM KOIN TIDAK VALID:\nPelanggan maksimal hanya bisa klaim ${trueMaxRedeemable} koin gratis (termasuk koin bonus dari nota ini).`);
         }
     } else if (redeemedLoyaltyCoins > 0) {
         return alert("⚠️ PEMBAYARAN DITOLAK:\nPelanggan umum/Walk-in tidak memiliki akun loyalty poin.");
     }
+    // --- END SMART GATE ---
 
     let payMethods = []; 
     if(cash > 0) payMethods.push("Tunai"); 
