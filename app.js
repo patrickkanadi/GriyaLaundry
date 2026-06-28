@@ -1351,26 +1351,112 @@ function renderHistoryList(type) {
     }
 }
 
-// FUNGSI BARU: Menghubungkan tombol Shift di HTML untuk langsung membuka rincian shift online kasir
+// PERBAIKAN: Mengubah tombol Shift untuk menampilkan ringkasan shift berjalan (bukan histori)
 window.openShiftReport = function() {
-    let historyModal = document.getElementById("history-modal");
-    if (historyModal) {
-        // Tampilkan modal riwayat utama
-        historyModal.classList.remove("hidden");
-        
-        // Panggil pencetakan otomatis list 5-6 histori shift kasir yang aktif
-        renderHistoryList('shifts');
-        
-        // Opsional: Menyesuaikan visual tab aktif di dalam modal jika ada elemen kustom toggle tab
-        let tabOrders = document.getElementById("tab-hist-orders");
-        let tabShifts = document.getElementById("tab-hist-shifts");
-        if (tabOrders && tabShifts) {
-            tabOrders.classList.remove("active");
-            tabShifts.classList.add("active");
-        }
-    } else {
-        console.warn("Peringatan: Elemen id 'history-modal' tidak ditemukan pada index.html Anda!");
+    if (!db || !currentShiftId) {
+        alert("⚠️ Anda belum masuk shift atau database belum siap.");
+        return;
     }
+
+    // Membuka koneksi baca ke store orders dan expenses
+    let tx = db.transaction(["orders", "expenses"], "readonly");
+    let ordersStore = tx.objectStore("orders");
+    let expensesStore = tx.objectStore("expenses");
+
+    let activeOrders = [];
+    let activeExpenses = [];
+
+    ordersStore.getAll().onsuccess = (ev) => { activeOrders = ev.target.result; };
+    expensesStore.getAll().onsuccess = (ev) => { activeExpenses = ev.target.result; };
+
+    // Setelah pengambilan data lokal selesai, lakukan kalkulasi real-time
+    tx.oncomplete = () => {
+        let shiftOrders = activeOrders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
+        let shiftExpenses = activeExpenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
+
+        let totalCustomers = 0;
+        let totalOrders = 0;
+        let totalOmset = 0;
+        let totalCash = 0;
+        let totalQris = 0;
+        let totalTransfer = 0;
+        let totalHotelPiutang = 0;
+        let totalTamuPiutang = 0;
+        let totalFree = 0;
+        let totalExpenses = 0;
+        let foodSummary = {};
+
+        // Iterasi kalkulasi breakdown pendapatan nota
+        shiftOrders.forEach(o => {
+            totalOrders++;
+            if (o.customerPhone && o.customerPhone !== "-") totalCustomers++;
+            totalOmset += (o.grandTotal || 0);
+            totalCash += (o.cashAmount || 0);
+            totalQris += (o.qrisAmount || 0);
+            totalTransfer += (o.transferAmount || 0);
+            totalHotelPiutang += (o.hotelPiutangAmount || 0);
+            totalTamuPiutang += (o.tamuPiutangAmount || 0);
+            totalFree += (o.freeAmount || 0);
+
+            // Rekap item/layanan laundry yang terjual
+            if (o.items) {
+                o.items.forEach(i => {
+                    if (!foodSummary[i.name]) foodSummary[i.name] = 0;
+                    foodSummary[i.name] += i.qty;
+                });
+            }
+        });
+
+        // Iterasi rekap pengeluaran laci
+        shiftExpenses.forEach(exp => { 
+            tExpense += (exp.amount || 0); 
+        });
+        
+        let netCash = Math.max(0, tCash - totalExpenses);
+
+        // Kunci Data: Simpan hasil kalkulasi ke global memory agar dibaca sinkron oleh tombol cetak printer
+        window.currentShiftData = {
+            totalCustomers: totalCustomers,
+            totalOrders: totalOrders,
+            totalOmset: totalOmset,
+            totalCash: totalCash,
+            totalQris: totalQris,
+            totalTransfer: totalTransfer,
+            totalHotelPiutang: totalHotelPiutang,
+            totalTamuPiutang: totalTamuPiutang,
+            totalFree: totalFree,
+            totalExpenses: totalExpenses,
+            net: netCash,
+            foodSummary: foodSummary
+        };
+
+        // Bangun elemen HTML daftar ringkasan item terjual
+        let foodHtml = "";
+        for (const [name, qty] of Object.entries(foodSummary)) {
+            let qtyDisplay = qty % 1 !== 0 ? Number(qty).toFixed(2) : qty;
+            foodHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:4px 0;"><span>${name}</span> <strong>${qtyDisplay}x</strong></div>`;
+        }
+
+        // Distribusikan data kalkulasi langsung ke elemen-elemen rincian penutupan modal di layar
+        if (document.getElementById("sd-id")) document.getElementById("sd-id").innerText = currentShiftId;
+        if (document.getElementById("sd-login")) document.getElementById("sd-login").innerText = formatTimeOnlyWIB(currentLoginTime);
+        if (document.getElementById("sd-logout")) document.getElementById("sd-logout").innerText = "Saat Ini (Aktif)";
+        if (document.getElementById("sd-omset")) document.getElementById("sd-omset").innerText = "Rp " + totalOmset.toLocaleString('id-ID');
+        if (document.getElementById("sd-cash")) document.getElementById("sd-cash").innerText = "Rp " + totalCash.toLocaleString('id-ID');
+        if (document.getElementById("sd-qris")) document.getElementById("sd-qris").innerText = "Rp " + totalQris.toLocaleString('id-ID');
+        if (document.getElementById("sd-transfer")) document.getElementById("sd-transfer").innerText = "Rp " + totalTransfer.toLocaleString('id-ID');
+        if (document.getElementById("sd-net")) document.getElementById("sd-net").innerText = "Rp " + netCash.toLocaleString('id-ID');
+        if (document.getElementById("sd-food")) document.getElementById("sd-food").innerHTML = foodHtml || "Belum ada item terjual pada shift ini";
+
+        // Tampilkan modal ringkasan shift penutupan ke kasir
+        let modal = document.getElementById("shift-detail-modal");
+        if (modal) {
+            modal.classList.remove("hidden");
+        } else {
+            // Fallback jika id modal tidak ditemukan di index.html
+            alert(`Ringkasan Shift Kasir:\n\nOmset: Rp ${totalOmset.toLocaleString('id-ID')}\nTunai: Rp ${totalCash.toLocaleString('id-ID')}\nQRIS: Rp ${totalQris.toLocaleString('id-ID')}\nTransfer: Rp ${totalTransfer.toLocaleString('id-ID')}\nPengeluaran Laci: Rp ${totalExpenses.toLocaleString('id-ID')}`);
+        }
+    };
 };
 
 // BUG FIX 3: Pengubahan ambang batas kedaluwarsa idle otomatis menjadi 4 jam (bebas logout jika baru 1 jam)
