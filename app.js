@@ -396,35 +396,10 @@ function renderCart() {
     window.cartSubtotal = total; window.cartGrandTotal = total;
 }
 
-// ==========================================
-// PENGATURAN LOGIK INTEGRASI UNDIAN (BARU)
-// ==========================================
-window.togglePromoCheckbox = function(chk) {
-    let parent = chk.closest('div'); let hiddenInput = parent.querySelector('.promo-input');
-    if (chk.checked) {
-        let itemName = chk.getAttribute('data-item');
-        // ATURAN BARU: Wajib mengajukan pertanyaan konfirmasi kepada pembeli secara tertulis
-        if (confirm(`Apakah pelanggan setuju untuk memakai kupon jatah hadiah "${itemName}" pada nota belanja ini?`)) {
-            hiddenInput.value = chk.getAttribute('data-max');
-        } else { chk.checked = false; hiddenInput.value = 0; }
-    } else { hiddenInput.value = 0; }
-    applyPromo();
-};
-
-window.toggleLoyaltyCoins = function(chk, maxVal) {
-    let parent = chk.closest('div'); let hiddenInput = parent.querySelector('.promo-input');
-    if (chk.checked) {
-        if (confirm(`Gunakan pemotongan koin gratis (${maxVal} item) untuk order kasir ini?`)) {
-            hiddenInput.value = maxVal;
-        } else { chk.checked = false; hiddenInput.value = 0; }
-    } else { hiddenInput.value = 0; }
-    applyPromo();
-};
-
 function reviewOrder() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
-    // CRITICAL FIX: Reset tuntas seluruh sisa input form ke angka mutlak 0 saat modal dibuka kembali
+    // PERBAIKAN PERHITUNGAN MACET: Reset tuntas seluruh form input pembayaran ke angka 0 mutlak
     document.getElementById("pay-cash").value = 0; 
     document.getElementById("pay-qris").value = 0; 
     document.getElementById("pay-transfer").value = 0;
@@ -442,14 +417,13 @@ function reviewOrder() {
         
         for (let i = 0; i < cartCoins; i++) {
             if (availableFree > 0) { maxRedeemable++; availableFree--; } 
-            else { tempPoints++; if (tempPoints >= window.loyaltyTarget) { availableFree++; tempPoints -= window.loyaltyTarget; } }
+            else { tempPoints++; if (tempPoints >= window.loyaltyTarget) { maxRedeemable++; tempPoints -= window.loyaltyTarget; } }
         }
 
         if (maxRedeemable > 0) {
             promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#fef9e7; padding:10px; border-radius:6px; border:1px solid #f9e79f;">
-               <div><strong style="color:#856404;">🎁 Koin Gratis (Loyalty)</strong><br><small>Tersedia klaim: ${maxRedeemable}</small></div>
-               <label style="font-weight:bold; color:#b7950b;"><input type="checkbox" onchange="window.toggleLoyaltyCoins(this, ${maxRedeemable})"> Gunakan</label>
-               <input type="hidden" class="promo-input" data-type="loyalty" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${maxRedeemable}">
+               <div><strong style="color:#856404;">🎁 Koin Gratis (Loyalty)</strong><br><small style="color:#7d6608;">Maks klaim: ${maxRedeemable} (Tersedia: ${activeCustomerProfile.freeCoins})</small></div>
+               <input type="number" class="promo-input" data-type="loyalty" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${maxRedeemable}" min="0" oninput="applyPromo()" style="width:70px; padding:6px; font-weight:bold; text-align:center; border:1px solid #d4ac0d; border-radius:4px;">
            </div>`;
         }
 
@@ -460,10 +434,10 @@ function reviewOrder() {
                     if (cartItem) {
                         let possibleClaim = Math.min(qtyOwned, Math.floor(cartItem.qty));
                         if (possibleClaim > 0) {
+                            // PERBAIKAN FITUR UNDIAN: Menggunakan input spinner (kolom angka kuantitas) tanpa pop-up untuk mendukung klaim multi-qty sekaligus
                             promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#f9ebff; padding:10px; border-radius:6px; border:1px solid #d6b4fc;">
-                               <div><strong style="color:#8e44ad;">🎫 Undian: ${rewardName}</strong><br><small>Tersedia: ${qtyOwned} item</small></div>
-                               <label style="font-weight:bold; color:#8e44ad; cursor:pointer;"><input type="checkbox" data-item="${rewardName}" data-max="${possibleClaim}" onchange="window.togglePromoCheckbox(this)"> Gunakan</label>
-                               <input type="hidden" class="promo-input" data-type="stored" data-item="${rewardName}" data-price="${cartItem.originalPrice}" value="0" max="${possibleClaim}">
+                               <div><strong style="color:#8e44ad;">🎫 Undian: ${rewardName}</strong><br><small style="color:#6c3483;">Maks guna: ${possibleClaim} (Total dimiliki: ${qtyOwned})</small></div>
+                               <input type="number" class="promo-input" data-type="stored" data-item="${rewardName}" data-price="${cartItem.originalPrice}" value="0" max="${possibleClaim}" min="0" oninput="applyPromo()" style="width:70px; padding:6px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px;">
                            </div>`;
                         }
                     }
@@ -474,12 +448,9 @@ function reviewOrder() {
 
     let promoContainer = document.getElementById("dynamic-promo-section") || document.getElementById("review-promo-section");
     if (promoContainer) {
-        if (promoHtml) {
-            promoContainer.innerHTML = promoHtml; promoContainer.classList.remove("hidden");
-        } else {
-            promoContainer.innerHTML = ""; // FIX MUTLAK: Mengosongkan penuh isi HTML kontainer sisa agar input lama terhapus total
-            promoContainer.classList.add("hidden");
-        }
+        promoContainer.innerHTML = promoHtml;
+        if (promoHtml) promoContainer.classList.remove("hidden");
+        else promoContainer.classList.add("hidden");
     }
  
     document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
@@ -494,6 +465,7 @@ window.applyPromo = function() {
     document.querySelectorAll('.promo-input').forEach(input => {
         let max = Number(input.max) || 0; let val = Number(input.value) || 0;
         if (val > max) { val = max; input.value = val; }
+        if (val < 0) { val = 0; input.value = 0; }
         totalFreeValue += (val * (Number(input.getAttribute('data-price')) || 0));
     });
  
@@ -503,7 +475,7 @@ window.applyPromo = function() {
     let hp = Number(document.getElementById("pay-hotel-piutang").value) || 0; 
     let tp = Number(document.getElementById("pay-tamu-piutang").value) || 0;
     
-    // FIX KALKULASI BERSIH: Potong subtotal dengan jatah diskon undian/loyalty gratis yang dicentang
+    // FORMULA TOTAL BERSIH: Mengurangi subtotal kasir dengan total rupiah diskon undian/loyalty gratis yang dimasukkan
     window.cartGrandTotal = Math.max(0, window.cartSubtotal - totalFreeValue);
     document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
     
@@ -546,7 +518,7 @@ async function finalizeOrder(shouldPrint) {
         activeCustomerProfile.spent += window.cartGrandTotal;
         activeCustomerProfile.freeCoins = Math.max(0, (activeCustomerProfile.freeCoins || 0) - redeemedLoyaltyCoins);
         
-        // HAPUS DARI MEMORI: Eksekusi pengurangan jatah hadiah dan bersihkan total jika kuota bernilai 0
+        // PENGURANGAN DAN PEMBERSIHAN MEMORI LOKAL: Mengurangi sisa tiket undian sebanyak kuantitas yang dipilih
         redeemedList.forEach(rp => {
             if (rp.source === 'stored' && activeCustomerProfile.storedRewards) {
                 if (activeCustomerProfile.storedRewards[rp.item] !== undefined) {
@@ -577,7 +549,7 @@ async function finalizeOrder(shouldPrint) {
 
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     if (shouldPrint) await buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, "Split", newPoints, newFree);
-    document.getElementById("review-modal").classList.add("hidden"); lockMenu(); runBackgroundSync();
+    document.getElementById("review-modal").classList.add("hidden"); lockMenu(); renderProductGrid(); runBackgroundSync();
 }
 
 function saveMemberToDB(profile) {
@@ -586,9 +558,6 @@ function saveMemberToDB(profile) {
     db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(profile);
 }
 
-// ==========================================
-// MODUL LAYOUT OPERASIONAL SHIFT TERBARU
-// ==========================================
 window.openShiftReport = function() {
     if (!db || !currentShiftId) return alert("Anda belum membuka shift kasir.");
     let tx = db.transaction(["orders", "expenses"], "readonly");
