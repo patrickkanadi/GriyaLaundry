@@ -348,9 +348,10 @@ window.switchAntrean = function(index) {
         let todayStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, '0') + "-" + String(d.getDate()).padStart(2, '0');
         const lotteryBtn = document.getElementById("btn-trigger-lottery");
         if (lotteryBtn) {
+            // FIXED: Isolated lottery button constraints from loyalty tracking logs on queue tab swap loops
             if (activeCustomerProfile && (activeCustomerProfile.lastClaimDate === todayStr || activeCustomerProfile.isNoWA)) {
                 lotteryBtn.disabled = true;
-                lotteryBtn.innerText = "🎫 Sudah Klaim / Tidak Valid";
+                lotteryBtn.innerText = "🎫 Sudah Klaim Hari Ini";
             } else {
                 lotteryBtn.disabled = false;
                 lotteryBtn.innerText = "🎫 Pilih Undian";
@@ -412,6 +413,7 @@ function proceedToUnlock(phone, name) {
     const lotteryBtn = document.getElementById("btn-trigger-lottery");
 
     if (lotteryBtn) {
+        // FIXED: Allows loyalty claimers to spin by relying on strict text parsing format
         if (activeCustomerProfile && (activeCustomerProfile.lastClaimDate === todayStr || activeCustomerProfile.isNoWA)) {
             lotteryBtn.disabled = true;
             lotteryBtn.innerText = "🎫 Sudah Klaim Hari Ini";
@@ -667,7 +669,8 @@ async function submitLotteryCode() {
     let hasPending = await new Promise(resolve => {
         db.transaction(["promo_claims"], "readonly").objectStore("promo_claims").getAll().onsuccess = e => {
             let claims = e.target.result;
-            let found = claims.some(c => c.phone === activeCustomerProfile.phone && String(c.timestamp).startsWith(todayStr));
+            // FIXED: Only block if the type is explicitly an undian spin ("Promo Code")
+            let found = claims.some(c => c.phone === activeCustomerProfile.phone && String(c.timestamp).startsWith(todayStr) && c.code !== "Loyalty Claim");
             resolve(found);
         };
     });
@@ -844,11 +847,20 @@ window.calculateRemaining = function() {
 function closeReview() { document.getElementById("review-modal").classList.add("hidden"); }
 
 async function finalizeOrder(shouldPrint) {
-    const cash = Number(document.getElementById("pay-cash").value) || 0; const qris = Number(document.getElementById("pay-qris").value) || 0; const transfer = Number(document.getElementById("pay-transfer").value) || 0; const hotelPiutang = Number(document.getElementById("pay-hotel-piutang").value) || 0; const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
-    let internalCoinBox = document.getElementById("internal-coins"); const internalCoins = internalCoinBox ? (Number(internalCoinBox.value) || 0) : 0;
-    const totalPiutang = hotelPiutang + tamuPiutang; const totalAccounted = cash + qris + transfer + free + totalPiutang; const remaining = window.cartGrandTotal - totalAccounted;
+    const cash = Number(document.getElementById("pay-cash").value) || 0; 
+    const qris = Number(document.getElementById("pay-qris").value) || 0; 
+    const transfer = Number(document.getElementById("pay-transfer").value) || 0; 
+    const hotelPiutang = Number(document.getElementById("pay-hotel-piutang").value) || 0; 
+    const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; 
+    const free = Number(document.getElementById("pay-free").value) || 0;
+    let internalCoinBox = document.getElementById("internal-coins"); 
+    const internalCoins = internalCoinBox ? (Number(internalCoinBox.value) || 0) : 0;
+    const totalPiutang = hotelPiutang + tamuPiutang; 
+    const totalAccounted = cash + qris + transfer + free + totalPiutang; 
+    const remaining = window.cartGrandTotal - totalAccounted;
     const requiresProcessing = currentCart.some(i => String(i.workflow).toUpperCase() === "TICKET");
-    let custPhoneRaw = document.getElementById("cust-phone").value.trim(); let custPhone = custPhoneRaw || "-";
+    let custPhoneRaw = document.getElementById("cust-phone").value.trim(); 
+    let custPhone = custPhoneRaw || "-";
     const custName = document.getElementById("cust-name").value.trim() || "Walk-in";
     const hasHotelItem = currentCart.some(i => String(i.category).toLowerCase().includes("hotel"));
 
@@ -857,34 +869,66 @@ async function finalizeOrder(shouldPrint) {
     if (totalPiutang > 0 && !hasHotelItem) return alert("⚠️ PEMBAYARAN DITOLAK:\nPiutang HANYA berlaku untuk item dalam kategori Hotel.");
     if (totalPiutang > 0 && (!custPhone || custPhone === "-")) return alert("⚠️ PEMBAYARAN DITOLAK:\nAnda WAJIB memasukkan nomor pelanggan untuk mencatat Piutang.");
 
-    let payMethods = []; if(cash > 0) payMethods.push("Tunai"); if(qris > 0) payMethods.push("QRIS"); if(transfer > 0) payMethods.push("Trf.Bank"); if(hotelPiutang > 0) payMethods.push("Piutang(B2B)"); if(tamuPiutang > 0) payMethods.push("Piutang(Tamu)"); if(free > 0) payMethods.push("Gratis");
-    const payString = payMethods.length > 0 ? payMethods.join("+") : "Belum Bayar";
-    let status = "Completed"; if (totalPiutang > 0) status = "Pending Debt"; else if (requiresProcessing) status = "Processing";
+    let redeemedList = []; 
+    let redeemedLoyaltyCoins = 0;
+    let redeemedStoredVouchers = 0;
 
-    let redeemedList = []; let redeemedLoyaltyCoins = 0;
+    // Read values from promo inputs safely
     document.querySelectorAll('.promo-input').forEach(input => {
         let val = Number(input.value) || 0;
         if (val > 0) {
             let src = input.getAttribute('data-type');
             redeemedList.push({ source: src, item: input.getAttribute('data-item'), qty: val, price: Number(input.getAttribute('data-price')) });
             if (src === 'loyalty') redeemedLoyaltyCoins += val;
+            if (src === 'stored') redeemedStoredVouchers += val;
         }
     });
 
+    // --- CRITICAL BUG FIX: STRICT VERIFICATION GATE FOR POINTS BALANCE ---
+    if (activeCustomerProfile) {
+        let availableFreePoints = activeCustomerProfile.freeCoins || 0;
+        if (redeemedLoyaltyCoins > availableFreePoints) {
+            return alert(`⚠️ SINKRONISASI PONT GA KLAIM GA VALID:\nPelanggan hanya memiliki jatah ${availableFreePoints} koin gratis, tetapi input rincian mencoba mengklaim ${redeemedLoyaltyCoins} koin.`);
+        }
+    } else if (redeemedLoyaltyCoins > 0) {
+        return alert("⚠️ PEMBAYARAN DITOLAK:\nPelanggan umum/Walk-in tidak memiliki akun loyalty poin.");
+    }
+    // --- END BUG FIX GATE ---
+
+    let payMethods = []; 
+    if(cash > 0) payMethods.push("Tunai"); 
+    if(qris > 0) payMethods.push("QRIS"); 
+    if(transfer > 0) payMethods.push("Trf.Bank"); 
+    if(hotelPiutang > 0) payMethods.push("Piutang(B2B)"); 
+    if(tamuPiutang > 0) payMethods.push("Piutang(Tamu)"); 
+    if(free > 0) payMethods.push("Gratis");
+    
+    const payString = payMethods.length > 0 ? payMethods.join("+") : "Belum Bayar";
+    let status = "Completed"; 
+    if (totalPiutang > 0) status = "Pending Debt"; 
+    else if (requiresProcessing) status = "Processing";
+
     let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
     let coinsEarned = Math.max(0, totalCoinsInCart - redeemedLoyaltyCoins);
-    let newPoints = 0; let newFree = 0;
+    let newPoints = 0; 
+    let newFree = 0;
     
     if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {}, lastClaimDate: "", isNoWA: custPhone.startsWith("999") };
         activeCustomerProfile.spent += window.cartGrandTotal;
-        let currentPoints = activeCustomerProfile.points || 0; let currentFree = activeCustomerProfile.freeCoins || 0;
+        let currentPoints = activeCustomerProfile.points || 0; 
+        let currentFree = activeCustomerProfile.freeCoins || 0;
         
-        currentFree -= redeemedLoyaltyCoins; currentPoints += coinsEarned;
-        let newlyEarnedFree = Math.floor(currentPoints / window.loyaltyTarget); currentPoints = currentPoints % window.loyaltyTarget; currentFree += newlyEarnedFree;
-        newPoints = currentPoints; newFree = currentFree;
+        currentFree -= redeemedLoyaltyCoins; 
+        currentPoints += coinsEarned;
+        let newlyEarnedFree = Math.floor(currentPoints / window.loyaltyTarget); 
+        currentPoints = currentPoints % window.loyaltyTarget; 
+        currentFree += newlyEarnedFree;
+        newPoints = currentPoints; 
+        newFree = currentFree;
         
-        activeCustomerProfile.points = currentPoints; activeCustomerProfile.freeCoins = currentFree;
+        activeCustomerProfile.points = currentPoints; 
+        activeCustomerProfile.freeCoins = currentFree;
         redeemedList.forEach(rp => { if(rp.source === 'stored' && activeCustomerProfile.storedRewards[rp.item]) activeCustomerProfile.storedRewards[rp.item] -= rp.qty; });
         
         let pendingPromoCode = antreans[currentAntreanIndex].pendingPromoCode;
@@ -915,7 +959,8 @@ async function finalizeOrder(shouldPrint) {
         coinsEarned: coinsEarned, redeemedPromos: redeemedList, expectedCoins: expectedCoinsTotal, internalCoinsUsed: internalCoins, syncStatus: "Pending" 
     };
 
-    const txMenu = db.transaction(["menu"], "readwrite"); const storeMenu = txMenu.objectStore("menu");
+    const txMenu = db.transaction(["menu"], "readwrite"); 
+    const storeMenu = txMenu.objectStore("menu");
     currentCart.forEach(cartItem => {
         storeMenu.get(cartItem.itemId).onsuccess = (ev) => {
             const menuItem = ev.target.result;
