@@ -823,19 +823,231 @@ function reviewOrder() {
     applyPromo(); document.getElementById("review-modal").classList.remove("hidden");
 }
 
+
+
+
+On the end shift report, it's not makanan terjual, but item terjual. 
+
+To address your requests, here are the updated code blocks for both index.html and app.js.
+
+The Review Payment Modal now features a live reactive loyalty projection box that calculates point impacts in real time as promos are modified, the Shift History Logs are streamlined to display up to the last 8 entries for the logged-in cashier, and the end-of-shift report header has been corrected.
+
+## 1. Updates for index.html
+Find the area containing the <!-- REVIEW MODAL --> and <!-- SHIFT REPORT MODAL --> near the bottom of your file and replace it with this updated, labeled structure:
+
+HTML
+    <!-- REVIEW MODAL -->
+    <div id="review-modal" class="modal-overlay hidden">
+        <div class="modal-content modal-large">
+            <h2 style="margin-top:0; border-bottom:2px solid #eee; padding-bottom:10px;">🧾 Rincian Pembayaran</h2>
+            
+            <div id="dynamic-promo-section" class="hidden" style="background:#fff3cd; border:1px solid #ffeeba; padding:15px; border-radius:8px; margin-bottom:15px; display:flex; flex-direction:column; gap:10px;"></div>
+            
+            <div style="background:#f9f9f9; padding:15px; border-radius:8px; border:1px solid #eee; margin-bottom:15px;">
+                <div style="display:flex; justify-content:space-between; font-size:16px; color:#7f8c8d; margin-bottom:5px;"><span>Subtotal:</span> <span id="review-subtotal">Rp 0</span></div>
+                <div style="display:flex; justify-content:space-between; font-size:24px; color:#2c3e50; font-weight:bold;"><span>Total Akhir:</span> <span id="review-grandtotal">Rp 0</span></div>
+                <!-- LIVE REAL-TIME DYNAMIC LOYALTY CALCULATION CONTAINER -->
+                <div id="live-loyalty-preview" class="hidden" style="margin-top: 10px;"></div>
+            </div>
+            
+            <p style="font-weight:bold; color:#e67e22; margin-bottom:5px;">💵 Metode Pembayaran (Wajib Lunas)</p>
+            <div class="split-pay-grid">
+                <div class="form-box" style="margin-bottom:0;"><label>Tunai / Cash (Rp)</label><input type="number" id="pay-cash" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
+                <div class="form-box" style="margin-bottom:0;"><label>QRIS (Rp)</label><input type="number" id="pay-qris" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
+                <div class="form-box" style="margin-bottom:0;"><label>Transfer Bank (Rp)</label><input type="number" id="pay-transfer" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
+                <div class="form-box" style="margin-bottom:0;"><label style="color:#27ae60;">Gratis / Promo Diskon (Rp)</label><input type="number" id="pay-free" value="0" onclick="this.select()" oninput="calculateRemaining()" style="background:#e8f4f8; font-weight:bold;"></div>
+                <div class="form-box" style="margin-bottom:0; background:#f8d7da; padding:5px; border-radius:6px;"><label style="color:#721c24;">Piutang: B2B Hotel (Rp)</label><input type="number" id="pay-hotel-piutang" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
+                <div class="form-box" style="margin-bottom:0; background:#f8d7da; padding:5px; border-radius:6px;"><label style="color:#721c24;">Piutang: Tamu Kamar (Rp)</label><input type="number" id="pay-tamu-piutang" value="0" onclick="this.select()" oninput="calculateRemaining()"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:18px; color:#c0392b; font-weight:bold; margin-bottom: 20px; padding:10px; background:#fdf2e9; border-radius:8px;"><span>Sisa Kurang Bayar:</span> <span id="review-remaining">Rp 0</span></div>
+
+            <div style="background:#e8f4f8; padding:15px; border-radius:8px; margin-bottom:15px;">
+                <label style="font-weight:bold; color:#2980b9;">⚙️ Koin Fisik Dipakai (Layanan Hotel / Full Service)</label>
+                <div style="display:flex; gap:10px; margin-top:5px;">
+                    <input type="number" id="internal-coins" value="0" min="0" style="width:100%; padding:10px; font-weight:bold; font-size:16px; border:2px solid #bdc3c7; border-radius:6px;">
+                </div>
+                <small style="color:#7f8c8d;">Isi jika Anda memasukkan koin fisik ke mesin khusus untuk nota ini. (Otomatis potong stok fisik).</small>
+            </div>
+            
+            <div style="display: flex; gap: 10px; flex-wrap:wrap;">
+                <button onclick="closeReview()" style="flex:1; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold;">Kembali</button>
+                <button onclick="finalizeOrder(false)" style="flex:1; padding:15px; background:#f39c12; color:white; border:none; border-radius:8px; font-weight:bold;">Simpan (Tanpa Struk)</button>
+                <button onclick="finalizeOrder(true)" style="flex:2; padding:15px; background:#27ae60; color:white; border:none; border-radius:8px; font-weight:bold;">🖨️ Simpan & Cetak</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTLEMENT MODAL -->
+    <div id="settlement-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 style="margin-top:0;">💳 Pelunasan Pengambilan</h2>
+            <div style="font-size:24px; font-weight:bold; color:#e74c3c; margin-bottom:15px; text-align:center;">Sisa Tagihan: <span id="settle-amount">Rp 0</span></div>
+            <div class="split-pay-grid">
+                <div class="form-box" style="margin-bottom:0;"><label>Tunai</label><input type="number" id="settle-cash" value="0" onclick="this.select()"></div>
+                <div class="form-box" style="margin-bottom:0;"><label>QRIS</label><input type="number" id="settle-qris" value="0" onclick="this.select()"></div>
+                <div class="form-box" style="margin-bottom:0; grid-column: span 2;"><label>Transfer Bank</label><input type="number" id="settle-transfer" value="0" onclick="this.select()"></div>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button onclick="document.getElementById('settlement-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; font-weight:bold; border:none;">Batal</button>
+                <button onclick="confirmSettlement()" style="flex:2; padding:15px; border-radius:8px; font-weight:bold; border:none; background:#27ae60; color:white;">Bayar & Selesai</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EXPENSE MODAL -->
+    <div id="expense-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 style="margin-top:0;">💸 Catat Pengeluaran Laci</h2>
+            <div class="form-box"><label>Jumlah (Rp)</label><input type="number" id="exp-amount"></div>
+            <div class="form-box"><label>Kategori</label><input type="text" id="exp-category" list="expense-category-list" autocomplete="off"><datalist id="expense-category-list"></datalist></div>
+            <div class="form-box"><label>Keterangan Lengkap</label><input type="text" id="exp-desc"></div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button onclick="document.getElementById('expense-modal').classList.add('hidden')" style="flex:1; padding:15px; background:#ecf0f1; border:none; border-radius:8px; font-weight:bold;">Batal</button>
+                <button onclick="saveExpense()" style="flex:1; padding:15px; background:#e67e22; color:white; border:none; border-radius:8px; font-weight:bold;">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HISTORY MODAL -->
+    <div id="history-modal" class="modal-overlay hidden">
+        <div class="modal-content modal-large">
+            <h2 style="margin-top:0;">📋 Riwayat Sistem</h2>
+            <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap;">
+                <button id="btn-hist-orders" onclick="renderHistoryList('orders')" style="flex:1; padding:10px; cursor:pointer; border:1px solid #ddd; border-radius:4px; background:#fff; font-weight:bold; font-size:13px; color:#333;">🛍️ Transaksi</button>
+                <button id="btn-hist-expenses" onclick="renderHistoryList('expenses')" style="flex:1; padding:10px; cursor:pointer; border:1px solid #ddd; border-radius:4px; background:#fff; font-weight:bold; font-size:13px; color:#333;">💸 Pengeluaran</button>
+                <button id="btn-hist-shifts" onclick="renderHistoryList('shifts')" style="flex:1; padding:10px; cursor:pointer; border:1px solid #ddd; border-radius:4px; background:#fff; font-weight:bold; font-size:13px; color:#333;">📊 Riwayat Shift</button>
+            </div>
+            <div class="history-list" id="history-container" style="max-height:400px; overflow-y:auto; background:#f9f9f9;"></div>
+            <button onclick="document.getElementById('history-modal').classList.add('hidden')" style="width:100%; padding:15px; margin-top:15px; background:#ecf0f1; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Tutup</button>
+        </div>
+    </div>
+
+    <!-- VOID ADMIN MODAL -->
+    <div id="admin-void-modal" class="modal-overlay hidden"><div class="modal-content" style="text-align:center;"><h2 style="margin-top:0; color:#e74c3c;">⚠️ Pembatalan Transaksi</h2><input type="password" id="admin-void-pin" placeholder="PIN Admin" inputmode="numeric" style="font-size:24px; text-align:center; margin-bottom:15px; width:100%; padding:10px; border:2px solid #bdc3c7; border-radius:8px;"><div style="display:flex; gap:10px; flex-wrap:wrap;"><button onclick="document.getElementById('admin-void-modal').classList.add('hidden')" style="flex:1; min-width:80px; padding:15px; background:#bdc3c7; border:none; border-radius:8px; font-weight:bold;">Batal</button><button onclick="submitRemoteVoid()" style="flex:1; min-width:100px; padding:15px; background:#f39c12; color:white; border:none; border-radius:8px; font-weight:bold;">Request</button><button onclick="confirmAdminVoid()" style="flex:1; min-width:100px; padding:15px; background:#e74c3c; color:white; border:none; border-radius:8px; font-weight:bold;">Insta-Void</button></div></div></div>
+
+    <!-- CASH DROP MODAL -->
+    <div id="cash-drop-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="cash-drop-title" style="margin-top:0;">🏦 Simpan / Tarik Uang Laci</h2>
+            <div style="background:#e8f4f8; padding:15px; border-radius:8px; margin-bottom:15px; text-align:center;">
+                <div style="font-size:12px; font-weight:bold; color:#2980b9; text-transform:uppercase;">Estimasi Saldo Laci Saat Ini</div>
+                <div id="live-drawer-display" style="font-size:28px; font-weight:bold; color:#2c3e50;">Rp 0</div>
+            </div>
+            <div class="form-box"><label style="color:#e67e22;">Jumlah Uang Diambil (Rp)</label><input type="number" id="drop-amount" placeholder="Misal: 500000 atau 0" style="border-color:#e67e22; font-size:20px; font-weight:bold;"></div>
+            <div class="form-box">
+                <label>Diserahkan Ke Mana?</label>
+                <select id="drop-destination">
+                    <option value="Admin">👤 Diserahkan ke Admin / Owner</option>
+                    <option value="Bank">🏦 Disetor ke Bank</option>
+                </select>
+            </div>
+            <div class="form-box"><label>Catatan Tambahan</label><input type="text" id="drop-notes" placeholder="Misal: Diserahkan ke Ibu / Transfer BCA"></div>
+            <div style="display:flex; gap:10px; margin-top: 20px;">
+                <button id="btn-drop-cancel" onclick="document.getElementById('cash-drop-modal').classList.add('hidden')" style="flex:1; padding:15px; border:none; border-radius:8px; font-weight:bold; background:#ecf0f1; cursor:pointer;">Batal</button>
+                <button id="btn-drop-confirm" onclick="submitCashDrop()" style="flex:2; padding:15px; background:#16a085; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Simpan Data</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- SHIFT REPORT MODAL -->
+    <div id="shift-report-modal" class="modal-overlay hidden">
+        <div class="modal-content modal-large">
+            <div style="text-align: center; margin-bottom: 20px;"><h2 style="margin:0; color: #2c3e50;">📊 Laporan Akhir Shift</h2><p style="color: #7f8c8d; margin: 5px 0 0 0;">Harap pastikan semua angka sudah benar sebelum Logout.</p></div>
+            <div class="stats-grid">
+                <div class="stat-box"><div class="stat-label">Total Nota</div><div class="stat-value" id="sr-orders">0</div></div>
+                <div class="stat-box"><div class="stat-label">Pelanggan</div><div class="stat-value" id="sr-customers">0</div></div>
+                <div class="stat-box" style="grid-column: span 2; background: #e8f4f8; border-color: #bee5eb;"><div class="stat-label" style="color: #0c5460;">Total Omset Kotor</div><div class="stat-value" id="sr-omset" style="font-size: 28px; color: #0c5460;">Rp 0</div></div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="revenue-breakdown">
+                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">💰 Rincian Pembayaran Masuk</div>
+                    <div class="revenue-row"><span>Tunai</span> <strong id="sr-cash">Rp 0</strong></div>
+                    <div class="revenue-row"><span>QRIS</span> <strong id="sr-qris">Rp 0</strong></div>
+                    <div class="revenue-row"><span>Transfer Bank</span> <strong id="sr-transfer">Rp 0</strong></div>
+                    <div class="revenue-row"><span>Gratis/Promo</span> <strong id="sr-free">Rp 0</strong></div>
+                </div>
+                <div class="revenue-breakdown">
+                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">⚠️ Piutang & Pengeluaran</div>
+                    <div class="revenue-row"><span>Piutang B2B Hotel</span> <strong id="sr-hotel-piutang" style="color:#e74c3c;">Rp 0</strong></div>
+                    <div class="revenue-row"><span>Piutang Tamu Kamar</span> <strong id="sr-tamu-piutang" style="color:#e74c3c;">Rp 0</strong></div>
+                    <div class="revenue-row"><span>Pengeluaran Laci</span> <strong id="sr-expense" style="color:#e67e22;">Rp 0</strong></div>
+                </div>
+                <!-- FIXED CORRECTION: HEADER RENAMED FROM MAKANAN TERJUAL TO ITEM TERJUAL -->
+                <div class="revenue-breakdown" style="grid-column: span 2; margin-top: 5px;">
+                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">📦 Item Terjual</div>
+                    <div id="sr-items-summary" style="max-height: 140px; overflow-y: auto; font-size: 14px; display: flex; flex-direction: column; gap: 4px;"></div>
+                </div>
+            </div>
+            <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 15px;">
+                <div id="sr-net-title" style="font-size: 14px; font-weight: bold; color: #155724; text-transform: uppercase;">Uang Tunai Seharusnya di Laci</div>
+                <div id="sr-net" style="font-size: 32px; font-weight: bold; color: #155724; margin-top: 5px;">Rp 0</div>
+            </div>
+            <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left;">
+                <div style="font-weight: bold; color: #856404; margin-bottom: 10px;">⚡ Cek Meteran Listrik (Wajib)</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div><label style="font-size: 12px; font-weight: bold; color: #856404;">Meteran Token (Sisa kWh)</label><input type="number" id="meter-token" placeholder="Misal: 150.5" step="0.01" style="width: 100%; padding: 10px; border: 1px solid #ffeeba; border-radius: 4px; margin-top: 5px;"></div>
+                    <div><label style="font-size: 12px; font-weight: bold; color: #856404;">Meteran Pasca (Total kWh)</label><input type="number" id="meter-pasca" placeholder="Misal: 14500" step="0.01" style="width: 100%; padding: 10px; border: 1px solid #ffeeba; border-radius: 4px; margin-top: 5px;"></div>
+                </div>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button onclick="document.getElementById('shift-report-modal').classList.add('hidden')" style="flex:1; padding:12px; border:none; border-radius:8px; font-weight:bold; background:#f1f5f7; color:#2c3e50; cursor:pointer; font-size:14px;">Tutup</button>
+                <button onclick="printCurrentShiftReport()" style="flex:1.2; padding:12px; background:#27ae60; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; gap:6px;">🖨️ Cetak Laporan</button>
+                <button onclick="initiateLogoutSequence(false)" style="flex:1.5; padding:12px; background:#c0392b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px;">Akhiri Shift & Keluar</button>
+            </div>
+        </div>
+    </div>
+## 2. Updates for app.js
+Replace the applyPromo and renderHistoryList functions inside your app.js file with these versions to restore reactive calculation previews and apply the strict 8-shift log constraint:
+
+JavaScript
 window.applyPromo = function() {
     let totalFreeValue = 0;
+    let redeemedLoyaltyCoins = 0;
+    
     document.querySelectorAll('.promo-input').forEach(input => {
         let max = Number(input.max) || 0; let val = Number(input.value) || 0;
         if (val > max) { val = max; input.value = val; } if (val < 0) { val = 0; input.value = 0; }
         let price = Number(input.getAttribute('data-price')) || 0;
         totalFreeValue += (val * price);
+        if (input.getAttribute('data-type') === 'loyalty') { redeemedLoyaltyCoins += val; }
     });
 
     document.getElementById("pay-free").value = totalFreeValue; 
-    let q = Number(document.getElementById("pay-qris").value) || 0; let t = Number(document.getElementById("pay-transfer").value) || 0; let hp = Number(document.getElementById("pay-hotel-piutang").value) || 0; let tp = Number(document.getElementById("pay-tamu-piutang").value) || 0;
+    let q = Number(document.getElementById("pay-qris").value) || 0; 
+    let t = Number(document.getElementById("pay-transfer").value) || 0; 
+    let hp = Number(document.getElementById("pay-hotel-piutang").value) || 0; 
+    let tp = Number(document.getElementById("pay-tamu-piutang").value) || 0;
     let autoCash = window.cartGrandTotal - (q + t + hp + tp + totalFreeValue);
-    document.getElementById("pay-cash").value = Math.max(0, autoCash); calculateRemaining();
+    document.getElementById("pay-cash").value = Math.max(0, autoCash); 
+    calculateRemaining();
+
+    // RESTORED DYNAMIC LOYALTY LIVE CALCULATION MODULE
+    const loyaltyPreviewDiv = document.getElementById("live-loyalty-preview");
+    if (loyaltyPreviewDiv && activeCustomerProfile) {
+        let totalCoinsInCart = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
+        let coinsEarned = Math.max(0, totalCoinsInCart - redeemedLoyaltyCoins);
+        
+        let projectedPoints = activeCustomerProfile.points || 0;
+        let projectedFreeCoins = activeCustomerProfile.freeCoins || 0;
+        
+        projectedFreeCoins -= redeemedLoyaltyCoins;
+        projectedPoints += coinsEarned;
+        
+        let extraFree = Math.floor(projectedPoints / window.loyaltyTarget);
+        projectedPoints = projectedPoints % window.loyaltyTarget;
+        projectedFreeCoins += extraFree;
+        
+        loyaltyPreviewDiv.innerHTML = `
+            <div style="font-size: 13px; color: #27ae60; font-weight: bold; background: #e8f8f5; padding: 10px; border-radius: 6px; border: 1px solid #a3e4d7; text-align: left; line-height: 1.4;">
+                🎯 Est. Poin Baru: <strong>${projectedPoints}/${window.loyaltyTarget}</strong> 
+                | 🎁 Est. Sisa Koin Gratis: <strong>${Math.max(0, projectedFreeCoins)}</strong>
+                <br><small style="color: #7f8c8d; font-weight: normal;">(Order ini menghasilkan +${coinsEarned} Poin, menggunakan -${redeemedLoyaltyCoins} Koin Gratis)</small>
+            </div>
+        `;
+        loyaltyPreviewDiv.classList.remove("hidden");
+    } else if (loyaltyPreviewDiv) {
+        loyaltyPreviewDiv.classList.add("hidden");
+    }
 }
 
 window.calculateRemaining = function() {
@@ -1179,17 +1391,14 @@ function renderHistoryList(type) {
     const container = document.getElementById("history-container"); 
     container.innerHTML = "";
     
-    // Grab tab elements safely
     const btnOrders = document.getElementById("btn-hist-orders");
     const btnExpenses = document.getElementById("btn-hist-expenses");
     const btnShifts = document.getElementById("btn-hist-shifts");
     
-    // Reset all tab button styles to neutral white
     if(btnOrders) { btnOrders.style.background = "#fff"; btnOrders.style.color = "#333"; btnOrders.style.borderColor = "#ddd"; }
     if(btnExpenses) { btnExpenses.style.background = "#fff"; btnExpenses.style.color = "#333"; btnExpenses.style.borderColor = "#ddd"; }
     if(btnShifts) { btnShifts.style.background = "#fff"; btnShifts.style.color = "#333"; btnShifts.style.borderColor = "#ddd"; }
     
-    // Highlight the explicitly active view context dynamically
     if (type === 'orders' && btnOrders) { btnOrders.style.background = "#2980b9"; btnOrders.style.color = "#fff"; btnOrders.style.borderColor = "#2980b9"; }
     if (type === 'expenses' && btnExpenses) { btnExpenses.style.background = "#e67e22"; btnExpenses.style.color = "#fff"; btnExpenses.style.borderColor = "#e67e22"; }
     if (type === 'shifts' && btnShifts) { btnShifts.style.background = "#8e44ad"; btnShifts.style.color = "#fff"; btnShifts.style.borderColor = "#8e44ad"; }
@@ -1219,10 +1428,13 @@ function renderHistoryList(type) {
         };
     } else if (type === 'shifts') {
         db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").getAll().onsuccess = (e) => {
-            // FIXED: Enforce a strict whitespace-trimmed, case-insensitive string comparison gate
             const shifts = e.target.result.filter(s => s.cashier && currentCashier && s.cashier.trim().toLowerCase() === currentCashier.trim().toLowerCase()).reverse();
-            if(shifts.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center; font-size:13px; color:#7f8c8d;">Belum ada histori shift Anda di memori lokal.</div>`;
-            shifts.forEach(s => {
+            
+            // FILTERS LOG BALANCES TO THE LATEST 6 TO 8 ENTRIES MAX
+            const limitedShifts = shifts.slice(0, 8);
+            
+            if(limitedShifts.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center; font-size:13px; color:#7f8c8d;">Belum ada histori shift Anda di memori lokal.</div>`;
+            limitedShifts.forEach(s => {
                 let detailBtn = `<button onclick="viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px;">👁️ Detail</button>`;
                 let printBtn = `<button onclick="printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px;">🖨️ Cetak</button>`;
                 container.innerHTML += `<div class="history-row" style="align-items:flex-start; font-size:13px;"><div><strong>Shift: ${s.shiftId}</strong><br><small style="color:#7f8c8d;">Kasir: ${s.cashier} | Keluar: ${formatWIB(s.logoutTime)}</small></div><div style="display:flex; text-align:right; align-items:center; gap:4px;"><div><strong style="margin-right:10px;">Omset: Rp ${s.totalOmset.toLocaleString('id-ID')}</strong></div> ${detailBtn} ${printBtn}</div></div>`;
