@@ -364,8 +364,6 @@
             <div style="background:#f9f9f9; padding:15px; border-radius:8px; border:1px solid #eee; margin-bottom:15px;">
                 <div style="display:flex; justify-content:space-between; font-size:16px; color:#7f8c8d; margin-bottom:5px;"><span>Subtotal:</span> <span id="review-subtotal">Rp 0</span></div>
                 <div style="display:flex; justify-content:space-between; font-size:24px; color:#2c3e50; font-weight:bold;"><span>Total Akhir:</span> <span id="review-grandtotal">Rp 0</span></div>
-                <!-- LIVE REAL-TIME DYNAMIC LOYALTY CALCULATION CONTAINER -->
-                <div id="live-loyalty-preview" class="hidden" style="margin-top: 10px;"></div>
             </div>
             
             <p style="font-weight:bold; color:#e67e22; margin-bottom:5px;">💵 Metode Pembayaran (Wajib Lunas)</p>
@@ -430,10 +428,10 @@
     <div id="history-modal" class="modal-overlay hidden">
         <div class="modal-content modal-large">
             <h2 style="margin-top:0;">📋 Riwayat Sistem</h2>
-            <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap;">
-                <button id="btn-hist-orders" onclick="renderHistoryList('orders')" style="flex:1; padding:10px; cursor:pointer; border:1px solid #ddd; border-radius:4px; background:#fff; font-weight:bold; font-size:13px; color:#333;">🛍️ Transaksi</button>
-                <button id="btn-hist-expenses" onclick="renderHistoryList('expenses')" style="flex:1; padding:10px; cursor:pointer; border:1px solid #ddd; border-radius:4px; background:#fff; font-weight:bold; font-size:13px; color:#333;">💸 Pengeluaran</button>
-                <button id="btn-hist-shifts" onclick="renderHistoryList('shifts')" style="flex:1; padding:10px; cursor:pointer; border:1px solid #ddd; border-radius:4px; background:#fff; font-weight:bold; font-size:13px; color:#333;">📊 Riwayat Shift</button>
+            <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                <button onclick="renderHistoryList('orders')" style="flex:1; padding:10px; cursor:pointer;">🛍️ Transaksi</button>
+                <button onclick="renderHistoryList('expenses')" style="flex:1; padding:10px; cursor:pointer;">💸 Pengeluaran</button>
+                <button onclick="renderHistoryList('shifts')" style="flex:1; padding:10px; cursor:pointer; background:#8e44ad; color:white; border:none; border-radius:4px; font-weight:bold;">📊 Riwayat Shift</button>
             </div>
             <div class="history-list" id="history-container" style="max-height:400px; overflow-y:auto; background:#f9f9f9;"></div>
             <button onclick="document.getElementById('history-modal').classList.add('hidden')" style="width:100%; padding:15px; margin-top:15px; background:#ecf0f1; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Tutup</button>
@@ -490,9 +488,8 @@
                     <div class="revenue-row"><span>Piutang Tamu Kamar</span> <strong id="sr-tamu-piutang" style="color:#e74c3c;">Rp 0</strong></div>
                     <div class="revenue-row"><span>Pengeluaran Laci</span> <strong id="sr-expense" style="color:#e67e22;">Rp 0</strong></div>
                 </div>
-                <!-- FIXED CORRECTION: HEADER RENAMED FROM MAKANAN TERJUAL TO ITEM TERJUAL -->
                 <div class="revenue-breakdown" style="grid-column: span 2; margin-top: 5px;">
-                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">📦 Item Terjual</div>
+                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">🍔 Makanan Terjual</div>
                     <div id="sr-items-summary" style="max-height: 140px; overflow-y: auto; font-size: 14px; display: flex; flex-direction: column; gap: 4px;"></div>
                 </div>
             </div>
@@ -507,6 +504,7 @@
                     <div><label style="font-size: 12px; font-weight: bold; color: #856404;">Meteran Pasca (Total kWh)</label><input type="number" id="meter-pasca" placeholder="Misal: 14500" step="0.01" style="width: 100%; padding: 10px; border: 1px solid #ffeeba; border-radius: 4px; margin-top: 5px;"></div>
                 </div>
             </div>
+            <!-- FIXED: Shift action deck structured to reflect separated layouts matching verified attachment verbatim -->
             <div style="display:flex; gap:10px;">
                 <button onclick="document.getElementById('shift-report-modal').classList.add('hidden')" style="flex:1; padding:12px; border:none; border-radius:8px; font-weight:bold; background:#f1f5f7; color:#2c3e50; cursor:pointer; font-size:14px;">Tutup</button>
                 <button onclick="printCurrentShiftReport()" style="flex:1.2; padding:12px; background:#27ae60; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; gap:6px;">🖨️ Cetak Laporan</button>
@@ -514,6 +512,7 @@
             </div>
         </div>
     </div>
+
     <!-- ORDER DETAIL MODAL -->
     <div id="order-detail-modal" class="modal-overlay hidden">
         <div class="modal-content">
