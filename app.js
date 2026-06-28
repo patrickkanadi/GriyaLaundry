@@ -1351,6 +1351,28 @@ function renderHistoryList(type) {
     }
 }
 
+// FUNGSI BARU: Menghubungkan tombol Shift di HTML untuk langsung membuka rincian shift online kasir
+window.openShiftReport = function() {
+    let historyModal = document.getElementById("history-modal");
+    if (historyModal) {
+        // Tampilkan modal riwayat utama
+        historyModal.classList.remove("hidden");
+        
+        // Panggil pencetakan otomatis list 5-6 histori shift kasir yang aktif
+        renderHistoryList('shifts');
+        
+        // Opsional: Menyesuaikan visual tab aktif di dalam modal jika ada elemen kustom toggle tab
+        let tabOrders = document.getElementById("tab-hist-orders");
+        let tabShifts = document.getElementById("tab-hist-shifts");
+        if (tabOrders && tabShifts) {
+            tabOrders.classList.remove("active");
+            tabShifts.classList.add("active");
+        }
+    } else {
+        console.warn("Peringatan: Elemen id 'history-modal' tidak ditemukan pada index.html Anda!");
+    }
+};
+
 // BUG FIX 3: Pengubahan ambang batas kedaluwarsa idle otomatis menjadi 4 jam (bebas logout jika baru 1 jam)
 function checkExpiredShifts() {
     if (!db) return;
