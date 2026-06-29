@@ -93,7 +93,7 @@ function logUserActivity() {
 ['click', 'touchstart', 'keydown'].forEach(evt => window.addEventListener(evt, logUserActivity, { passive: true }));
 
 // ==========================================
-// 2. PRINTER ENGINE MURNI ESC/POS
+// 2. PRINTER ENGINE
 // ==========================================
 window.connectBluetoothPrinter = async function() {
     try {
@@ -212,9 +212,9 @@ window.attemptLogin = async function() {
                         currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString(); 
                         db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: hashedPin, shiftId: currentShiftId, loginTime: currentLoginTime, lastActiveTime: Date.now(), cashierName: currentCashier}); 
                     }
-                    let sc = document.getElementById("login-screen"); if(sc) sc.classList.add("hidden");
-                    let ps = document.getElementById("pos-screen"); if(ps) ps.classList.remove("hidden");
-                    let dc = document.getElementById("display-cashier"); if(dc) dc.innerText = currentCashier;
+                    document.getElementById("login-screen").classList.add("hidden");
+                    document.getElementById("pos-screen").classList.remove("hidden");
+                    document.getElementById("display-cashier").innerText = currentCashier;
                     window.syncMasterData(); lockMenu(); 
                 };
             } else { alert("PIN Kasir Salah atau Belum Sinkron!"); }
@@ -224,14 +224,14 @@ window.attemptLogin = async function() {
 
 window.switchWorkspace = function(type) {
     document.querySelectorAll('.ws-tab').forEach(b => b.classList.remove('active'));
-    let mw = document.getElementById("main-workspace-wrapper"); if(mw) mw.classList.add("hidden");
-    let aw = document.getElementById("active-tickets-workspace"); if(aw) aw.classList.add("hidden");
+    document.getElementById("main-workspace-wrapper").classList.add("hidden");
+    document.getElementById("active-tickets-workspace").classList.add("hidden");
     if (type === 'new') {
-        let tb = document.getElementById("tab-new-order"); if(tb) tb.classList.add("active");
-        if(mw) mw.classList.remove("hidden");
+        document.getElementById("tab-new-order").classList.add("active");
+        document.getElementById("main-workspace-wrapper").classList.remove("hidden");
     } else {
-        let tbt = document.getElementById("tab-active-tickets"); if(tbt) tbt.classList.add("active");
-        if(aw) aw.classList.remove("hidden");
+        document.getElementById("tab-active-tickets").classList.add("active");
+        document.getElementById("active-tickets-workspace").classList.remove("hidden");
         window.renderActiveTickets(); 
     }
 };
@@ -246,41 +246,36 @@ window.switchAntrean = function(index) {
     antreans[currentAntreanIndex].cart = [...currentCart];
     antreans[currentAntreanIndex].profile = activeCustomerProfile ? {...activeCustomerProfile} : null;
     antreans[currentAntreanIndex].isLocked = isMenuLocked;
-    
-    let cp = document.getElementById("cust-phone"); if(cp) antreans[currentAntreanIndex].phoneInput = cp.value;
-    let cn = document.getElementById("cust-name"); if(cn) antreans[currentAntreanIndex].nameInput = cn.value;
+    antreans[currentAntreanIndex].phoneInput = document.getElementById("cust-phone").value;
+    antreans[currentAntreanIndex].nameInput = document.getElementById("cust-name").value;
     
     currentAntreanIndex = index;
     currentCart = [...antreans[currentAntreanIndex].cart]; 
     activeCustomerProfile = antreans[currentAntreanIndex].profile ? {...antreans[currentAntreanIndex].profile} : null;
     isMenuLocked = antreans[currentAntreanIndex].isLocked;
-    
-    if(cp) cp.value = antreans[currentAntreanIndex].phoneInput;
-    if(cn) cn.value = antreans[currentAntreanIndex].nameInput;
+    document.getElementById("cust-phone").value = antreans[currentAntreanIndex].phoneInput;
+    document.getElementById("cust-name").value = antreans[currentAntreanIndex].nameInput;
 
     document.querySelectorAll(".antrean-btn").forEach((btn, i) => {
         if (i === index) { btn.classList.add("active"); btn.style.background = "#fff"; btn.style.color = "#2980b9"; } 
         else { btn.classList.remove("active"); btn.style.background = "#bdc3c7"; btn.style.color = "#fff"; }
     });
 
-    let gl = document.getElementById("glass-overlay");
-    let cis = document.getElementById("customer-input-section");
-    let acb = document.getElementById("active-customer-banner");
-
     if (isMenuLocked) {
-        if(cis) cis.classList.remove("hidden");
-        if(acb) acb.classList.add("hidden");
-        if(gl) { gl.style.opacity = "1"; gl.style.pointerEvents = "auto"; }
-        let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
+        document.getElementById("customer-input-section").classList.remove("hidden");
+        document.getElementById("active-customer-banner").classList.add("hidden");
+        document.getElementById("glass-overlay").style.opacity = "1";
+        document.getElementById("glass-overlay").style.pointerEvents = "auto";
+        document.getElementById("promo-indicator").classList.add("hidden");
     } else {
-        let pName = activeCustomerProfile ? activeCustomerProfile.name : ((cn ? cn.value : "") || "Walk-in");
-        let pPhone = activeCustomerProfile ? activeCustomerProfile.phone : (cp ? cp.value : "");
-        let acn = document.getElementById("active-cust-name"); if(acn) acn.innerText = pName;
-        let acph = document.getElementById("active-cust-phone"); if(acph) acph.innerText = (pPhone && pPhone !== "-" && !pPhone.startsWith("999")) ? `(${pPhone})` : "";
-        
-        if(cis) cis.classList.add("hidden");
-        if(acb) acb.classList.remove("hidden");
-        if(gl) { gl.style.opacity = "0"; gl.style.pointerEvents = "none"; }
+        let pName = activeCustomerProfile ? activeCustomerProfile.name : (document.getElementById("cust-name").value || "Walk-in");
+        let pPhone = activeCustomerProfile ? activeCustomerProfile.phone : document.getElementById("cust-phone").value;
+        document.getElementById("active-cust-name").innerText = pName;
+        document.getElementById("active-cust-phone").innerText = (pPhone && pPhone !== "-" && !pPhone.startsWith("999")) ? `(${pPhone})` : "";
+        document.getElementById("customer-input-section").classList.add("hidden");
+        document.getElementById("active-customer-banner").classList.remove("hidden");
+        document.getElementById("glass-overlay").style.opacity = "0";
+        document.getElementById("glass-overlay").style.pointerEvents = "none";
         
         let d = new Date(); let todayStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, '0') + "-" + String(d.getDate()).padStart(2, '0');
         const lotteryBtn = document.getElementById("btn-trigger-lottery");
@@ -295,9 +290,7 @@ window.switchAntrean = function(index) {
 };
 
 window.updatePromoIndicator = function() {
-    let pi = document.getElementById("promo-indicator");
-    if (!pi) return;
-    if (!activeCustomerProfile) { pi.classList.add("hidden"); return; }
+    if (!activeCustomerProfile) { document.getElementById("promo-indicator").classList.add("hidden"); return; }
     let promoText = `🎁 ${activeCustomerProfile.freeCoins || 0} Koin Gratis! (Poin: ${activeCustomerProfile.points || 0}/${window.loyaltyTarget})`;
     let storedCount = Object.values(activeCustomerProfile.storedRewards || {}).reduce((a,b)=>a+b,0);
     if (storedCount > 0) promoText += ` | <span style="cursor:pointer; text-decoration:underline; color:purple;" onclick="window.showStoredRewards()">🎫 ${storedCount} Undian Tersimpan</span>`;
@@ -305,8 +298,8 @@ window.updatePromoIndicator = function() {
     let pending = antreans[currentAntreanIndex].pendingPromoCode;
     if (pending) promoText += ` | ⏳ Menunggu Checkout: ${pending}`;
     
-    pi.innerHTML = promoText;
-    pi.classList.remove("hidden");
+    document.getElementById("promo-indicator").innerHTML = promoText;
+    document.getElementById("promo-indicator").classList.remove("hidden");
 };
 
 window.showStoredRewards = function() {
@@ -329,17 +322,15 @@ window.openLotteryModal = function() {
 };
 
 window.updateLotteryDesc = function() {
-    let sel = document.getElementById("lottery-select"); if(!sel) return;
-    let code = sel.value; let descDiv = document.getElementById("lottery-desc");
-    if(!code) { if(descDiv) descDiv.innerHTML = ""; return; }
+    let code = document.getElementById("lottery-select").value; let descDiv = document.getElementById("lottery-desc");
+    if(!code) { descDiv.innerHTML = ""; return; }
     let promo = window.globalPromos.find(p => p.code === code);
-    if(promo && descDiv) { descDiv.innerHTML = `<div style="padding:10px; background:#e8f4f8; border-radius:6px; color:#2980b9; font-weight:bold; margin-bottom:15px; text-align:left;">🎁 <strong>Insentif:</strong> Mendapatkan ${promo.rewardQty}x ${promo.rewardItem}</div>`; }
+    if(promo) { descDiv.innerHTML = `<div style="padding:10px; background:#e8f4f8; border-radius:6px; color:#2980b9; font-weight:bold; margin-bottom:15px; text-align:left;">🎁 <strong>Insentif:</strong> Mendapatkan ${promo.rewardQty}x ${promo.rewardItem}</div>`; }
 };
 
 window.submitLotteryCode = async function() {
     if (!activeCustomerProfile) return alert("Pilih pelanggan terlebih dahulu!");
-    let sel = document.getElementById("lottery-select"); if(!sel) return;
-    let code = sel.value; if (!code) return alert("Silakan pilih salah satu promo dari kotak dropdown!");
+    let code = document.getElementById("lottery-select").value; if (!code) return alert("Silakan pilih salah satu promo dari kotak dropdown!");
 
     let d = new Date(); let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
     let hasPending = await new Promise(resolve => {
@@ -350,45 +341,39 @@ window.submitLotteryCode = async function() {
     });
 
     if (activeCustomerProfile.lastClaimDate === todayStr || hasPending) {
-        let mod = document.getElementById("lottery-modal"); if(mod) mod.classList.add("hidden");
+        document.getElementById("lottery-modal").classList.add("hidden");
         return alert("⚠️ Pelanggan ini sudah mengklaim undian hari ini. (Batas maksimal 1 klaim per hari)");
     }
 
     let promo = window.globalPromos.find(p => p.code === code); if (!promo) return alert("Promo tidak valid.");
     antreans[currentAntreanIndex].pendingPromoCode = code;
-    let mod = document.getElementById("lottery-modal"); if(mod) mod.classList.add("hidden");
-    window.updatePromoIndicator();
+    document.getElementById("lottery-modal").classList.add("hidden"); window.updatePromoIndicator();
 };
 
 function lockMenu() {
     isMenuLocked = true; activeCustomerProfile = null; 
     let promoContainer = document.getElementById("dynamic-promo-section") || document.getElementById("review-promo-section");
     if (promoContainer) promoContainer.innerHTML = "";
-    
-    let pf = document.getElementById("pay-free");
-    if (pf) { if(pf.tagName === 'INPUT') pf.value = 0; else pf.innerText = 0; }
+    if (document.getElementById("pay-free")) document.getElementById("pay-free").value = 0;
 
-    let cis = document.getElementById("customer-input-section"); if(cis) cis.classList.remove("hidden");
-    let acb = document.getElementById("active-customer-banner"); if(acb) acb.classList.add("hidden");
-    let gl = document.getElementById("glass-overlay"); if(gl) { gl.style.opacity = "1"; gl.style.pointerEvents = "auto"; }
-    
-    let cp = document.getElementById("cust-phone"); if(cp) cp.value = ""; 
-    let cn = document.getElementById("cust-name"); if(cn) cn.value = "";
-    
+    document.getElementById("customer-input-section").classList.remove("hidden");
+    document.getElementById("active-customer-banner").classList.add("hidden");
+    document.getElementById("glass-overlay").style.opacity = "1";
+    document.getElementById("glass-overlay").style.pointerEvents = "auto";
+    document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "";
     currentCart = []; 
     antreans[currentAntreanIndex] = { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "", pendingPromoCode: null };
     window.renderCart();
-    let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
+    document.getElementById("promo-indicator").classList.add("hidden");
 }
 
 function proceedToUnlock(phone, name) {
-    let acn = document.getElementById("active-cust-name"); if(acn) acn.innerText = name; 
-    let acp = document.getElementById("active-cust-phone"); if(acp) acp.innerText = (phone !== "-" && !phone.startsWith("999")) ? `(${phone})` : "";
-    let cis = document.getElementById("customer-input-section"); if(cis) cis.classList.add("hidden");
-    let acb = document.getElementById("active-customer-banner"); if(acb) acb.classList.remove("hidden");
-    isMenuLocked = false; 
-    let gl = document.getElementById("glass-overlay"); 
-    if(gl) { gl.style.opacity = "0"; setTimeout(() => { gl.style.pointerEvents = "none"; }, 300); }
+    document.getElementById("active-cust-name").innerText = name; 
+    document.getElementById("active-cust-phone").innerText = (phone !== "-" && !phone.startsWith("999")) ? `(${phone})` : "";
+    document.getElementById("customer-input-section").classList.add("hidden");
+    document.getElementById("active-customer-banner").classList.remove("hidden");
+    isMenuLocked = false; document.getElementById("glass-overlay").style.opacity = "0"; 
+    setTimeout(() => { document.getElementById("glass-overlay").style.pointerEvents = "none"; }, 300);
 
     antreans[currentAntreanIndex].isLocked = false; 
     antreans[currentAntreanIndex].phoneInput = phone; antreans[currentAntreanIndex].nameInput = name; 
@@ -407,19 +392,16 @@ function proceedToUnlock(phone, name) {
 
 window.unlockMenu = function(isGuest) {
     let phone = "-"; let name = "Walk-in";
-    let cp = document.getElementById("cust-phone");
-    let cn = document.getElementById("cust-name");
-
     if (isGuest) { 
-        if(cp) cp.value = ""; if(cn) cn.value = "Walk-in"; activeCustomerProfile = null; 
+        document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "Walk-in"; activeCustomerProfile = null; 
         proceedToUnlock(phone, name);
     } else { 
-        phone = cp ? cp.value.trim() : ""; name = (cn ? cn.value.trim() : "") || "Pelanggan"; 
+        phone = document.getElementById("cust-phone").value.trim(); name = document.getElementById("cust-name").value.trim() || "Pelanggan"; 
         if (phone.length < 5) {
             if (confirm("Daftarkan pelanggan tanpa nomor WhatsApp?")) {
                 phone = "999" + Date.now().toString().slice(-7);
-                if(cp) cp.value = phone;
-                if (cn && !cn.value.trim()) cn.value = "Pelanggan Tanpa WA";
+                document.getElementById("cust-phone").value = phone;
+                if (!document.getElementById("cust-name").value.trim()) document.getElementById("cust-name").value = "Pelanggan Tanpa WA";
                 proceedToUnlock(phone, name);
             } else { return; }
         } else {
@@ -436,22 +418,21 @@ window.selectMember = function(phone) {
     db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
         activeCustomerProfile = e.target.result;
         if(activeCustomerProfile) {
-            let cp = document.getElementById("cust-phone"); if(cp) cp.value = activeCustomerProfile.phone;
-            let cn = document.getElementById("cust-name"); if(cn) cn.value = activeCustomerProfile.name;
+            document.getElementById("cust-phone").value = activeCustomerProfile.phone;
+            document.getElementById("cust-name").value = activeCustomerProfile.name;
             let rb = document.getElementById("autocomplete-results"); if(rb) rb.classList.add("hidden");
             window.updatePromoIndicator();
         }
     };
 };
 
-// FIX 1: AUTOCOMPLETE TAMPIL INSTAN SAAT KLIK (Kosong pun akan muncul list teratas)
+// FITUR AUTOCOMPLETE INSTAN AKTIF TANPA MENGETIK (REALTIME)
 window.handleAutocomplete = function(e) {
     if(!db) return;
     const val = e.target ? e.target.value.toLowerCase().trim() : ""; 
     const resBox = document.getElementById("autocomplete-results");
     if (!resBox) return;
     
-    // Jangan reset profil secara brutal jika input masih match dengan data member aktif
     if (activeCustomerProfile) {
         if (val !== activeCustomerProfile.phone.toLowerCase() && val !== activeCustomerProfile.name.toLowerCase()) {
             activeCustomerProfile = null; 
@@ -468,7 +449,6 @@ window.handleAutocomplete = function(e) {
         }
         matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
 
-        // Tampilkan instan
         if (matches.length > 0) {
             resBox.innerHTML = matches.map(m => `
                 <div class="autocomplete-item" onclick="window.selectMember('${m.phone}')" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px;">
@@ -484,14 +464,14 @@ window.handleAutocomplete = function(e) {
 
 window.openEditMember = function() {
     let prefill = (activeCustomerProfile && activeCustomerProfile.phone !== "-" && !activeCustomerProfile.isNoWA) ? activeCustomerProfile.phone : "";
-    let eop = document.getElementById("edit-old-phone"); if(eop) eop.value = prefill; 
-    let enp = document.getElementById("edit-new-phone"); if(enp) enp.value = "";
-    let mod = document.getElementById("edit-member-modal"); if(mod) mod.classList.remove("hidden");
+    document.getElementById("edit-old-phone").value = prefill; 
+    document.getElementById("edit-new-phone").value = "";
+    document.getElementById("edit-member-modal").classList.remove("hidden");
 };
 
 window.submitEditMember = function() {
-    let eop = document.getElementById("edit-old-phone"); let oldPhone = eop ? eop.value.trim() : ""; 
-    let enp = document.getElementById("edit-new-phone"); let newPhone = enp ? enp.value.trim() : "";
+    let oldPhone = document.getElementById("edit-old-phone").value.trim(); 
+    let newPhone = document.getElementById("edit-new-phone").value.trim();
     if(!oldPhone || !newPhone) return alert("Nomor tidak boleh kosong.");
 
     db.transaction(["members"], "readonly").objectStore("members").get(oldPhone).onsuccess = (e) => {
@@ -500,9 +480,7 @@ window.submitEditMember = function() {
         member.phone = newPhone;
         let tx = db.transaction(["members"], "readwrite");
         tx.objectStore("members").delete(oldPhone); tx.objectStore("members").put(member);
-        alert("Nomor WhatsApp berhasil diubah!"); lockMenu(); 
-        let mod = document.getElementById("edit-member-modal"); if(mod) mod.classList.add("hidden");
-        window.runBackgroundSync();
+        alert("Nomor WhatsApp berhasil diubah!"); lockMenu(); document.getElementById("edit-member-modal").classList.add("hidden"); window.runBackgroundSync();
     };
 };
 
@@ -511,8 +489,7 @@ window.submitEditMember = function() {
 // ==========================================
 function loadMenuUI() {
     const categories = [...new Set(globalMenuData.map(i => i.category))]; currentCategory = categories[0];
-    const catContainer = document.getElementById("category-container"); if(!catContainer) return;
-    catContainer.innerHTML = "";
+    const catContainer = document.getElementById("category-container"); catContainer.innerHTML = "";
     categories.forEach(cat => {
         const btn = document.createElement("button"); btn.className = `cat-btn ${cat === currentCategory ? "active" : ""}`; btn.innerText = cat;
         btn.onclick = () => { currentCategory = cat; document.querySelectorAll(".cat-btn").forEach(b => b.classList.remove("active")); btn.classList.add("active"); renderProductGrid(); };
@@ -522,8 +499,7 @@ function loadMenuUI() {
 }
 
 function renderProductGrid() {
-    const grid = document.getElementById("product-grid"); if(!grid) return;
-    grid.innerHTML = "";
+    const grid = document.getElementById("product-grid"); grid.innerHTML = "";
     globalMenuData.filter(i => i.category === currentCategory).forEach(item => {
         const card = document.createElement("div"); card.className = "product-card";
         card.innerHTML = `<div><h4>${item.name}</h4></div><div class="price-badge">Rp ${item.price.toLocaleString('id-ID')}</div>`;
@@ -532,11 +508,11 @@ function renderProductGrid() {
     });
 }
 
-window.openNumpad = function(item) { activeNumpadItem = item; numpadValue = "0"; let nd = document.getElementById("numpad-display"); if(nd) nd.innerText = "0"; let mod = document.getElementById("numpad-modal"); if(mod) mod.classList.remove("hidden"); };
-window.closeNumpad = function() { let mod = document.getElementById("numpad-modal"); if(mod) mod.classList.add("hidden"); activeNumpadItem = null; };
+window.openNumpad = function(item) { activeNumpadItem = item; numpadValue = "0"; document.getElementById("numpad-display").innerText = "0"; document.getElementById("numpad-modal").classList.remove("hidden"); };
+window.closeNumpad = function() { document.getElementById("numpad-modal").classList.add("hidden"); activeNumpadItem = null; };
 window.numpadPress = function(val) {
     if (val === 'DEL') { numpadValue = numpadValue.slice(0, -1) || "0"; } else if (val === '.') { if (!numpadValue.includes('.')) numpadValue += '.'; } else { numpadValue = numpadValue === "0" ? String(val) : numpadValue + val; }
-    let nd = document.getElementById("numpad-display"); if(nd) nd.innerText = numpadValue;
+    document.getElementById("numpad-display").innerText = numpadValue;
 };
 window.confirmNumpad = function() { let qty = parseFloat(numpadValue); if (qty > 0) window.addToCart(activeNumpadItem, qty); window.closeNumpad(); };
 
@@ -557,10 +533,8 @@ window.updateCartItemQty = function(itemId, delta) {
     }
 };
 
-// FIX 3: TOMBOL KERANJANG LEBIH BESAR (45px x 45px)
 window.renderCart = function() {
-    const container = document.getElementById("cart-items"); if(!container) return;
-    container.innerHTML = ""; let total = 0;
+    const container = document.getElementById("cart-items"); container.innerHTML = ""; let total = 0;
     currentCart.forEach(item => {
         const lineTotal = item.qty * item.price; total += lineTotal; 
         const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
@@ -581,13 +555,9 @@ window.renderCart = function() {
 
 window.openReview = function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
-    
-    // SAFE-RESET INPUT FIELDS
-    let inputs = ["pay-cash", "pay-qris", "pay-transfer", "pay-hotel-piutang", "pay-tamu-piutang"];
-    inputs.forEach(id => { let el = document.getElementById(id); if(el && el.tagName === 'INPUT') el.value = 0; });
-    
-    let pf = document.getElementById("pay-free");
-    if(pf) { if(pf.tagName === 'INPUT') pf.value = 0; else pf.innerText = 0; }
+    document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-transfer").value = 0;
+    if(document.getElementById("pay-hotel-piutang")) document.getElementById("pay-hotel-piutang").value = 0; 
+    if(document.getElementById("pay-tamu-piutang")) document.getElementById("pay-tamu-piutang").value = 0; 
     
     window.cartSubtotal = currentCart.reduce((sum, item) => sum + (item.qty * item.price), 0);
     window.cartGrandTotal = window.cartSubtotal;
@@ -634,17 +604,14 @@ window.openReview = function() {
         else promoContainer.classList.add("hidden");
     }
  
-    let rst = document.getElementById("review-subtotal"); if(rst) rst.innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
-    let rgt = document.getElementById("review-grandtotal"); if(rgt) rgt.innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
+    document.getElementById("review-subtotal").innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
+    document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
     window.applyPromo();
-    
-    let mod = document.getElementById("review-modal"); if(mod) mod.classList.remove("hidden");
+    document.getElementById("review-modal").classList.remove("hidden");
 };
-
-// ALIASING AGAR BUTTON CHECKOUT SELALU WORK
 window.reviewOrder = window.openReview;
 
-// FIX 4: TOMBOL BATAL CHECKOUT DIAMANKAN KE GLOBAL WINDOW
+// TOMBOL BATAL CHECKOUT DIAMANKAN KE GLOBAL WINDOW
 window.closeReview = function() {
     let reviewModal = document.getElementById("review-modal");
     if (reviewModal) { reviewModal.classList.add("hidden"); }
@@ -652,7 +619,6 @@ window.closeReview = function() {
 window.closeReviewModal = window.closeReview;
 window.cancelOrder = window.closeReview;
 
-// FIX 5: APPLY PROMO YANG KOKOH (ANTI-NULL)
 window.applyPromo = function() {
     let totalFreeValue = 0;
     document.querySelectorAll('.promo-input').forEach(input => {
@@ -671,7 +637,6 @@ window.applyPromo = function() {
     let elTP = document.getElementById("pay-tamu-piutang"); let tp = elTP ? Number(elTP.value) : 0;
     
     window.cartGrandTotal = Math.max(0, window.cartSubtotal - totalFreeValue);
-    
     let rgt = document.getElementById("review-grandtotal");
     if(rgt) rgt.innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
     
@@ -695,6 +660,7 @@ window.calculateRemaining = function() {
     if(rr) rr.innerText = `Rp ${remaining.toLocaleString('id-ID')}`;
 };
 
+// FIX 3: KALKULASI POIN DAN PENGHAPUSAN UNDIAN AMAN SENTOSA
 window.finalizeOrder = async function(shouldPrint) {
     let pc = document.getElementById("pay-cash"); let cash = pc ? Number(pc.value) : 0;
     let elQ = document.getElementById("pay-qris"); let qris = elQ ? Number(elQ.value) : 0;
@@ -720,7 +686,6 @@ window.finalizeOrder = async function(shouldPrint) {
     let cn = document.getElementById("cust-name"); let custName = cn ? cn.value.trim() : "Walk-in"; if(!custName) custName = "Walk-in";
     let newPoints = 0; let newFree = 0;
 
-    // FIX KALKULASI POIN (ANTI-BUG)
     let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
     let paidCoins = Math.max(0, cartCoins - redeemedLoyaltyCoins);
     let expectedCoinsTotal = currentCart.reduce((sum, item) => { let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; let multiplier = Math.ceil(item.qty / divisor); return sum + ((item.expectedCoins || 0) * multiplier); }, 0);
@@ -731,6 +696,7 @@ window.finalizeOrder = async function(shouldPrint) {
         
         let initialPoints = activeCustomerProfile.points || 0;
         let initialFree = activeCustomerProfile.freeCoins || 0;
+        
         let totalPoints = initialPoints + paidCoins;
         let newlyEarnedFree = Math.floor(totalPoints / window.loyaltyTarget);
         let remainingPoints = totalPoints % window.loyaltyTarget;
@@ -745,6 +711,25 @@ window.finalizeOrder = async function(shouldPrint) {
                 }
             }
         });
+
+        // MASUKKAN UNDIAN BARU JIKA ADA DI ANTREAN INI
+        let pendingPromoCode = antreans[currentAntreanIndex].pendingPromoCode;
+        if (pendingPromoCode) {
+            let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
+            if (promo) {
+                if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
+                activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
+                
+                let d = new Date();
+                let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
+                activeCustomerProfile.lastClaimDate = todayStr; 
+                
+                db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({
+                    claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier, shiftId: currentShiftId, syncStatus: "Pending"
+                });
+            }
+        }
+        antreans[currentAntreanIndex].pendingPromoCode = null;
         
         activeCustomerProfile.points = remainingPoints;
         activeCustomerProfile.freeCoins = finalFreeCoins;
@@ -1018,7 +1003,7 @@ window.saveCoinJammed = function() {
 };
 
 // ==========================================
-// 10. SINKRONISASI INTI (FAST PIN SYNC)
+// 10. SINKRONISASI INTI & FAST PIN SYNC
 // ==========================================
 window.syncMasterData = async function() {
     let nTxt = document.getElementById("network-text"); let nDot = document.getElementById("network-dot");
@@ -1031,8 +1016,9 @@ window.syncMasterData = async function() {
             window.globalRecentShifts = result.recentShifts || [];
             
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
-            const btnDrawer = document.getElementById("btn-drawer") || document.getElementById("btn-cashdrop") || document.querySelector("button[onclick*='openCashDrop']");
-            if (btnDrawer) btnDrawer.style.display = window.enableDrawerTracking ? "" : "none";
+            document.querySelectorAll("button[onclick*='openCashDrop'], #btn-drawer, #btn-cashdrop").forEach(btn => {
+                btn.style.display = window.enableDrawerTracking ? "" : "none";
+            });
 
             let txStaff = db.transaction(["staff"], "readwrite");
             txStaff.objectStore("staff").clear();
@@ -1041,7 +1027,14 @@ window.syncMasterData = async function() {
             txStaff.oncomplete = () => {
                 let txOthers = db.transaction(["menu", "settings", "members", "expense_categories"], "readwrite");
                 txOthers.objectStore("menu").clear(); result.data.menu.forEach(m => txOthers.objectStore("menu").add(m));
-                txOthers.objectStore("members").clear(); result.data.members.forEach(m => txOthers.objectStore("members").add(m));
+                // JANGAN WIPE MEMBER TOTAL JIKA MASIH ADA TRANSAKSI GANTUNG DI BACKGROUND (Fix Race Condition Poin)
+                let unMems = [];
+                db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = (ue) => {
+                    unMems = ue.target.result.map(u => u.phone);
+                    result.data.members.forEach(m => {
+                        if (!unMems.includes(m.phone)) txOthers.objectStore("members").put(m);
+                    });
+                };
                 let expCatStore = txOthers.objectStore("expense_categories"); expCatStore.clear(); 
                 if(result.data.expenseCategories) result.data.expenseCategories.forEach(c => expCatStore.add({name: c}));
                 let settingsStore = txOthers.objectStore("settings"); settingsStore.clear();
@@ -1066,6 +1059,7 @@ window.manualPushSync = async function() {
     await window.syncMasterData(); alert("Sinkronisasi Database Berhasil!");
 };
 
+// FIX 5: BACKGROUND SYNC DIPULIHKAN 100% UNTUK SELURUH MODUL DATA (TERMASUK PROMO CLAIMS)
 window.runBackgroundSync = async function() {
     if (!navigator.onLine || isSyncing) return; isSyncing = true; 
     try {
@@ -1083,6 +1077,68 @@ window.runBackgroundSync = async function() {
             try {
                 let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncShiftReport", data: report }) });
                 if ((await r.json()).status === "Success") db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId);
+            } catch(e) {}
+        }
+        let promoClaims = await new Promise(res => db.transaction(["promo_claims"], "readonly").objectStore("promo_claims").getAll().onsuccess = e => res(e.target.result));
+        for (const claim of promoClaims) {
+            try {
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncPromoClaim", data: claim }) });
+                if ((await r.json()).status === "Success") db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").delete(claim.claimId);
+            } catch(e) {}
+        }
+        let expenses = await new Promise(res => db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
+        for (const exp of expenses) {
+            if (exp.syncStatus === "Pending") {
+                try {
+                    let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncExpense", data: exp }) });
+                    if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); }
+                } catch(e) {}
+            }
+        }
+        let cashDrops = await new Promise(res => db.transaction(["cash_drops"], "readonly").objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
+        for (const drop of cashDrops) {
+            try {
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncCashDrop", data: drop }) });
+                if ((await r.json()).status === "Success") db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").delete(drop.dropId);
+            } catch(e) {}
+        }
+        let voids = await new Promise(res => db.transaction(["void_requests"], "readonly").objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
+        for (const req of voids) {
+            try {
+                const actionType = req.type === 'orders' ? "requestOrderVoid" : "requestExpenseVoid"; const payload = req.type === 'orders' ? { orderId: req.id, status: req.status, authName: req.authName } : { expenseId: req.id, status: req.status, authName: req.authName };
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: actionType, ...payload }) });
+                if ((await r.json()).status === "Success") db.transaction(["void_requests"], "readwrite").objectStore("void_requests").delete(req.id);
+            } catch(e) {}
+        }
+        let members = await new Promise(res => db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
+        for (const mem of members) {
+            try {
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncMember", data: mem }) });
+                if ((await r.json()).status === "Success") db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone);
+            } catch(e) {}
+        }
+        let ticketCoins = await new Promise(res => db.transaction(["ticket_coins"], "readonly").objectStore("ticket_coins").getAll().onsuccess = e => res(e.target.result));
+        for (const tc of ticketCoins) {
+            try {
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncTicketCoins", data: tc }) });
+                if ((await r.json()).status === "Success") db.transaction(["ticket_coins"], "readwrite").objectStore("ticket_coins").delete(tc.logId);
+            } catch(e) {}
+        }
+        let coinRets = await new Promise(res => db.transaction(["coin_retrievals"], "readonly").objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
+        for (const cr of coinRets) {
+            if (cr.syncStatus === "Pending") {
+                try {
+                    let actionCode = cr.notes && cr.notes.includes("Macet") ? "syncCoinJammed" : "syncCoinRetrieval";
+                    let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: actionCode, data: cr }) });
+                    if ((await r.json()).status === "Success") { cr.syncStatus = "Synced"; db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").put(cr); }
+                } catch(e) {}
+            }
+        }
+        let phoneUpds = await new Promise(res => db.transaction(["phone_updates"], "readonly").objectStore("phone_updates").getAll().onsuccess = e => res(e.target.result));
+        for (const pu of phoneUpds) {
+            try {
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "updateMemberPhone", data: pu }) });
+                if ((await r.json()).status === "Success") db.transaction(["phone_updates"], "readwrite").objectStore("phone_updates").delete(pu.id);
             } catch(e) {}
         }
     } finally { isSyncing = false; }
@@ -1221,7 +1277,6 @@ window.onload = async () => {
     await initDB(); 
     await window.syncMasterData(); 
     
-    // DELEGASI GLOBAL EVENT LISTENER
     document.addEventListener("input", function(e) {
         if (e.target && (e.target.id === "cust-phone" || e.target.id === "cust-name")) { window.handleAutocomplete(e); }
     });
