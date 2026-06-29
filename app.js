@@ -38,7 +38,7 @@ let printShiftOnLogout = false;
 window.lastActivityWrite = Date.now();
 
 // ==========================================
-// INISIALISASI DATABASE & UTILITY
+// 1. INISIALISASI DATABASE & UTILITY
 // ==========================================
 function initDB() {
     return new Promise((resolve, reject) => {
@@ -117,7 +117,7 @@ function logUserActivity() {
 ['click', 'touchstart', 'keydown'].forEach(evt => window.addEventListener(evt, logUserActivity, { passive: true }));
 
 // ==========================================
-// PRINTER ENGINE
+// 2. PRINTER ENGINE
 // ==========================================
 window.connectBluetoothPrinter = async function() {
     try {
@@ -148,7 +148,7 @@ function formatEscPosLine(left, right, isBig) {
 }
 
 // ==========================================
-// APLIKASI CORE & WORKSPACE
+// 3. APLIKASI CORE & WORKSPACE
 // ==========================================
 window.attemptLogin = async function() {
     const pinInput = document.getElementById("cashier-pin"); const rawPin = pinInput.value.trim();
@@ -192,7 +192,7 @@ window.switchWorkspace = function(type) {
 window.lockScreen = function() { window.location.reload(); };
 
 // ==========================================
-// PELANGGAN & ANTREAN
+// 4. PELANGGAN & ANTREAN
 // ==========================================
 window.switchAntrean = function(index) {
     if (currentAntreanIndex === index) return;
@@ -229,19 +229,19 @@ window.switchAntrean = function(index) {
         document.getElementById("active-customer-banner").classList.remove("hidden");
         document.getElementById("glass-overlay").style.opacity = "0";
         document.getElementById("glass-overlay").style.pointerEvents = "none";
-        updatePromoIndicator();
+        window.updatePromoIndicator();
     }
-    renderCart();
+    window.renderCart();
 };
 
-function updatePromoIndicator() {
+window.updatePromoIndicator = function() {
     if (!activeCustomerProfile) { document.getElementById("promo-indicator").classList.add("hidden"); return; }
     let promoText = `🎁 ${activeCustomerProfile.freeCoins || 0} Koin Gratis! (Poin: ${activeCustomerProfile.points || 0}/${window.loyaltyTarget})`;
     let storedCount = Object.values(activeCustomerProfile.storedRewards || {}).reduce((a,b)=>a+b,0);
     if (storedCount > 0) promoText += ` | 🎫 ${storedCount} Undian Tersimpan`;
     document.getElementById("promo-indicator").innerHTML = promoText;
     document.getElementById("promo-indicator").classList.remove("hidden");
-}
+};
 
 function lockMenu() {
     isMenuLocked = true; activeCustomerProfile = null; 
@@ -256,7 +256,7 @@ function lockMenu() {
     document.getElementById("cust-phone").value = ""; document.getElementById("cust-name").value = "";
     currentCart = []; 
     antreans[currentAntreanIndex] = { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "", pendingPromoCode: null };
-    renderCart();
+    window.renderCart();
     document.getElementById("promo-indicator").classList.add("hidden");
 }
 
@@ -272,7 +272,8 @@ function proceedToUnlock(phone, name) {
     antreans[currentAntreanIndex].phoneInput = phone; antreans[currentAntreanIndex].nameInput = name; 
     antreans[currentAntreanIndex].profile = activeCustomerProfile ? {...activeCustomerProfile} : null;
     
-    updatePromoIndicator(); renderCart();
+    window.updatePromoIndicator();
+    window.renderCart();
 }
 
 window.unlockMenu = function(isGuest) {
@@ -305,7 +306,7 @@ window.selectMember = function(phone) {
         document.getElementById("cust-phone").value = activeCustomerProfile.phone;
         document.getElementById("cust-name").value = activeCustomerProfile.name;
         document.getElementById("autocomplete-results").classList.add("hidden");
-        updatePromoIndicator();
+        window.updatePromoIndicator();
     };
 };
 
@@ -356,7 +357,7 @@ window.submitEditMember = function() {
 };
 
 // ==========================================
-// MENU & TRANSAKSI (CART)
+// 5. MENU & TRANSAKSI (CART)
 // ==========================================
 function loadMenuUI() {
     const categories = [...new Set(globalMenuData.map(i => i.category))]; currentCategory = categories[0];
@@ -382,7 +383,7 @@ function renderProductGrid() {
 function addToCart(item, qty) {
     const existing = currentCart.find(i => i.itemId === item.itemId);
     if (existing) { existing.qty += qty; } else { currentCart.push({ ...item, qty: qty, originalPrice: item.price }); }
-    renderCart();
+    window.renderCart();
 }
 
 window.updateCartItemQty = function(itemId, delta) {
@@ -390,7 +391,7 @@ window.updateCartItemQty = function(itemId, delta) {
     if (existing) {
         existing.qty += delta;
         if (existing.qty <= 0) currentCart = currentCart.filter(i => i.itemId !== itemId);
-        renderCart();
+        window.renderCart();
     }
 };
 
@@ -402,8 +403,8 @@ window.renderCart = function() {
         <div class="cart-item" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
             <div><strong>${item.name}</strong><br><small>Rp ${item.price.toLocaleString('id-ID')} x ${item.qty}</small></div>
             <div style="display:flex; align-items:center; gap:5px;">
-                <button onclick="updateCartItemQty('${item.itemId}', -1)" style="background:#e74c3c; color:white; border:none; padding:2px 8px; border-radius:4px; font-weight:bold;">-</button>
-                <button onclick="updateCartItemQty('${item.itemId}', 1)" style="background:#2ecc71; color:white; border:none; padding:2px 8px; border-radius:4px; font-weight:bold;">+</button>
+                <button onclick="window.updateCartItemQty('${item.itemId}', -1)" style="background:#e74c3c; color:white; border:none; padding:2px 8px; border-radius:4px; font-weight:bold;">-</button>
+                <button onclick="window.updateCartItemQty('${item.itemId}', 1)" style="background:#2ecc71; color:white; border:none; padding:2px 8px; border-radius:4px; font-weight:bold;">+</button>
             </div>
         </div>`;
     });
@@ -433,7 +434,7 @@ window.openReview = function() {
         if (maxRedeemable > 0) {
             promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#fef9e7; padding:10px; border-radius:6px; border:1px solid #f9e79f;">
                <div><strong style="color:#856404;">🎁 Koin Gratis (Loyalty)</strong><br><small style="color:#7d6608;">Maks klaim: ${maxRedeemable}</small></div>
-               <input type="number" class="promo-input" data-type="loyalty" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${maxRedeemable}" min="0" oninput="applyPromo()" style="width:70px; padding:6px; font-weight:bold; text-align:center; border:1px solid #d4ac0d; border-radius:4px;">
+               <input type="number" class="promo-input" data-type="loyalty" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${maxRedeemable}" min="0" oninput="window.applyPromo()" style="width:70px; padding:6px; font-weight:bold; text-align:center; border:1px solid #d4ac0d; border-radius:4px;">
            </div>`;
         }
 
@@ -446,7 +447,7 @@ window.openReview = function() {
                         if (possibleClaim > 0) {
                             promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#f9ebff; padding:10px; border-radius:6px; border:1px solid #d6b4fc;">
                                <div><strong style="color:#8e44ad;">🎫 Undian: ${rewardName}</strong><br><small style="color:#6c3483;">Maks guna: ${possibleClaim}</small></div>
-                               <input type="number" class="promo-input" data-type="stored" data-item="${rewardName}" data-price="${cartItem.originalPrice}" value="0" max="${possibleClaim}" min="0" oninput="applyPromo()" style="width:70px; padding:6px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px;">
+                               <input type="number" class="promo-input" data-type="stored" data-item="${rewardName}" data-price="${cartItem.originalPrice}" value="0" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:70px; padding:6px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px;">
                            </div>`;
                         }
                     }
@@ -552,7 +553,7 @@ window.finalizeOrder = async function(shouldPrint) {
     };
 
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
-    // Jika perlu print set struknya disini: (Diubah jadi dummy await untuk memastikan tidak crash di demo)
+    // Print module bypass for demo logic structure
     // if (shouldPrint) await buildEscPosReceipt(...)
     document.getElementById("review-modal").classList.add("hidden"); lockMenu(); renderProductGrid(); window.runBackgroundSync();
 };
@@ -564,7 +565,7 @@ function saveMemberToDB(profile) {
 }
 
 // ==========================================
-// TIKET AKTIF & PENYELESAIAN
+// 6. TIKET AKTIF & PENYELESAIAN
 // ==========================================
 window.renderActiveTickets = function() {
     const grid = document.getElementById("ticket-grid-container"); if(!grid) return;
@@ -583,10 +584,30 @@ window.renderActiveTickets = function() {
 };
 
 window.markTicketReady = function(orderId, expectedCoins) {
-    activeDoneOrderId = orderId; 
+    window.activeDoneOrderId = orderId; 
     let elE = document.getElementById("done-expected-coins"); if(elE) elE.innerText = expectedCoins;
     let elA = document.getElementById("done-actual-coins"); if(elA) elA.value = expectedCoins;
     document.getElementById("ticket-done-modal").classList.remove("hidden");
+};
+
+window.submitTicketDone = function() {
+    let actual = Number(document.getElementById("done-actual-coins").value) || 0;
+    let expected = Number(document.getElementById("done-expected-coins").innerText) || 0;
+    if (actual < 0) return alert("Jumlah koin tidak valid.");
+
+    const ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
+    if (ticket) {
+        ticket.orderStatus = "Ready for Pickup"; ticket.syncStatus = "Pending";
+        db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
+
+        if (actual > 0) {
+            let overuse = Math.max(0, actual - expected); let baseUsage = Math.min(expected, actual);
+            const payload = { logId: "TKC-" + Date.now(), orderId: window.activeDoneOrderId, timestamp: new Date().toISOString(), cashier: currentCashier, expected: baseUsage, overuse: overuse, syncStatus: "Pending" };
+            db.transaction(["ticket_coins"], "readwrite").objectStore("ticket_coins").add(payload);
+        }
+        window.renderActiveTickets(); window.runBackgroundSync();
+    }
+    document.getElementById("ticket-done-modal").classList.add("hidden");
 };
 
 window.openSettlement = function(orderId, remainingDue) {
@@ -598,8 +619,18 @@ window.openSettlement = function(orderId, remainingDue) {
     document.getElementById("settlement-modal").classList.remove("hidden");
 };
 
+window.confirmSettlement = function() {
+    if (!activeSettlementTicket) return;
+    const c = Number(document.getElementById("settle-cash").value) || 0; const q = Number(document.getElementById("settle-qris").value) || 0; const t = Number(document.getElementById("settle-transfer").value) || 0;
+    activeSettlementTicket.cashAmount += c; activeSettlementTicket.qrisAmount += q; activeSettlementTicket.transferAmount += t;
+    activeSettlementTicket.orderStatus = "Completed"; activeSettlementTicket.syncStatus = "Pending";
+    db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
+    activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
+    document.getElementById("settlement-modal").classList.add("hidden"); window.renderActiveTickets(); window.runBackgroundSync();
+};
+
 // ==========================================
-// PENGELUARAN (EXPENSE)
+// 7. PENGELUARAN (EXPENSE)
 // ==========================================
 window.openExpenseModal = function() {
     document.getElementById("expense-modal").classList.remove("hidden");
@@ -626,7 +657,7 @@ window.saveExpense = function() {
 };
 
 // ==========================================
-// RIWAYAT (HISTORY) & VOID
+// 8. RIWAYAT (HISTORY), ORDER DETAILS & VOID
 // ==========================================
 window.openHistoryModal = function() {
     document.getElementById("history-modal").classList.remove("hidden");
@@ -674,6 +705,68 @@ window.renderHistoryList = function(type) {
     }
 };
 
+window.viewOrderDetails = function(orderId) {
+    db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = (e) => {
+        let order = e.target.result;
+        if(!order) return alert("Order tidak ditemukan di memori tablet.");
+        let itemsHtml = ""; let remainingPromos = [...(order.redeemedPromos || []).map(p => ({...p}))];
+        order.items.forEach(item => {
+            let lineTotal = item.qty * item.originalPrice;
+            itemsHtml += `<div style="display:flex; justify-content:space-between; margin-top:8px;"><div style="font-weight:bold;">${item.qty}x ${item.name}</div><div style="font-weight:bold;">Rp ${lineTotal.toLocaleString('id-ID')}</div></div>`;
+            for (let i = 0; i < remainingPromos.length; i++) {
+                let rp = remainingPromos[i];
+                if (rp.qty > 0 && (rp.item === item.name || rp.item === item.subCategory || rp.item === item.category)) {
+                    let applyQty = Math.min(rp.qty, item.qty);
+                    if (applyQty > 0) {
+                        let discountValue = applyQty * rp.price;
+                        itemsHtml += `<div style="display:flex; justify-content:space-between; font-size:13px; color:#e74c3c; margin-left:15px; border-bottom:1px dashed #eee; padding-bottom:4px;"><div>↘ Promo Hemat! (${rp.item})</div><div>-Rp ${discountValue.toLocaleString('id-ID')}</div></div>`;
+                        rp.qty -= applyQty;
+                    }
+                }
+            }
+        });
+        document.getElementById("detail-items").innerHTML = itemsHtml;
+        document.getElementById("detail-subtotal").innerText = `Rp ${(order.subtotal || 0).toLocaleString('id-ID')}`;
+        document.getElementById("detail-discount").innerText = `-Rp ${(order.discounts || 0).toLocaleString('id-ID')}`;
+        document.getElementById("detail-grandtotal").innerText = `Rp ${(order.grandTotal || 0).toLocaleString('id-ID')}`;
+        document.getElementById("detail-paymethod").innerText = order.paymentMethod || "-";
+        document.getElementById("order-detail-modal").classList.remove("hidden");
+    };
+};
+
+window.reprintOrder = async function(orderId) { alert("Sistem Reprint Print-Bluetooth dieksekusi (Module Bypassed)"); };
+window.printShiftReportFromHistory = async function(shiftId) { alert("Sistem Print Laporan Shift dieksekusi (Module Bypassed)"); };
+
+window.viewShiftDetails = function(shiftId) {
+    const onlineShift = (window.globalRecentShifts || []).find(s => s.shiftId === shiftId);
+    if (onlineShift) { showShiftModalLayout(onlineShift); } 
+    else {
+        db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").get(shiftId).onsuccess = (e) => {
+            let s = e.target.result; if (!s) return alert("Data riwayat shift tidak ditemukan.");
+            showShiftModalLayout(s);
+        };
+    }
+};
+
+function showShiftModalLayout(s) {
+    let foodHtml = "";
+    if(s.foodSummary) {
+        for(const [name, qty] of Object.entries(s.foodSummary)) { 
+            foodHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:4px 0;"><span>${name}</span> <strong>${qty}x</strong></div>`; 
+        }
+    }
+    document.getElementById("sd-id").innerText = s.shiftId;
+    document.getElementById("sd-login").innerText = formatTimeOnlyWIB(s.loginTime);
+    document.getElementById("sd-logout").innerText = formatTimeOnlyWIB(s.logoutTime);
+    document.getElementById("sd-omset").innerText = `Rp ${(s.totalOmset||0).toLocaleString('id-ID')}`;
+    document.getElementById("sd-cash").innerText = `Rp ${(s.totalCash||0).toLocaleString('id-ID')}`;
+    document.getElementById("sd-qris").innerText = `Rp ${(s.totalQris||0).toLocaleString('id-ID')}`;
+    document.getElementById("sd-transfer").innerText = `Rp ${(s.totalTransfer||0).toLocaleString('id-ID')}`;
+    document.getElementById("sd-net").innerText = `Rp ${(s.netCash||0).toLocaleString('id-ID')}`;
+    document.getElementById("sd-food").innerHTML = foodHtml || "Tidak ada item terjual";
+    document.getElementById("shift-detail-modal").classList.remove("hidden");
+}
+
 window.requestVoid = function(type, id) {
     currentVoidTarget = { type: type, id: id };
     document.getElementById("void-auth-name").value = "";
@@ -682,7 +775,7 @@ window.requestVoid = function(type, id) {
 };
 
 // ==========================================
-// KOIN MANAGEMENT & SETOR TUNAI (CASH DROP)
+// 9. KOIN MANAGEMENT & SETOR TUNAI (CASH DROP)
 // ==========================================
 window.openCashDrop = function() {
     document.getElementById("cashdrop-modal").classList.remove("hidden");
@@ -724,8 +817,32 @@ window.saveCoinJammed = function() {
 };
 
 // ==========================================
-// SINKRONISASI MANUAL & BACKGROUND
+// 10. SINKRONISASI MANUAL & BACKGROUND
 // ==========================================
+window.syncMasterData = async function() {
+    if (!navigator.onLine) return;
+    try {
+        const response = await fetch(API_URL, { method: 'GET', mode: 'cors' }); 
+        const result = await response.json();
+        if (result.status === "Success") {
+            window.masterDrawerBalance = result.masterDrawerBalance || 0;
+            window.loyaltyTarget = result.data.loyaltyTarget || 10; 
+            window.globalPromos = result.data.promos || [];
+            window.globalRecentShifts = result.recentShifts || [];
+            window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
+            
+            const tx = db.transaction(["staff", "menu", "settings", "members", "expense_categories"], "readwrite");
+            tx.objectStore("staff").clear(); result.data.staff.forEach(s => tx.objectStore("staff").add(s));
+            tx.objectStore("menu").clear(); result.data.menu.forEach(m => tx.objectStore("menu").add(m));
+            tx.objectStore("members").clear(); result.data.members.forEach(m => tx.objectStore("members").add(m));
+            
+            if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
+            globalMenuData = result.data.menu; activeLaundryTickets = result.data.activeLaundryOrders || [];
+            if (!document.getElementById("pos-screen").classList.contains("hidden")) { loadMenuUI(); window.renderActiveTickets(); }
+        }
+    } catch (e) { console.error("Sync Error:", e); }
+};
+
 window.manualPushSync = async function() {
     if (!navigator.onLine) return alert("Anda sedang offline!");
     let nTxt = document.getElementById("network-text");
@@ -763,7 +880,7 @@ window.runBackgroundSync = async function() {
 };
 
 // ==========================================
-// SHIFT REPORT & PENUTUPAN (AKHIRI SHIFT)
+// 11. SHIFT REPORT & PENUTUPAN (AKHIRI SHIFT)
 // ==========================================
 window.openShiftReport = function() {
     if (!db || !currentShiftId) return alert("Anda belum membuka shift kasir.");
@@ -808,6 +925,10 @@ window.openShiftReport = function() {
 
         let modal = document.getElementById("shift-detail-modal"); if (modal) modal.classList.remove("hidden");
     };
+};
+
+window.printCurrentShiftReport = async function() {
+    alert("Fungsi Cetak Laporan Bluetooth Terpanggil!");
 };
 
 window.triggerEndShift = async function() {
@@ -863,11 +984,14 @@ function performAutoClose(shift) {
     };
 }
 
+// ==========================================
+// 12. INITIALIZATION BROWSER ONLOAD
+// ==========================================
 window.onload = async () => { 
     await initDB(); 
     await window.syncMasterData(); 
     
-    // Auto-complete Event Listeners
+    // PEMULIHAN LISTENERS EVENT DROPDOWN AUTOCOMPLETE PADA FORM INPUT PELANGGAN
     const phoneInp = document.getElementById("cust-phone");
     const nameInp = document.getElementById("cust-name");
     if(phoneInp && nameInp) {
