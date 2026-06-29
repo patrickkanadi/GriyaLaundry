@@ -57,7 +57,10 @@ function processVoidApprovals(authStatuses) {
         for (const [orderId, info] of Object.entries(authStatuses.orders)) {
             db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = (e) => {
                 let order = e.target.result;
-                if (order && order.orderStatus !== info.status) { order.orderStatus = info.status; order.voidAuth = info.auth; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); }
+                if (order && order.orderStatus !== info.status) {
+                    order.orderStatus = info.status; order.voidAuth = info.auth;
+                    db.transaction(["orders"], "readwrite").objectStore("orders").put(order);
+                }
             };
         }
     }
@@ -65,50 +68,68 @@ function processVoidApprovals(authStatuses) {
         for (const [expenseId, info] of Object.entries(authStatuses.expenses)) {
             db.transaction(["expenses"], "readonly").objectStore("expenses").get(expenseId).onsuccess = (e) => {
                 let expense = e.target.result;
-                if (expense && expense.status !== info.status) { expense.status = info.status; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(expense); }
+                if (expense && expense.status !== info.status) {
+                    expense.status = info.status;
+                    db.transaction(["expenses"], "readwrite").objectStore("expenses").put(expense);
+                }
             };
         }
     }
 }
 
 async function hashString(str) {
-    const msgUint8 = new TextEncoder().encode(str); const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-    const hashArray = Array.from(new Uint8Array(hashBuffer)); return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    const msgUint8 = new TextEncoder().encode(str);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function formatWIB(dateString) { return new Date(dateString).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') + ' WIB'; }
 function formatTimeOnlyWIB(dateString) { return new Date(dateString).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, hour: '2-digit', minute: '2-digit' }) + ' WIB'; }
 
 window.getDynamicSettings = function() {
-    return new Promise((resolve) => { let settings = {}; db.transaction(["settings"], "readonly").objectStore("settings").getAll().onsuccess = (e) => { if (e.target.result) { e.target.result.forEach(s => { settings[s.key] = s.value; }); } resolve(settings); }; });
+    return new Promise((resolve) => {
+        let settings = {};
+        db.transaction(["settings"], "readonly").objectStore("settings").getAll().onsuccess = (e) => {
+            if (e.target.result) { e.target.result.forEach(s => { settings[s.key] = s.value; }); }
+            resolve(settings);
+        };
+    });
 };
 
 function logUserActivity() {
     let now = Date.now();
     if (currentPin && (now - window.lastActivityWrite > 5 * 60 * 1000)) {
-        window.lastActivityWrite = now; let tx = db.transaction(["active_shifts"], "readwrite");
-        tx.objectStore("active_shifts").get(currentPin).onsuccess = (e) => { let shift = e.target.result; if (shift) { shift.lastActiveTime = now; tx.objectStore("active_shifts").put(shift); } };
+        window.lastActivityWrite = now;
+        let tx = db.transaction(["active_shifts"], "readwrite");
+        tx.objectStore("active_shifts").get(currentPin).onsuccess = (e) => {
+            let shift = e.target.result; if (shift) { shift.lastActiveTime = now; tx.objectStore("active_shifts").put(shift); }
+        };
     }
 }
 ['click', 'touchstart', 'keydown'].forEach(evt => window.addEventListener(evt, logUserActivity, { passive: true }));
 
 // ==========================================
-// 2. PRINTER ENGINE
+// 2. PRINTER ENGINE MURNI ESC/POS
 // ==========================================
 window.connectBluetoothPrinter = async function() {
     try {
         btDevice = await navigator.bluetooth.requestDevice({ filters: [{ services: [0x18F0] }], optionalServices: [0x18F0] });
-        const server = await btDevice.gatt.connect(); const service = await server.getPrimaryService(0x18F0);
+        const server = await btDevice.gatt.connect();
+        const service = await server.getPrimaryService(0x18F0);
         btCharacteristic = await service.getCharacteristic(0x2AF1);
-        const btn = document.getElementById("btn-printer"); if(btn) { btn.innerText = "🖨️ Printer: Terhubung"; btn.style.background = "#2ecc71"; }
+        const btn = document.getElementById("btn-printer");
+        if(btn) { btn.innerText = "🖨️ Printer: Terhubung"; btn.style.background = "#2ecc71"; }
     } catch (err) { alert("Gagal terhubung ke printer Bluetooth."); }
 };
 
 async function sendToPrinter(payloadUint8) {
-    if (!btCharacteristic) { alert("Printer belum terhubung! Silakan klik tombol 'Printer: Offline' di atas terlebih dahulu."); return; }
+    if (!btCharacteristic) { alert("Printer belum terhubung! Pastikan modul nyala dan terkoneksi di menu atas."); return; }
     const chunkSize = 20; 
     for (let i = 0; i < payloadUint8.length; i += chunkSize) {
-        const chunk = payloadUint8.slice(i, i + chunkSize); await btCharacteristic.writeValue(chunk); await new Promise(r => setTimeout(r, 10)); 
+        const chunk = payloadUint8.slice(i, i + chunkSize);
+        await btCharacteristic.writeValue(chunk);
+        await new Promise(r => setTimeout(r, 10)); 
     }
 }
 
@@ -123,14 +144,21 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
     const settings = await window.getDynamicSettings();
     const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; const h2 = settings["Header_2"] || ""; const h3 = settings["Header_3"] || ""; 
     const f1 = settings["Footer_1"] || "TERIMA KASIH"; const f2 = settings["Footer_2"] || ""; const f3 = settings["Footer_3"] || ""; 
-    const CMD_INIT = "\x1B\x40"; const CMD_CENTER = "\x1B\x61\x01"; const CMD_LEFT = "\x1B\x61\x00"; const CMD_BOLD_ON = "\x1B\x45\x01"; const CMD_BOLD_OFF = "\x1B\x45\x00"; const CMD_BIG = "\x1B!\x11"; const CMD_NORMAL = "\x1B!\x00"; const CMD_CUT = "\x1D\x56\x41\x10";
+    
+    const CMD_INIT = "\x1B\x40"; const CMD_CENTER = "\x1B\x61\x01"; const CMD_LEFT = "\x1B\x61\x00";
+    const CMD_BOLD_ON = "\x1B\x45\x01"; const CMD_BOLD_OFF = "\x1B\x45\x00";
+    const CMD_BIG = "\x1B!\x11"; const CMD_NORMAL = "\x1B!\x00"; const CMD_CUT = "\x1D\x56\x41\x10";
 
-    let receipt = CMD_INIT + CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
-    if(h2) receipt += h2 + "\n"; if(h3) receipt += h3 + "\n";
-    receipt += formatWIB(order.timestamp || new Date().toISOString()) + "\n--------------------------------\n" + CMD_LEFT;
+    let receipt = CMD_INIT;
+    receipt += CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
+    if(h2) receipt += h2 + "\n";
+    if(h3) receipt += h3 + "\n";
+    receipt += formatWIB(order.timestamp || new Date().toISOString()) + "\n";
+    receipt += "--------------------------------\n" + CMD_LEFT;
     receipt += "Nota: " + orderId + "\nPlgn: " + order.customerName + "\nKsr : " + order.cashier + "\n--------------------------------\n";
 
     let remainingPromos = [...(order.redeemedPromos || []).map(p => ({...p}))];
+
     order.items.forEach(item => {
         const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
         const lineTotal = (item.qty * item.originalPrice).toLocaleString('id-ID');
@@ -148,7 +176,8 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
         }
     });
 
-    receipt += "--------------------------------\n" + formatEscPosLine("Subtotal", order.subtotal.toLocaleString('id-ID'), false) + "\n";
+    receipt += "--------------------------------\n";
+    receipt += formatEscPosLine("Subtotal", order.subtotal.toLocaleString('id-ID'), false) + "\n";
     if (order.discounts && order.discounts > 0) { receipt += formatEscPosLine("Total Diskon", "-" + order.discounts.toLocaleString('id-ID'), false) + "\n"; }
     receipt += CMD_BOLD_ON + CMD_BIG + formatEscPosLine("TOTAL", order.grandTotal.toLocaleString('id-ID'), true) + "\n" + CMD_NORMAL + CMD_BOLD_OFF + "\n";
     receipt += formatEscPosLine(`Tercatat(${payMethod})`, deposit.toLocaleString('id-ID'), false) + "\n";
@@ -163,8 +192,10 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
     }
 
     receipt += "--------------------------------\n" + CMD_CENTER + CMD_BOLD_ON + f1 + "\n" + CMD_BOLD_OFF;
-    if(f2) receipt += f2 + "\n"; if(f3) receipt += f3 + "\n";
+    if(f2) receipt += f2 + "\n";
+    if(f3) receipt += f3 + "\n";
     receipt += "\n\n\n\n" + CMD_CUT;
+
     const encoder = new TextEncoder(); await sendToPrinter(encoder.encode(receipt));
 };
 
@@ -426,7 +457,6 @@ window.selectMember = function(phone) {
     };
 };
 
-// FITUR AUTOCOMPLETE INSTAN AKTIF TANPA MENGETIK (REALTIME)
 window.handleAutocomplete = function(e) {
     if(!db) return;
     const val = e.target ? e.target.value.toLowerCase().trim() : ""; 
@@ -553,6 +583,9 @@ window.renderCart = function() {
     window.cartSubtotal = total; window.cartGrandTotal = total;
 };
 
+// ==========================================
+// 5B. ALGORITMA ANTI-PARADOKS POIN DAN REVIEW
+// ==========================================
 window.openReview = function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-transfer").value = 0;
@@ -565,11 +598,20 @@ window.openReview = function() {
     let promoHtml = "";
     if (activeCustomerProfile) {
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
-        let availableFree = activeCustomerProfile.freeCoins || 0; let tempPoints = activeCustomerProfile.points || 0; let maxRedeemable = 0;
         
-        for (let i = 0; i < cartCoins; i++) {
-            if (availableFree > 0) { maxRedeemable++; availableFree--; } 
-            else { tempPoints++; if (tempPoints >= window.loyaltyTarget) { maxRedeemable++; tempPoints -= window.loyaltyTarget; } }
+        let maxRedeemable = 0;
+        let F = activeCustomerProfile.freeCoins || 0;
+        let P = activeCustomerProfile.points || 0;
+        let T = window.loyaltyTarget || 10;
+
+        // MATEMATIKA ANTI-PARADOKS KOIN
+        for (let r = cartCoins; r >= 0; r--) {
+            let paidItems = cartCoins - r;
+            let earnedFree = Math.floor((P + paidItems) / T);
+            if (r <= F + earnedFree) {
+                maxRedeemable = r;
+                break;
+            }
         }
 
         if (maxRedeemable > 0) {
@@ -611,7 +653,6 @@ window.openReview = function() {
 };
 window.reviewOrder = window.openReview;
 
-// TOMBOL BATAL CHECKOUT DIAMANKAN KE GLOBAL WINDOW
 window.closeReview = function() {
     let reviewModal = document.getElementById("review-modal");
     if (reviewModal) { reviewModal.classList.add("hidden"); }
@@ -660,7 +701,6 @@ window.calculateRemaining = function() {
     if(rr) rr.innerText = `Rp ${remaining.toLocaleString('id-ID')}`;
 };
 
-// FIX 3: KALKULASI POIN DAN PENGHAPUSAN UNDIAN AMAN SENTOSA
 window.finalizeOrder = async function(shouldPrint) {
     let pc = document.getElementById("pay-cash"); let cash = pc ? Number(pc.value) : 0;
     let elQ = document.getElementById("pay-qris"); let qris = elQ ? Number(elQ.value) : 0;
@@ -712,7 +752,6 @@ window.finalizeOrder = async function(shouldPrint) {
             }
         });
 
-        // MASUKKAN UNDIAN BARU JIKA ADA DI ANTREAN INI
         let pendingPromoCode = antreans[currentAntreanIndex].pendingPromoCode;
         if (pendingPromoCode) {
             let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
@@ -724,6 +763,7 @@ window.finalizeOrder = async function(shouldPrint) {
                 let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
                 
+                // MENGEMBALIKAN PENYIMPANAN LOGIK PROMO CLAIMS
                 db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({
                     claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier, shiftId: currentShiftId, syncStatus: "Pending"
                 });
@@ -1027,7 +1067,8 @@ window.syncMasterData = async function() {
             txStaff.oncomplete = () => {
                 let txOthers = db.transaction(["menu", "settings", "members", "expense_categories"], "readwrite");
                 txOthers.objectStore("menu").clear(); result.data.menu.forEach(m => txOthers.objectStore("menu").add(m));
-                // JANGAN WIPE MEMBER TOTAL JIKA MASIH ADA TRANSAKSI GANTUNG DI BACKGROUND (Fix Race Condition Poin)
+                
+                // MENGUBAH SISTEM WRITE MENJADI PUT AGAR DATA LAMA (TERMASUK CLOUD) TIDAK TERHAPUS OLEH SYNC
                 let unMems = [];
                 db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = (ue) => {
                     unMems = ue.target.result.map(u => u.phone);
@@ -1035,6 +1076,7 @@ window.syncMasterData = async function() {
                         if (!unMems.includes(m.phone)) txOthers.objectStore("members").put(m);
                     });
                 };
+                
                 let expCatStore = txOthers.objectStore("expense_categories"); expCatStore.clear(); 
                 if(result.data.expenseCategories) result.data.expenseCategories.forEach(c => expCatStore.add({name: c}));
                 let settingsStore = txOthers.objectStore("settings"); settingsStore.clear();
@@ -1059,7 +1101,6 @@ window.manualPushSync = async function() {
     await window.syncMasterData(); alert("Sinkronisasi Database Berhasil!");
 };
 
-// FIX 5: BACKGROUND SYNC DIPULIHKAN 100% UNTUK SELURUH MODUL DATA (TERMASUK PROMO CLAIMS)
 window.runBackgroundSync = async function() {
     if (!navigator.onLine || isSyncing) return; isSyncing = true; 
     try {
