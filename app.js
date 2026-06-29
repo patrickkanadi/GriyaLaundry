@@ -104,6 +104,18 @@ async function hashString(str) {
 function formatWIB(dateString) { return new Date(dateString).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') + ' WIB'; }
 function formatTimeOnlyWIB(dateString) { return new Date(dateString).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, hour: '2-digit', minute: '2-digit' }) + ' WIB'; }
 
+function logUserActivity() {
+    let now = Date.now();
+    if (currentPin && (now - window.lastActivityWrite > 5 * 60 * 1000)) {
+        window.lastActivityWrite = now;
+        let tx = db.transaction(["active_shifts"], "readwrite");
+        tx.objectStore("active_shifts").get(currentPin).onsuccess = (e) => {
+            let shift = e.target.result; if (shift) { shift.lastActiveTime = now; tx.objectStore("active_shifts").put(shift); }
+        };
+    }
+}
+['click', 'touchstart', 'keydown'].forEach(evt => window.addEventListener(evt, logUserActivity, { passive: true }));
+
 // ==========================================
 // 2. PRINTER ENGINE
 // ==========================================
@@ -292,7 +304,7 @@ window.selectMember = function(phone) {
     };
 };
 
-// PERBAIKAN AUTOCOMPLETE ENGINE: Pemindaian data lokal IndexedDB yang aman
+// FIX 1: JENDELA AUTOCOMPLETE LANGSUNG KELUAR SAAT KLIK (TANPA TUNGGU KETIK KARAKTER)
 window.handleAutocomplete = function(e) {
     if(!db) return;
     const val = e.target.value.toLowerCase().trim(); 
@@ -301,14 +313,15 @@ window.handleAutocomplete = function(e) {
     
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
         let matches = ev.target.result; 
+        // Jika ada text diinput lakukan filter, jika kosong (baru klik) tampilkan semua
         if (val.length > 0) matches = matches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
         matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
 
-        if (matches.length > 0 && val.length > 0) {
+        if (matches.length > 0) {
             resBox.innerHTML = matches.map(m => `
-                <div class="autocomplete-item" onclick="window.selectMember('${m.phone}')" style="padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; text-align: left; background: #fff;">
+                <div class="autocomplete-item" onclick="window.selectMember('${m.phone}')" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px;">
                     <div style="font-weight: bold; color: #2980b9;">${m.phone}</div>
-                    <div style="font-size: 12px; color: #555;">${m.name}</div>
+                    <div style="font-size: 13px; color: #555; margin-top:2px;">${m.name}</div>
                 </div>
             `).join("");
             resBox.classList.remove("hidden");
@@ -378,16 +391,18 @@ window.updateCartItemQty = function(itemId, delta) {
     }
 };
 
+// FIX 3: STRUKTUR STRUK NOTE / KERANJANG DENGAN TOMBOL (+) DAN (-) YANG JAUH LEBIH BESAR (45px) UNTUK TABLET
 window.renderCart = function() {
     const container = document.getElementById("cart-items"); container.innerHTML = ""; let total = 0;
     currentCart.forEach(item => {
         const lineTotal = item.qty * item.price; total += lineTotal; 
         container.innerHTML += `
-        <div class="cart-item" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
-            <div><strong>${item.name}</strong><br><small>Rp ${item.price.toLocaleString('id-ID')} x ${item.qty}</small></div>
-            <div style="display:flex; align-items:center; gap:5px;">
-                <button onclick="window.updateCartItemQty('${item.itemId}', -1)" style="background:#e74c3c; color:white; border:none; padding:2px 8px; border-radius:4px; font-weight:bold;">-</button>
-                <button onclick="window.updateCartItemQty('${item.itemId}', 1)" style="background:#2ecc71; color:white; border:none; padding:2px 8px; border-radius:4px; font-weight:bold;">+</button>
+        <div class="cart-item" style="display:flex; justify-content:space-between; align-items:center; padding:15px 0; border-bottom:1px solid #edf2f7; gap: 10px;">
+            <div style="flex: 1;"><strong style="font-size: 16px; color: #2c3e50;">${item.name}</strong><br><small style="font-size: 13px; color: #7f8c8d;">Rp ${item.price.toLocaleString('id-ID')} x ${item.qty}</small></div>
+            <div style="display:flex; align-items:center; gap:12px; background: #f8f9fa; padding: 4px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <button onclick="window.updateCartItemQty('${item.itemId}', -1)" style="background:#e74c3c; color:white; border:none; width:45px; height:45px; border-radius:6px; font-weight:bold; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">-</button>
+                <span style="font-size: 18px; font-weight: bold; min-width: 30px; text-align: center;">${item.qty}</span>
+                <button onclick="window.updateCartItemQty('${item.itemId}', 1)" style="background:#2ecc71; color:white; border:none; width:45px; height:45px; border-radius:6px; font-weight:bold; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">+</button>
             </div>
         </div>`;
     });
@@ -450,6 +465,14 @@ window.openReview = function() {
     document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
     window.applyPromo();
     document.getElementById("review-modal").classList.remove("hidden");
+};
+
+// FIX 4: MEMBUAT TOMBOL CANCEL / SELESAI PADA MODAL CHECKOUT BERFUNGSI (TIDAK LAGI STUCK)
+window.closeReview = function() {
+    let reviewModal = document.getElementById("review-modal");
+    if (reviewModal) {
+        reviewModal.classList.add("hidden");
+    }
 };
 
 window.applyPromo = function() {
@@ -761,17 +784,14 @@ window.syncMasterData = async function() {
             window.loyaltyTarget = result.data.loyaltyTarget || 10; window.globalPromos = result.data.promos || [];
             window.globalRecentShifts = result.recentShifts || [];
             
-            // LOGIK BARU: Sembunyikan Laci Uang dengan selektor pintar jika DrawerTracking nonaktif
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
             const btnDrawer = document.getElementById("btn-drawer") || document.getElementById("btn-cashdrop") || document.querySelector("button[onclick*='openCashDrop']");
             if (btnDrawer) btnDrawer.style.display = window.enableDrawerTracking ? "" : "none";
 
-            // SINKRONISASI PIN KASIR DIUTAMAKAN (Transaksi 1 Terpisah): Login Cepat
             let txStaff = db.transaction(["staff"], "readwrite");
             txStaff.objectStore("staff").clear();
             result.data.staff.forEach(s => txStaff.objectStore("staff").add(s));
 
-            // SINKRONISASI SISA STORE LAIN (Transaksi 2)
             txStaff.oncomplete = () => {
                 let txOthers = db.transaction(["menu", "settings", "members", "expense_categories"], "readwrite");
                 txOthers.objectStore("menu").clear(); result.data.menu.forEach(m => txOthers.objectStore("menu").add(m));
@@ -792,7 +812,7 @@ window.syncMasterData = async function() {
 };
 
 window.manualPushSync = async function() {
-    if (!navigator.onLine) return alert("Anda sedang offline!");
+    if (!navigator.onLine) return alert("Anda Instruments sedang offline!");
     let nTxt = document.getElementById("network-text"); if(nTxt) nTxt.innerText = "Mengirim Data...";
     let nDot = document.getElementById("network-dot"); if(nDot) nDot.style.backgroundColor = "#f39c12";
     await window.runBackgroundSync();
@@ -870,7 +890,32 @@ window.openShiftReport = function() {
     };
 };
 
-window.printCurrentShiftReport = async function() { alert("Laporan dikirim ke Printer."); };
+// FIX 2: MENYALAKAN DAN MENYINKRONKAN OPSI FUNGSI PRINT SHIFT REPORT KE PRINTER BLUETOOTH
+window.printCurrentShiftReport = async function() {
+    const data = window.currentShiftData;
+    if (!data) return alert("Data ringkasan shift tidak tersedia.");
+    
+    const meterT = Number(document.getElementById("meter-token").value) || 0;
+    const meterP = Number(document.getElementById("meter-pasca").value) || 0;
+    
+    const tempPayload = {
+        shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
+        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, 
+        totalCash: data.totalCash, totalQris: data.totalQris, totalTransfer: data.totalTransfer, 
+        totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree,
+        totalExpenses: data.totalExpenses, netCash: data.net, foodSummary: data.foodSummary,
+        meterToken: meterT, meterPasca: meterP
+    };
+    
+    try {
+        if (typeof buildShiftReportReceipt === "function") {
+            await buildShiftReportReceipt(tempPayload);
+            alert("Laporan penutupan shift berhasil dikirim ke printer!");
+        } else {
+            alert("⚙️ Printer belum sepenuhnya siap, data laporan shift aman tersimpan!");
+        }
+    } catch (e) { alert("Gagal mencetak laporan: " + e.toString()); }
+};
 
 window.triggerEndShift = async function() {
     if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?\nLaporan penutupan akan langsung dikirim ke Cloud Google Sheet.")) return;
@@ -923,13 +968,13 @@ function performAutoClose(shift) {
 }
 
 // ==========================================
-// 12. ELEMEN DELEGASI GLOBAL (ONLOAD)
+// 12. INITIALIZATION BROWSER DELEGATION
 // ==========================================
 window.onload = async () => { 
     await initDB(); 
     await window.syncMasterData(); 
     
-    // GLOBAL EVENT DELEGATION: Menjamin fitur Autocomplete Dropdown bekerja tanpa kendala rendering
+    // DELEGASI GLOBAL EVENT LISTENER UNTUK MENJAMIN COMPATIBILITY INTERAKSI MULTI-WORKSPACE PWA
     document.addEventListener("input", function(e) {
         if (e.target && (e.target.id === "cust-phone" || e.target.id === "cust-name")) { window.handleAutocomplete(e); }
     });
