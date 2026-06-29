@@ -274,6 +274,75 @@ window.lockScreen = function() { window.location.reload(); };
 // ==========================================
 // 4. ANTREAN, PELANGGAN & LOTTERY (UNDIAN)
 // ==========================================
+
+// FIX MUTLAK 1: KONEKSI DOM UNTUK AUTOCOMPLETE DROPDOWN MEMBER (ANTI-ERROR)
+window.setupAutocompleteListeners = function() {
+    ['cust-phone', 'cust-name'].forEach(id => {
+        let el = document.getElementById(id);
+        if(el) {
+            // Kita attach event click, focus, input langsung ke node elemennya secara dinamis
+            el.addEventListener("click", window.handleAutocomplete);
+            el.addEventListener("focus", window.handleAutocomplete);
+            el.addEventListener("input", window.handleAutocomplete);
+        }
+    });
+
+    document.addEventListener("click", function(e) {
+        if (e.target && !e.target.closest('.autocomplete-wrapper') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') { 
+            let rb = document.getElementById('autocomplete-results'); if (rb) { rb.classList.add('hidden'); rb.style.display = "none"; }
+        }
+    });
+};
+
+window.handleAutocomplete = function(e) {
+    if(!db) return;
+    const val = e.target ? e.target.value.toLowerCase().trim() : ""; 
+    const resBox = document.getElementById("autocomplete-results");
+    if (!resBox) return;
+    
+    // Auto-hilang box promo
+    let pi = document.getElementById("promo-indicator"); 
+    if (activeCustomerProfile) {
+        if (val !== activeCustomerProfile.phone.toLowerCase() && val !== activeCustomerProfile.name.toLowerCase()) {
+            activeCustomerProfile = null; 
+            if(pi) pi.classList.add("hidden");
+        }
+    } else {
+        if(pi) pi.classList.add("hidden");
+    }
+    
+    db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
+        let matches = ev.target.result; 
+        if (val.length > 0) {
+            matches = matches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
+        }
+        matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
+
+        if (matches.length > 0) {
+            resBox.innerHTML = matches.map(m => `
+                <div class="autocomplete-item" onclick="window.selectMember('${m.phone}')" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px; z-index: 10000; position:relative;">
+                    <div style="font-weight: bold; color: #2980b9;">${m.phone}</div>
+                    <div style="font-size: 13px; color: #555; margin-top:2px;">${m.name}</div>
+                </div>
+            `).join("");
+            resBox.classList.remove("hidden");
+            resBox.style.display = "block";
+        } else { resBox.classList.add("hidden"); resBox.style.display = "none"; }
+    };
+};
+
+window.selectMember = function(phone) {
+    db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
+        activeCustomerProfile = e.target.result;
+        if(activeCustomerProfile) {
+            document.getElementById("cust-phone").value = activeCustomerProfile.phone;
+            document.getElementById("cust-name").value = activeCustomerProfile.name;
+            let rb = document.getElementById("autocomplete-results"); if(rb) { rb.classList.add("hidden"); rb.style.display = "none"; }
+            window.updatePromoIndicator();
+        }
+    };
+};
+
 window.switchAntrean = function(index) {
     if (currentAntreanIndex === index) return;
     antreans[currentAntreanIndex].cart = [...currentCart];
@@ -447,53 +516,6 @@ window.unlockMenu = function(isGuest) {
     }
 };
 
-window.selectMember = function(phone) {
-    db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
-        activeCustomerProfile = e.target.result;
-        if(activeCustomerProfile) {
-            document.getElementById("cust-phone").value = activeCustomerProfile.phone;
-            document.getElementById("cust-name").value = activeCustomerProfile.name;
-            let rb = document.getElementById("autocomplete-results"); if(rb) rb.classList.add("hidden");
-            window.updatePromoIndicator();
-        }
-    };
-};
-
-window.handleAutocomplete = function(e) {
-    if(!db) return;
-    const val = e.target ? e.target.value.toLowerCase().trim() : ""; 
-    const resBox = document.getElementById("autocomplete-results");
-    if (!resBox) return;
-    
-    if (activeCustomerProfile) {
-        if (val !== activeCustomerProfile.phone.toLowerCase() && val !== activeCustomerProfile.name.toLowerCase()) {
-            activeCustomerProfile = null; 
-            let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
-        }
-    } else {
-        let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
-    }
-    
-    db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
-        let matches = ev.target.result; 
-        if (val.length > 0) {
-            matches = matches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
-        }
-        matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
-
-        if (matches.length > 0) {
-            resBox.innerHTML = matches.map(m => `
-                <div class="autocomplete-item" onclick="window.selectMember('${m.phone}')" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px;">
-                    <div style="font-weight: bold; color: #2980b9;">${m.phone}</div>
-                    <div style="font-size: 13px; color: #555; margin-top:2px;">${m.name}</div>
-                </div>
-            `).join("");
-            resBox.classList.remove("hidden");
-            resBox.style.display = "block";
-        } else { resBox.classList.add("hidden"); resBox.style.display = "none"; }
-    };
-};
-
 window.openEditMember = function() {
     let prefill = (activeCustomerProfile && activeCustomerProfile.phone !== "-" && !activeCustomerProfile.isNoWA) ? activeCustomerProfile.phone : "";
     document.getElementById("edit-old-phone").value = prefill; 
@@ -585,6 +607,7 @@ window.renderCart = function() {
     window.cartSubtotal = total; window.cartGrandTotal = total;
 };
 
+// FIX 2: ALGORITMA MATEMATIKA ANTI-PARADOKS KOIN
 window.openReview = function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     document.getElementById("pay-cash").value = 0; document.getElementById("pay-qris").value = 0; document.getElementById("pay-transfer").value = 0;
@@ -598,12 +621,12 @@ window.openReview = function() {
     if (activeCustomerProfile) {
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
         
-        // MATEMATIKA ANTI-PARADOKS POIN: Cari nilai aman maksimum yang bisa diklaim gratis 
         let maxRedeemable = 0;
         let F = activeCustomerProfile.freeCoins || 0;
         let P = activeCustomerProfile.points || 0;
         let T = window.loyaltyTarget || 10;
 
+        // Simulasi Keranjang: Hanya jika "sisa" item yang dibayar menghasilkan poin yang cukup (atau Koin Gratis sudah ada) baru diizinkan klaim.
         for (let r = cartCoins; r >= 0; r--) {
             let paidItems = cartCoins - r;
             let earnedFree = Math.floor((P + paidItems) / T);
@@ -1058,18 +1081,15 @@ window.syncMasterData = async function() {
                 btn.style.display = window.enableDrawerTracking ? "" : "none";
             });
 
-            // PRIORITAS 1: SYNC PIN KASIR & MENU ORDER (AGAR LOGIN INSTAN & MENU TAMPIL CEPAT)
-            let txFast = db.transaction(["staff", "menu"], "readwrite");
-            txFast.objectStore("staff").clear(); result.data.staff.forEach(s => txFast.objectStore("staff").add(s));
-            txFast.objectStore("menu").clear(); result.data.menu.forEach(m => txFast.objectStore("menu").add(m));
+            let txStaff = db.transaction(["staff", "menu"], "readwrite");
+            txStaff.objectStore("staff").clear(); result.data.staff.forEach(s => txStaff.objectStore("staff").add(s));
+            txStaff.objectStore("menu").clear(); result.data.menu.forEach(m => txStaff.objectStore("menu").add(m));
 
-            txFast.oncomplete = () => {
+            txStaff.oncomplete = () => {
                 globalMenuData = result.data.menu; 
                 if (!document.getElementById("pos-screen").classList.contains("hidden")) { loadMenuUI(); }
-                
                 if(nTxt) nTxt.innerText = "Online & Sinkron"; if(nDot) nDot.style.backgroundColor = "#2ecc71";
                 
-                // PRIORITAS 2: BACKGROUND SYNC MEMBER & SETTINGS (YANG BERAT & LAMA)
                 let txOthers = db.transaction(["settings", "members", "expense_categories"], "readwrite");
                 let unMems = [];
                 db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = (ue) => {
