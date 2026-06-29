@@ -110,7 +110,7 @@ function logUserActivity() {
 ['click', 'touchstart', 'keydown'].forEach(evt => window.addEventListener(evt, logUserActivity, { passive: true }));
 
 // ==========================================
-// 2. PRINTER ENGINE (DIKEMBALIKAN UTUH)
+// 2. PRINTER ENGINE MURNI ESC/POS
 // ==========================================
 window.connectBluetoothPrinter = async function() {
     try {
@@ -124,7 +124,7 @@ window.connectBluetoothPrinter = async function() {
 };
 
 async function sendToPrinter(payloadUint8) {
-    if (!btCharacteristic) { alert("Printer belum terhubung! Silakan klik tombol 'Printer: Offline' di atas terlebih dahulu."); return; }
+    if (!btCharacteristic) { alert("Printer belum terhubung! Pastikan modul nyala dan terkoneksi di menu atas."); return; }
     const chunkSize = 20; 
     for (let i = 0; i < payloadUint8.length; i += chunkSize) {
         const chunk = payloadUint8.slice(i, i + chunkSize);
@@ -333,7 +333,6 @@ window.updatePromoIndicator = function() {
     document.getElementById("promo-indicator").classList.remove("hidden");
 };
 
-// DIKEMBALIKAN: DETAIL UNDIAN TERSIMPAN (BISA DIKLIK)
 window.showStoredRewards = function() {
     if(!activeCustomerProfile || !activeCustomerProfile.storedRewards) return;
     let items = Object.entries(activeCustomerProfile.storedRewards).filter(([k,v]) => v > 0);
@@ -341,7 +340,6 @@ window.showStoredRewards = function() {
     let msg = "🎁 Hadiah Undian Tersimpan:\n\n"; items.forEach(([k,v]) => msg += `- ${v}x ${k}\n`); alert(msg);
 };
 
-// DIKEMBALIKAN: FUNGSI PILIH UNDIAN HARIAN (LOTTERY MODAL)
 window.openLotteryModal = function() {
     if (!activeCustomerProfile) return alert("Harap pilih profil pelanggan terlebih dahulu.");
     if (activeCustomerProfile.isNoWA) { return alert("⚠️ Pelanggan tanpa WhatsApp valid tidak dapat didaftarkan dalam program undian."); }
@@ -465,7 +463,15 @@ window.handleAutocomplete = function(e) {
     const resBox = document.getElementById("autocomplete-results");
     if (!resBox) return;
     
-    activeCustomerProfile = null; document.getElementById("promo-indicator").classList.add("hidden");
+    // Jangan reset profil secara brutal jika input masih match dengan data member aktif
+    if (activeCustomerProfile) {
+        if (val !== activeCustomerProfile.phone.toLowerCase() && val !== activeCustomerProfile.name.toLowerCase()) {
+            activeCustomerProfile = null; 
+            document.getElementById("promo-indicator").classList.add("hidden");
+        }
+    } else {
+        document.getElementById("promo-indicator").classList.add("hidden");
+    }
     
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
         let matches = ev.target.result; 
@@ -474,6 +480,7 @@ window.handleAutocomplete = function(e) {
         }
         matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
 
+        // Tampilkan instan tanpa harus ada teks (val.length > 0 dihapus agar list keluar saat form diklik kosong)
         if (matches.length > 0) {
             resBox.innerHTML = matches.map(m => `
                 <div class="autocomplete-item" onclick="window.selectMember('${m.phone}')" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px;">
@@ -533,7 +540,6 @@ function renderProductGrid() {
     });
 }
 
-// DIKEMBALIKAN UTUH: FUNGSI NUMPAD DESIMAL
 window.openNumpad = function(item) { activeNumpadItem = item; numpadValue = "0"; document.getElementById("numpad-display").innerText = "0"; document.getElementById("numpad-modal").classList.remove("hidden"); };
 window.closeNumpad = function() { document.getElementById("numpad-modal").classList.add("hidden"); activeNumpadItem = null; };
 window.numpadPress = function(val) {
@@ -635,6 +641,7 @@ window.openReview = function() {
     document.getElementById("review-modal").classList.remove("hidden");
 };
 
+// TOMBOL BATAL CHECKOUT DIAMANKAN KE GLOBAL WINDOW
 window.closeReview = function() {
     let reviewModal = document.getElementById("review-modal");
     if (reviewModal) { reviewModal.classList.add("hidden"); }
@@ -652,8 +659,8 @@ window.applyPromo = function() {
     document.getElementById("pay-free").value = totalFreeValue; 
     let q = Number(document.getElementById("pay-qris").value) || 0; 
     let t = Number(document.getElementById("pay-transfer").value) || 0; 
-    let hp = Number(document.getElementById("pay-hotel-piutang").value) || 0; 
-    let tp = Number(document.getElementById("pay-tamu-piutang").value) || 0;
+    let hp = Number(document.getElementById("pay-hotel-piutang")?.value) || 0; 
+    let tp = Number(document.getElementById("pay-tamu-piutang")?.value) || 0;
     
     window.cartGrandTotal = Math.max(0, window.cartSubtotal - totalFreeValue);
     document.getElementById("review-grandtotal").innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
@@ -665,7 +672,7 @@ window.applyPromo = function() {
 
 window.calculateRemaining = function() {
     const c = Number(document.getElementById("pay-cash").value) || 0; const q = Number(document.getElementById("pay-qris").value) || 0; 
-    const t = Number(document.getElementById("pay-transfer").value) || 0; const hp = Number(document.getElementById("pay-hotel-piutang").value) || 0; const tp = Number(document.getElementById("pay-tamu-piutang").value) || 0; 
+    const t = Number(document.getElementById("pay-transfer").value) || 0; const hp = Number(document.getElementById("pay-hotel-piutang")?.value) || 0; const tp = Number(document.getElementById("pay-tamu-piutang")?.value) || 0; 
     const totalAccounted = c + q + t + hp + tp; 
     const remaining = Math.max(0, window.cartGrandTotal - totalAccounted);
     document.getElementById("review-remaining").innerText = `Rp ${remaining.toLocaleString('id-ID')}`;
@@ -673,8 +680,8 @@ window.calculateRemaining = function() {
 
 window.finalizeOrder = async function(shouldPrint) {
     const cash = Number(document.getElementById("pay-cash").value) || 0; const qris = Number(document.getElementById("pay-qris").value) || 0; 
-    const transfer = Number(document.getElementById("pay-transfer").value) || 0; const hotelPiutang = Number(document.getElementById("pay-hotel-piutang").value) || 0; 
-    const tamuPiutang = Number(document.getElementById("pay-tamu-piutang").value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
+    const transfer = Number(document.getElementById("pay-transfer").value) || 0; const hotelPiutang = Number(document.getElementById("pay-hotel-piutang")?.value) || 0; 
+    const tamuPiutang = Number(document.getElementById("pay-tamu-piutang")?.value) || 0; const free = Number(document.getElementById("pay-free").value) || 0;
     const totalPiutang = hotelPiutang + tamuPiutang; 
     if ((window.cartGrandTotal - (cash + qris + transfer + totalPiutang)) > 0) return alert("⚠️ Pembayaran Belum Cukup!");
 
@@ -724,9 +731,12 @@ window.finalizeOrder = async function(shouldPrint) {
     };
 
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
+    
+    // Pastikan Struk Printer Dipanggil Jika requested
     if (shouldPrint && typeof window.buildEscPosReceipt === "function") {
         await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, "Split", newPoints, newFree);
     }
+    
     document.getElementById("review-modal").classList.add("hidden"); lockMenu(); renderProductGrid(); window.runBackgroundSync();
 };
 
@@ -991,9 +1001,11 @@ window.syncMasterData = async function() {
             window.loyaltyTarget = result.data.loyaltyTarget || 10; window.globalPromos = result.data.promos || [];
             window.globalRecentShifts = result.recentShifts || [];
             
+            // HIDE DRAWER / LACI BUTTON JIKA TRACKING MATI
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
-            const btnDrawer = document.getElementById("btn-drawer") || document.getElementById("btn-cashdrop") || document.querySelector("button[onclick*='openCashDrop']");
-            if (btnDrawer) btnDrawer.style.display = window.enableDrawerTracking ? "" : "none";
+            document.querySelectorAll("button[onclick*='openCashDrop'], #btn-drawer, #btn-cashdrop").forEach(btn => {
+                btn.style.display = window.enableDrawerTracking ? "" : "none";
+            });
 
             let txStaff = db.transaction(["staff"], "readwrite");
             txStaff.objectStore("staff").clear();
@@ -1181,6 +1193,7 @@ window.onload = async () => {
     await initDB(); 
     await window.syncMasterData(); 
     
+    // DELEGASI GLOBAL EVENT LISTENER
     document.addEventListener("input", function(e) {
         if (e.target && (e.target.id === "cust-phone" || e.target.id === "cust-name")) { window.handleAutocomplete(e); }
     });
