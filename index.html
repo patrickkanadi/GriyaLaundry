@@ -593,9 +593,14 @@
 
     </div>
 
-    <div style="background: #f1f3f5; padding: 15px 20px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #e2e8f0;">
-      <button onclick="document.getElementById('shift-detail-modal').classList.add('hidden')" style="background: #95a5a6; color: white; border: none; padding: 10px 16px; font-weight: bold; border-radius: 6px; cursor: pointer;">Tutup Jendela</button>
-      <button onclick="printCurrentShiftReport()" style="background: #3498db; color: white; border: none; padding: 10px 18px; font-weight: bold; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px;">🖨️ Cetak Laporan</button>
+<div style="background: #f1f3f5; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; gap: 10px;">
+      
+      <button onclick="document.getElementById('shift-detail-modal').classList.add('hidden')" style="background: #95a5a6; color: white; border: none; padding: 11px 18px; font-weight: bold; border-radius: 6px; cursor: pointer;">❌ Batal / Tutup</button>
+      
+      <button onclick="window.printCurrentShiftReport()" style="background: #3498db; color: white; border: none; padding: 11px 20px; font-weight: bold; border-radius: 6px; cursor: pointer;">🖨️ Cetak Laporan</button>
+      
+      <button onclick="window.triggerEndShift()" style="background: #e74c3c; color: white; border: none; padding: 11px 20px; font-weight: bold; border-radius: 6px; cursor: pointer;">🚪 Akhiri Shift & Logout</button>
+      
     </div>
 
   </div>
