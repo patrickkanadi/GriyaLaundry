@@ -505,102 +505,79 @@
         </div>
     </div>
  
-    <div id="shift-detail-modal" class="modal-backdrop hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px; box-sizing: border-box;">
-  <div class="modal-content" style="background: #ffffff; width: 100%; max-width: 550px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
-    
-    <div style="background: #2980b9; color: #ffffff; padding: 15px 20px; font-weight: bold; font-size: 18px; display: flex; justify-content: space-between; align-items: center;">
-      <span>📊 Ringkasan & Laporan Shift Berjalan</span>
-      <button onclick="document.getElementById('shift-detail-modal').classList.add('hidden')" style="background: transparent; border: none; color: white; font-size: 22px; cursor: pointer; line-height: 1;">&times;</button>
+    <div id="shift-detail-modal" class="modal-backdrop hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 15px; box-sizing: border-box;">
+  <div class="modal-content" style="background: #ffffff; width: 100%; max-width: 750px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column; max-height: 95vh;">
+
+    <div style="background: #2980b9; color: #ffffff; padding: 12px 20px; font-weight: bold; font-size: 16px; display: flex; justify-content: space-between; align-items: center;">
+      <span>📊 Laporan Akhir Shift</span>
+      <button onclick="document.getElementById('shift-detail-modal').classList.add('hidden')" style="background: transparent; border: none; color: white; font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
     </div>
 
     <div style="padding: 20px; overflow-y: auto; flex: 1; font-family: sans-serif; color: #333; font-size: 14px;">
-      
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; background: #f8f9fa; border-radius: 6px; overflow: hidden;">
-        <tr>
-          <td style="padding: 8px 12px; color: #666;">ID Shift:</td>
-          <td id="sd-id" style="padding: 8px 12px; font-weight: bold; text-align: right;">-</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px 12px; color: #666;">Waktu Login:</td>
-          <td id="sd-login" style="padding: 8px 12px; text-align: right;">-</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px 12px; color: #666;">Status Terkini:</td>
-          <td id="sd-logout" style="padding: 8px 12px; text-align: right; color: #2ecc71; font-weight: bold;">Saat Ini (Aktif)</td>
-        </tr>
-      </table>
 
-      <h3 style="margin: 15px 0 8px 0; font-size: 14px; color: #2980b9; border-bottom: 2px solid #edf2f7; padding-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">💰 Penerimaan Pembayaran Kasir</h3>
-      <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 15px;">
-        <div style="display: flex; justify-content: space-between;">
-          <span>Tunai / Cash:</span>
-          <strong id="sd-cash">Rp 0</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between;">
-          <span>QRIS Statis/Dinamis:</span>
-          <strong id="sd-qris">Rp 0</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between;">
-          <span>Transfer Bank:</span>
-          <strong id="sd-transfer">Rp 0</strong>
-        </div>
+      <div style="display:flex; justify-content:space-between; background:#f8f9fa; padding:10px 15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+        <div><span style="color:#7f8c8d; font-size:12px;">ID Shift</span><br><strong id="sd-id">-</strong></div>
+        <div><span style="color:#7f8c8d; font-size:12px;">Waktu Login</span><br><strong id="sd-login">-</strong></div>
+        <div style="text-align:right;"><span style="color:#7f8c8d; font-size:12px;">Status</span><br><strong id="sd-logout" style="color:#2ecc71;">Saat Ini (Aktif)</strong></div>
       </div>
 
-      <h3 style="margin: 15px 0 8px 0; font-size: 14px; color: #e67e22; border-bottom: 2px solid #edf2f7; padding-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">⚠️ Piutang &amp; Pengeluaran Laci</h3>
-      <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 15px;">
-        <div style="display: flex; justify-content: space-between;">
-          <span>Piutang Hotel (B2B Contract):</span>
-          <strong id="sd-hotel-piutang" style="color: #d35400;">Rp 0</strong>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+
+        <div style="display:flex; flex-direction:column; gap:15px;">
+          
+          <div style="background:#ebf5fb; border:1px solid #bce8f1; border-radius:8px; padding:12px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span>Omset Kotor:</span> <strong id="sd-omset" style="color:#2980b9; font-size:16px;">Rp 0</strong></div>
+            <div style="display:flex; justify-content:space-between; border-top:1px dashed #bdc3c7; padding-top:8px; font-size:16px;">
+              <span style="color:#27ae60; font-weight:bold;">Uang Laci (Net):</span> <strong id="sd-net" style="color:#27ae60; font-size:18px;">Rp 0</strong>
+            </div>
+          </div>
+
+          <div style="border:1px solid #edf2f7; border-radius:8px; padding:12px;">
+            <h3 style="margin:0 0 10px 0; font-size:13px; color:#2980b9; text-transform:uppercase;">💰 Penerimaan Tunai/Non-Tunai</h3>
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Tunai / Cash:</span> <strong id="sd-cash">Rp 0</strong></div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>QRIS:</span> <strong id="sd-qris">Rp 0</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>Transfer Bank:</span> <strong id="sd-transfer">Rp 0</strong></div>
+          </div>
+
+          <div style="background:#faf5fb; border:1px solid #f5eef8; border-radius:8px; padding:12px;">
+            <h3 style="margin:0 0 10px 0; font-size:13px; color:#8e44ad; text-transform:uppercase;">🎁 Promo & Koin Gratis</h3>
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Item/Koin Digratiskan:</span> <strong id="sd-free-items" style="color:#8e44ad;">0 Item</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>Total Diskon Nominal:</span> <strong id="sd-discount-nom" style="color:#8e44ad;">Rp 0</strong></div>
+          </div>
         </div>
-        <div style="display: flex; justify-content: space-between;">
-          <span>Piutang Tamu Personal:</span>
-          <strong id="sd-tamu-piutang" style="color: #d35400;">Rp 0</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between;">
-          <span>Total Pengeluaran Operasional Laci:</span>
-          <strong id="sd-expenses" style="color: #c0392b;">Rp 0</strong>
+
+        <div style="display:flex; flex-direction:column; gap:15px;">
+          
+          <div style="border:1px solid #fae5d3; border-radius:8px; padding:12px;">
+            <h3 style="margin:0 0 10px 0; font-size:13px; color:#e67e22; text-transform:uppercase;">⚠️ Piutang & Pengeluaran</h3>
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Piutang Hotel B2B:</span> <strong id="sd-hotel-piutang" style="color:#d35400;">Rp 0</strong></div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>Piutang Tamu Kamar:</span> <strong id="sd-tamu-piutang" style="color:#d35400;">Rp 0</strong></div>
+            <div style="display:flex; justify-content:space-between; border-top:1px dashed #f5cba7; padding-top:6px;"><span>Pengeluaran Laci:</span> <strong id="sd-expenses" style="color:#c0392b;">Rp 0</strong></div>
+          </div>
+
+          <div style="background:#fdf2e9; border-radius:8px; padding:12px; display:flex; flex-direction:column;">
+            <h3 style="margin:0 0 8px 0; font-size:13px; color:#2c3e50; text-transform:uppercase;">🍔 Rangkuman Item Terjual</h3>
+            <div id="sd-food" style="max-height:90px; overflow-y:auto; color:#d35400; font-weight:bold; font-size:13px;">
+              Belum ada item terjual
+            </div>
+          </div>
+
+          <div style="background:#fff3cd; border:1px solid #ffeeba; border-radius:8px; padding:12px;">
+            <h3 style="margin:0 0 8px 0; font-size:13px; color:#856404; text-transform:uppercase;">🔌 Cek Meteran Listrik</h3>
+            <div style="display:flex; gap:10px;">
+              <div style="flex:1;"><label style="font-size:11px; color:#856404;">Sisa Token</label><input type="number" id="meter-token" value="0" min="0" style="width:100%; padding:8px; border:1px solid #ffeeba; border-radius:4px; font-weight:bold;"></div>
+              <div style="flex:1;"><label style="font-size:11px; color:#856404;">Total Pasca</label><input type="number" id="meter-pasca" value="0" min="0" style="width:100%; padding:8px; border:1px solid #ffeeba; border-radius:4px; font-weight:bold;"></div>
+            </div>
+          </div>
+
         </div>
       </div>
-
-      <h3 style="margin: 15px 0 8px 0; font-size: 14px; color: #2c3e50; border-bottom: 2px solid #edf2f7; padding-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">🧮 Rangkuman Akumulasi Finansial</h3>
-      <div style="background: #ebf5fb; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px;">
-        <div style="display: flex; justify-content: space-between; font-size: 15px;">
-          <span>Omset Kotor (Bruto):</span>
-          <strong id="sd-omset" style="color: #2980b9;">Rp 0</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 16px; border-top: 1px dashed #bdc3c7; padding-top: 8px;">
-          <span style="font-weight: bold; color: #27ae60;">Uang Bersih di Laci Kasir:</span>
-          <strong id="sd-net" style="color: #27ae60; font-size: 18px;">Rp 0</strong>
-        </div>
-      </div>
-
-      <h3 style="margin: 15px 0 8px 0; font-size: 14px; color: #7f8c8d; border-bottom: 2px solid #edf2f7; padding-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">🔌 Catatan Utilitas Listrik (PLN)</h3>
-      <div style="display: flex; gap: 15px; margin-bottom: 15px;">
-        <div style="flex: 1;">
-          <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">KWH Token Listrik:</label>
-          <input type="number" id="meter-token" value="0" min="0" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; box-sizing: border-box;">
-        </div>
-        <div style="flex: 1;">
-          <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">KWH Meteran Pascabayar:</label>
-          <input type="number" id="meter-pasca" value="0" min="0" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; box-sizing: border-box;">
-        </div>
-      </div>
-
-      <h3 style="margin: 15px 0 8px 0; font-size: 14px; color: #8e44ad; border-bottom: 2px solid #edf2f7; padding-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">🧺 Ringkasan Item &amp; Layanan Terjual</h3>
-      <div id="sd-food" style="background: #fdf2e9; border-radius: 8px; padding: 12px; max-height: 150px; overflow-y: auto; color: #d35400; font-weight: 500;">
-        Belum ada item terjual pada shift ini
-      </div>
-
     </div>
 
-<div style="background: #f1f3f5; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; gap: 10px;">
-      
-      <button onclick="document.getElementById('shift-detail-modal').classList.add('hidden')" style="background: #95a5a6; color: white; border: none; padding: 11px 18px; font-weight: bold; border-radius: 6px; cursor: pointer;">❌ Batal / Tutup</button>
-      
-      <button onclick="window.printCurrentShiftReport()" style="background: #3498db; color: white; border: none; padding: 11px 20px; font-weight: bold; border-radius: 6px; cursor: pointer;">🖨️ Cetak Laporan</button>
-      
-      <button onclick="window.triggerEndShift()" style="background: #e74c3c; color: white; border: none; padding: 11px 20px; font-weight: bold; border-radius: 6px; cursor: pointer;">🚪 Akhiri Shift & Logout</button>
-      
+    <div style="background: #f8f9fa; padding: 12px 20px; display: flex; justify-content: flex-end; align-items: center; border-top: 1px solid #e2e8f0; gap: 10px;">
+      <button onclick="document.getElementById('shift-detail-modal').classList.add('hidden')" style="background: #95a5a6; color: white; border: none; padding: 10px 15px; font-weight: bold; border-radius: 6px; cursor: pointer;">❌ Batal / Tutup</button>
+      <button onclick="window.printCurrentShiftReport()" style="background: #3498db; color: white; border: none; padding: 10px 15px; font-weight: bold; border-radius: 6px; cursor: pointer;">🖨️ Cetak Laporan</button>
+      <button onclick="window.triggerEndShift()" style="background: #e74c3c; color: white; border: none; padding: 10px 15px; font-weight: bold; border-radius: 6px; cursor: pointer;">🚪 Akhiri Shift & Logout</button>
     </div>
 
   </div>
