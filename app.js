@@ -278,9 +278,21 @@ window.attemptLogin = async function() {
                     currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString(); 
                     db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: hashedPin, shiftId: currentShiftId, loginTime: currentLoginTime, lastActiveTime: Date.now(), cashierName: currentCashier}); 
                 }
+                
+                // Transisi Layar
                 document.getElementById("login-screen").classList.add("hidden");
                 document.getElementById("pos-screen").classList.remove("hidden");
                 document.getElementById("display-cashier").innerText = currentCashier;
+                
+                // ==========================================
+                // TAMBAHAN BARU: Paksa load menu dari memori lokal saat login
+                // ==========================================
+                db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = (e) => {
+                    globalMenuData = e.target.result || [];
+                    loadMenuUI();
+                };
+                // ==========================================
+
                 window.lockMenu(); 
             };
         } else { 
