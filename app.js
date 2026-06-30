@@ -251,7 +251,8 @@ window.buildShiftReportReceipt = async function(data) {
 // 3. CORE LOGIN FAST SYNC
 // ==========================================
 window.attemptLogin = async function() {
-    const pinInput = document.getElementById("cashier-pin"); const rawPin = pinInput.value.trim();
+    const pinInput = document.getElementById("cashier-pin"); 
+    const rawPin = pinInput.value.trim();
     if (!rawPin) return;
     
     let loginBtn = document.getElementById("btn-login");
@@ -259,51 +260,33 @@ window.attemptLogin = async function() {
 
     try {
         const hashedPin = await hashString(rawPin);
-        
         let staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(hashedPin).onsuccess = e => res(e.target.result));
         
-        if (!staff) {
-            if (navigator.onLine) {
-                if(loginBtn) loginBtn.innerText = "Menarik Data Baru...";
-                await window.syncMasterData(true); 
-                staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(hashedPin).onsuccess = e => res(e.target.result));
-            }
-        }
-
         if (staff) {
             db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(hashedPin).onsuccess = (shiftReq) => {
-                const activeShift = shiftReq.target.result; currentCashier = staff.name; currentPin = hashedPin;
-                if (activeShift) { currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime; } 
-                else {
-                    currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString(); 
-                    db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: hashedPin, shiftId: currentShiftId, loginTime: currentLoginTime, lastActiveTime: Date.now(), cashierName: currentCashier}); 
-                }
+                // ... (simpan shiftId, dll seperti kode lama Anda) ...
                 
-                // Transisi Layar
+                // 1. Tampilkan layar POS
                 document.getElementById("login-screen").classList.add("hidden");
                 document.getElementById("pos-screen").classList.remove("hidden");
-                document.getElementById("display-cashier").innerText = currentCashier;
+                document.getElementById("display-cashier").innerText = staff.name;
                 
-                // ==========================================
-                // TAMBAHAN BARU: Paksa load menu dari memori lokal saat login
-                // ==========================================
+                // 2. AMBIL DATA MENU TERBARU DARI INDEXEDDB SECARA EKSPLISIT
                 db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = (e) => {
                     globalMenuData = e.target.result || [];
-                    loadMenuUI();
+                    
+                    // 3. Render Menu jika data ditemukan
+                    if (globalMenuData.length > 0) {
+                        loadMenuUI();
+                    }
                 };
-                // ==========================================
 
                 window.lockMenu(); 
             };
         } else { 
-            alert("PIN Kasir Salah atau Belum Terdaftar!"); 
+            alert("PIN Kasir Salah!"); 
         }
-    } catch (err) { 
-        alert("Terjadi kesalahan sistem login."); 
-    } finally { 
-        pinInput.value = ""; 
-        if(loginBtn) loginBtn.innerText = "Masuk / Buka Shift";
-    }
+    } catch (err) { alert("Sistem error."); }
 };
 
 window.switchWorkspace = function(type) {
@@ -604,15 +587,17 @@ window.submitEditMember = function() {
 // 5. MENU & NUMPAD & TRANSAKSI (CART)
 // ==========================================
 function loadMenuUI() {
-    const categories = [...new Set(globalMenuData.map(i => i.category))]; currentCategory = categories[0];
-    const catContainer = document.getElementById("category-container"); if(!catContainer) return;
-    catContainer.innerHTML = "";
-    categories.forEach(cat => {
-        const btn = document.createElement("button"); btn.className = `cat-btn ${cat === currentCategory ? "active" : ""}`; btn.innerText = cat;
-        btn.onclick = () => { currentCategory = cat; document.querySelectorAll(".cat-btn").forEach(b => b.classList.remove("active")); btn.classList.add("active"); renderProductGrid(); };
-        catContainer.appendChild(btn);
-    });
-    renderProductGrid();
+    // Jika data kosong, coba ambil ulang dari IndexedDB
+    if (!globalMenuData || globalMenuData.length === 0) {
+        db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = (e) => {
+            globalMenuData = e.target.result || [];
+            if(globalMenuData.length > 0) loadMenuUI(); // Panggil ulang diri sendiri
+        };
+        return;
+    }
+
+    const categories = [...new Set(globalMenuData.map(i => i.category))]; 
+    // ... sisa kode render Anda ...
 }
 
 function renderProductGrid() {
