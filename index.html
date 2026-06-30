@@ -158,10 +158,13 @@
     <div id="login-screen">
         <div class="login-box">
             <h2 style="margin-top:0;">Griya Laundry POS</h2>
-            <div style="margin-bottom: 20px; font-size: 14px; color: #7f8c8d; display: flex; flex-direction: column; align-items: center; gap: 10px; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee;">
-                <div style="display: flex; align-items: center; gap: 8px;"><span class="dot-online" id="login-network-dot" style="background-color: #f39c12;"></span> <strong id="login-network-text">Mengecek koneksi...</strong></div>
-                <button onclick="syncMasterData()" style="background: #3498db; color: white; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; width: 100%; font-weight: bold;">🔄 Sinkronisasi Paksa</button>
-            </div>
+<div style="margin-bottom: 20px; font-size: 14px; color: #7f8c8d; display: flex; flex-direction: column; align-items: center; gap: 10px; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee;">
+    <div style="display: flex; align-items: center; gap: 8px;"><span class="dot-online" id="login-network-dot" style="background-color: #f39c12;"></span> <strong id="login-network-text">Mengecek koneksi...</strong></div>
+    <button onclick="syncMasterData()" style="background: #3498db; color: white; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; width: 100%; font-weight: bold;">🔄 Sinkronisasi Paksa</button>
+    
+    <button id="btn-install-login" class="hidden" onclick="installPWA()" style="background: #8e44ad; color: white; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; width: 100%; font-weight: bold;">📲 Install App ke HP/Tablet</button>
+</div>
+            
             <p>Masukkan PIN Kasir</p>
             <input type="password" id="cashier-pin" placeholder="****" inputmode="numeric">
             <button id="btn-login" onclick="attemptLogin()">Masuk / Buka Shift</button>
