@@ -859,12 +859,25 @@ window.finalizeOrder = async function(shouldPrint) {
         window.saveMemberToDB(activeCustomerProfile);
     }
 
+// Cek apakah ada layanan cuci (bukan sekadar beli koin/minuman)
+    let isLaundry = currentCart.some(i => !String(i.category).toUpperCase().includes("MINUMAN") && !String(i.category).toUpperCase().includes("FOOD") && !String(i.name).toUpperCase().includes("KOIN"));
+    let finalStatus = isLaundry ? "Processing" : (totalPiutang > 0 ? "Pending Debt" : "Completed");
+
     const orderPayload = {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
-        customerName: custName, customerPhone: custPhone, orderStatus: (totalPiutang > 0 ? "Pending Debt" : "Completed"), items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
+        customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: "Split", cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: paidCoins, redeemedPromos: redeemedList, expectedCoins: expectedCoinsTotal, internalCoinsUsed: 0, syncStatus: "Pending" 
     };
+
+    db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
+    
+    // [BARU] Langsung tampilkan di tab "Cucian Aktif" tanpa harus nunggu Cloud Sync
+    if (finalStatus === "Processing") {
+        activeLaundryTickets.push(orderPayload);
+        let tc = document.getElementById("ticket-count"); 
+        if(tc) tc.innerText = activeLaundryTickets.length;
+    }
 
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     
