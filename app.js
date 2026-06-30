@@ -1429,10 +1429,17 @@ window.printCurrentShiftReport = async function() {
 };
 
 window.triggerEndShift = async function() {
-    if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?\nLaporan penutupan akan langsung dikirim ke Cloud Google Sheet.")) return;
     const data = window.currentShiftData; if (!data) return alert("Gagal mengambil data shift kasir.");
     let mt = document.getElementById("meter-token"); let meterT = mt ? (Number(mt.value) || 0) : 0;
     let mp = document.getElementById("meter-pasca"); let meterP = mp ? (Number(mp.value) || 0) : 0;
+    
+    // --- VALIDASI METERAN LISTRIK ---
+    if (meterT <= 0 && meterP <= 0) {
+        return alert("⚠️ Harap isi Meteran Listrik (Sisa Token atau Total Pasca) terlebih dahulu sebelum mengakhiri shift!");
+    }
+    // --------------------------------
+
+    if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?\nLaporan penutupan akan langsung dikirim ke Cloud Google Sheet.")) return;
     
     const shiftPayload = {
         shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
