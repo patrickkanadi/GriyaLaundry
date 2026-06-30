@@ -16,7 +16,7 @@
         
         /* Modals */
         .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 15px; box-sizing: border-box; }
-        .modal-content { background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); overflow: hidden; display: flex; flex-direction: column; width: 100%; max-width: 500px; max-height: 90vh; }
+        .modal-content { background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); overflow: hidden; display: flex; flex-direction: column; width: 100%; max-width: 500px; max-height: 95vh; }
         .modal-header { background: var(--primary); color: white; padding: 15px 20px; font-weight: bold; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }
         .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
         .modal-footer { background: #f1f3f5; padding: 15px 20px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #e2e8f0; }
@@ -45,12 +45,12 @@
         .price-badge { background: #fdf2e9; color: #d35400; font-weight: bold; padding: 4px 8px; border-radius: 4px; display: inline-block; font-size: 13px; align-self: flex-start; }
 
         /* Right Panel - Cart & Customer */
-        .cart-section { flex: 1; min-width: 350px; display: flex; flex-direction: column; background: #fff; }
+        .cart-section { flex: 1; min-width: 380px; display: flex; flex-direction: column; background: #fff; position: relative;}
         .antrean-tabs { display: flex; background: var(--secondary); padding: 10px 10px 0 10px; gap: 5px; }
         .antrean-btn { flex: 1; padding: 10px; border: none; border-radius: 8px 8px 0 0; background: #bdc3c7; color: white; font-weight: bold; cursor: pointer; }
         .antrean-btn.active { background: #fff; color: var(--primary); }
         
-        .customer-area { padding: 15px; background: #f8f9fa; border-bottom: 1px solid #ddd; position: relative; z-index: 100; }
+        .customer-area { padding: 15px; background: #f8f9fa; border-bottom: 1px solid #ddd; position: relative; z-index: 1000; }
         .cart-list { flex: 1; overflow-y: auto; padding: 15px; background: #fff; }
         .cart-footer { padding: 20px; background: #fff; border-top: 2px solid #ecf0f1; box-shadow: 0 -4px 10px rgba(0,0,0,0.03); }
         
@@ -59,29 +59,24 @@
         /* Lock Overlay */
         #glass-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); z-index: 50; transition: opacity 0.3s; }
         
-        /* Form Inputs & Labels */
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: bold; color: #555; }
     </style>
 </head>
 <body>
 
-<div id="login-screen" style="height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--secondary);">
+    <div id="login-screen" style="height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--secondary);">
         <div style="background: white; padding: 40px; border-radius: 12px; text-align: center; width: 320px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
             <h1 style="color: var(--primary); margin-top: 0;">Griya Laundry</h1>
             <p style="color: #7f8c8d; margin-bottom: 25px;">Masukkan PIN Kasir</p>
+            <input type="password" id="cashier-pin" placeholder="****" style="text-align: center; font-size: 24px; letter-spacing: 5px; margin-bottom: 20px; padding: 15px;" onkeypress="if(event.key === 'Enter') window.attemptLogin()">
+            <button id="btn-login" class="btn btn-primary" style="width: 100%; padding: 15px; font-size: 16px; margin-bottom: 15px;" onclick="window.attemptLogin()">Masuk / Buka Shift</button>
             
-            <input type="password" id="cashier-pin" placeholder="****" style="text-align: center; font-size: 24px; letter-spacing: 5px; margin-bottom: 20px; padding: 15px;" onkeypress="if(event.key === 'Enter') attemptLogin()">
-            <button id="btn-login" class="btn btn-primary" style="width: 100%; padding: 15px; font-size: 16px; margin-bottom: 15px;" onclick="attemptLogin()">Masuk / Buka Shift</button>
-            
-            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                <button class="btn btn-secondary" style="flex: 1; padding: 10px; font-size: 12px;" onclick="manualPushSync()">🔄 Sync Data</button>
-                <button id="btn-install" class="btn btn-success hidden" style="flex: 1; padding: 10px; font-size: 12px;" onclick="installPWA()">📲 Install App</button>
-            </div>
+            <button id="btn-install" class="btn btn-success hidden" style="width: 100%; padding: 10px; font-size: 14px; margin-bottom: 20px;" onclick="window.installPWA()">📲 Install Aplikasi Kasir</button>
 
-            <div style="margin-top: 10px; font-size: 12px; color: #95a5a6; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <div style="margin-top: 15px; padding: 10px; border-radius: 6px; background: #f8f9fa; font-size: 12px; color: #555; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; border: 1px solid #ddd;" onclick="window.manualPushSync()">
                 <div id="login-network-dot" style="width: 10px; height: 10px; border-radius: 50%; background: #f39c12;"></div>
-                <span id="login-network-text">Menarik Database...</span>
+                <span id="login-network-text">Menarik Database (Klik Sinkron)</span>
             </div>
         </div>
     </div>
@@ -92,22 +87,22 @@
             <div style="display: flex; align-items: center; gap: 20px;">
                 <h2 style="margin: 0;">Griya Laundry</h2>
                 <div style="display: flex; background: rgba(255,255,255,0.1); border-radius: 6px; overflow: hidden;">
-                    <button class="ws-tab active" id="tab-new-order" onclick="switchWorkspace('new')" style="background: transparent; border: none; color: white; padding: 8px 15px; cursor: pointer; font-weight: bold;">📝 Kasir Baru</button>
-                    <button class="ws-tab" id="tab-active-tickets" onclick="switchWorkspace('tickets')" style="background: transparent; border: none; color: white; padding: 8px 15px; cursor: pointer; font-weight: bold; border-left: 1px solid rgba(255,255,255,0.2);">🧺 Cucian (<span id="ticket-count">0</span>)</button>
+                    <button class="ws-tab active" id="tab-new-order" onclick="window.switchWorkspace('new')" style="background: transparent; border: none; color: white; padding: 8px 15px; cursor: pointer; font-weight: bold;">📝 Kasir Baru</button>
+                    <button class="ws-tab" id="tab-active-tickets" onclick="window.switchWorkspace('tickets')" style="background: transparent; border: none; color: white; padding: 8px 15px; cursor: pointer; font-weight: bold; border-left: 1px solid rgba(255,255,255,0.2);">🧺 Cucian (<span id="ticket-count">0</span>)</button>
                 </div>
             </div>
             
             <div style="display: flex; align-items: center; gap: 10px;">
-                <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 6px 12px; border-radius: 20px; font-size: 12px; cursor: pointer;" onclick="manualPushSync()">
+                <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 6px 12px; border-radius: 20px; font-size: 12px; cursor: pointer;" onclick="window.manualPushSync()">
                     <div id="network-dot" style="width: 10px; height: 10px; border-radius: 50%; background: #2ecc71;"></div>
                     <span id="network-text">Online & Sinkron</span>
                 </div>
                 
-                <button id="btn-printer" class="btn btn-secondary" onclick="connectBluetoothPrinter()">🖨️ Printer: Offline</button>
-                <button id="btn-drawer" class="btn btn-warning" onclick="openCashDrop()">💰 Laci Uang</button>
-                <button class="btn btn-primary" style="background: #34495e;" onclick="openCoinManagement()">🪙 Koin</button>
-                <button class="btn btn-primary" style="background: #34495e;" onclick="openExpenseModal()">💸 Pengeluaran</button>
-                <button class="btn btn-primary" style="background: #34495e;" onclick="openHistoryModal()">📋 Histori Order</button>
+                <button id="btn-printer" class="btn btn-secondary" onclick="window.connectBluetoothPrinter()">🖨️ Printer: Offline</button>
+                <button id="btn-drawer" class="btn btn-warning" onclick="window.openCashDrop()">💰 Laci Uang</button>
+                <button class="btn btn-primary" style="background: #34495e;" onclick="window.openCoinManagement()">🪙 Koin</button>
+                <button class="btn btn-primary" style="background: #34495e;" onclick="window.openExpenseModal()">💸 Pengeluaran</button>
+                <button class="btn btn-primary" style="background: #34495e;" onclick="window.openHistoryModal()">📋 Histori Order</button>
                 
                 <div style="height: 30px; width: 1px; background: rgba(255,255,255,0.3); margin: 0 10px;"></div>
                 
@@ -116,8 +111,8 @@
                     <strong id="display-cashier">Admin</strong>
                 </div>
                 
-                <button class="btn btn-danger" onclick="openShiftReport()">Laporan Shift</button>
-                <button class="btn" style="background: transparent; border: 1px solid #fff; color: white;" onclick="lockScreen()">🔒 Kunci</button>
+                <button class="btn btn-danger" onclick="window.openShiftReport()">Laporan Shift</button>
+                <button class="btn" style="background: transparent; border: 1px solid #fff; color: white;" onclick="window.lockScreen()">🔒 Kunci</button>
             </div>
         </div>
 
@@ -136,9 +131,9 @@
             
             <div class="cart-section">
                 <div class="antrean-tabs">
-                    <button class="antrean-btn active" onclick="switchAntrean(0)">Antrean 1</button>
-                    <button class="antrean-btn" onclick="switchAntrean(1)">Antrean 2</button>
-                    <button class="antrean-btn" onclick="switchAntrean(2)">Antrean 3</button>
+                    <button class="antrean-btn active" onclick="window.switchAntrean(0)">Antrean 1</button>
+                    <button class="antrean-btn" onclick="window.switchAntrean(1)">Antrean 2</button>
+                    <button class="antrean-btn" onclick="window.switchAntrean(2)">Antrean 3</button>
                 </div>
                 
                 <div class="customer-area">
@@ -148,11 +143,13 @@
                             <input type="text" id="cust-name" placeholder="Nama Pelanggan" autocomplete="off">
                         </div>
                         
-                        <div id="autocomplete-results" class="hidden" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; max-height: 300px; overflow-y: auto; z-index: 999999; box-shadow: 0px 10px 20px rgba(0,0,0,0.3); border-radius: 0 0 8px 8px;"></div>
+                        <div class="autocomplete-wrapper" style="position: relative; width: 100%;">
+                            <div id="autocomplete-results" class="hidden" style="position: absolute; top: 0; left: 0; right: 0; background: white; border: 1px solid #ccc; max-height: 300px; overflow-y: auto; z-index: 999999; box-shadow: 0px 10px 20px rgba(0,0,0,0.3); border-radius: 4px;"></div>
+                        </div>
                         
                         <div style="display: flex; gap: 8px;">
-                            <button class="btn btn-primary" style="flex: 2;" onclick="unlockMenu(false)">Buka Transaksi</button>
-                            <button class="btn btn-secondary" style="flex: 1;" onclick="unlockMenu(true)">Walk-in (Tamu)</button>
+                            <button class="btn btn-primary" style="flex: 2;" onclick="window.unlockMenu(false)">Buka Transaksi</button>
+                            <button class="btn btn-secondary" style="flex: 1;" onclick="window.unlockMenu(true)">Walk-in (Tamu)</button>
                         </div>
                     </div>
                     
@@ -166,9 +163,9 @@
                                 <div id="promo-indicator" style="font-size: 12px; color: #8e44ad; font-weight: bold; margin-top: 4px;"></div>
                             </div>
                             <div style="display: flex; flex-direction: column; gap: 5px;">
-                                <button class="btn btn-danger" style="padding: 6px 10px; font-size: 11px;" onclick="lockMenu()">Batal / Ganti</button>
-                                <button class="btn btn-warning" style="padding: 6px 10px; font-size: 11px; color: #fff;" onclick="openEditMember()">Ubah No. WA</button>
-                                <button id="btn-trigger-lottery" class="btn btn-primary" style="padding: 6px 10px; font-size: 11px; background: #8e44ad;" onclick="openLotteryModal()">🎫 Pilih Undian</button>
+                                <button class="btn btn-danger" style="padding: 6px 10px; font-size: 11px;" onclick="window.lockMenu()">Batal / Ganti</button>
+                                <button class="btn btn-warning" style="padding: 6px 10px; font-size: 11px; color: #fff;" onclick="window.openEditMember()">Ubah No. WA</button>
+                                <button id="btn-trigger-lottery" class="btn btn-primary" style="padding: 6px 10px; font-size: 11px; background: #8e44ad;" onclick="window.openLotteryModal()">🎫 Pilih Undian</button>
                             </div>
                         </div>
                     </div>
@@ -181,7 +178,7 @@
                         <span style="font-size: 16px; color: #7f8c8d; font-weight: bold;">TOTAL:</span>
                         <strong id="cart-grand-total" style="font-size: 24px; color: #2c3e50;">Rp 0</strong>
                     </div>
-                    <button class="btn btn-success" style="width: 100%; padding: 18px; font-size: 18px;" onclick="openReview()">🛒 BAYAR ORDER</button>
+                    <button class="btn btn-success" style="width: 100%; padding: 18px; font-size: 18px;" onclick="window.openReview()">🛒 BAYAR ORDER</button>
                 </div>
             </div>
         </div>
@@ -209,18 +206,18 @@
           <div id="dynamic-promo-section" class="hidden" style="margin-bottom: 15px; border-bottom: 2px dashed #eee; padding-bottom: 15px;"></div>
 
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 18px; border-bottom: 2px solid #2c3e50; padding-bottom: 10px;">
-            <tr><td style="padding: 5px 0; color: #2c3e50; font-weight: bold;">TOTAL TAGIHAN KOTOR:</td><td id="review-grandtotal" style="text-align: right; font-weight: bold; color: #e74c3c;">Rp 0</td></tr>
+            <tr><td style="padding: 5px 0; color: #2c3e50; font-weight: bold;">TOTAL TAGIHAN:</td><td id="review-grandtotal" style="text-align: right; font-weight: bold; color: #e74c3c;">Rp 0</td></tr>
           </table>
           
           <h4 style="margin: 0 0 10px 0; color: #7f8c8d; font-size: 13px; text-transform: uppercase;">Metode Pembayaran (Bisa Split)</h4>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
-              <div class="form-group"><label>💵 Uang Tunai (Cash)</label><input type="number" id="pay-cash" value="0" min="0" oninput="calculateRemaining()" style="font-weight: bold; font-size: 16px;"></div>
-              <div class="form-group"><label>📱 QRIS</label><input type="number" id="pay-qris" value="0" min="0" oninput="calculateRemaining()" style="font-weight: bold; font-size: 16px;"></div>
-              <div class="form-group"><label>🏦 Transfer Bank</label><input type="number" id="pay-transfer" value="0" min="0" oninput="calculateRemaining()" style="font-weight: bold; font-size: 16px;"></div>
+              <div class="form-group"><label>💵 Uang Tunai (Cash)</label><input type="number" id="pay-cash" value="0" min="0" oninput="window.calculateRemaining()" style="font-weight: bold; font-size: 16px;"></div>
+              <div class="form-group"><label>📱 QRIS</label><input type="number" id="pay-qris" value="0" min="0" oninput="window.calculateRemaining()" style="font-weight: bold; font-size: 16px;"></div>
+              <div class="form-group"><label>🏦 Transfer Bank</label><input type="number" id="pay-transfer" value="0" min="0" oninput="window.calculateRemaining()" style="font-weight: bold; font-size: 16px;"></div>
               
-              <div class="form-group"><label style="color:#d35400;">📝 Piutang (B2B Hotel)</label><input type="number" id="pay-hotel-piutang" value="0" min="0" oninput="calculateRemaining()" style="font-weight: bold; font-size: 16px; border-color: #e67e22;"></div>
-              <div class="form-group"><label style="color:#d35400;">📝 Piutang (Tamu Hotel)</label><input type="number" id="pay-tamu-piutang" value="0" min="0" oninput="calculateRemaining()" style="font-weight: bold; font-size: 16px; border-color: #e67e22;"></div>
-              <div class="form-group"><label style="color:#8e44ad;">🎁 Total Diskon (Auto)</label><input type="number" id="pay-free" value="0" readonly style="font-weight: bold; font-size: 16px; background:#f5eef8; border-color: #9b59b6;"></div>
+              <div class="form-group"><label style="color:#d35400;">📝 Piutang (B2B Hotel)</label><input type="number" id="pay-hotel-piutang" value="0" min="0" oninput="window.calculateRemaining()" style="font-weight: bold; font-size: 16px; border-color: #e67e22;"></div>
+              <div class="form-group"><label style="color:#d35400;">📝 Piutang (Tamu Hotel)</label><input type="number" id="pay-tamu-piutang" value="0" min="0" oninput="window.calculateRemaining()" style="font-weight: bold; font-size: 16px; border-color: #e67e22;"></div>
+              <div class="form-group"><label style="color:#8e44ad;">🎁 Diskon Otomatis</label><input type="number" id="pay-free" value="0" readonly style="font-weight: bold; font-size: 16px; background:#f5eef8; border-color: #9b59b6;"></div>
           </div>
 
           <div style="display: flex; justify-content: space-between; align-items: center; background: #ecf0f1; padding: 15px; border-radius: 8px;">
@@ -229,9 +226,9 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-danger" onclick="closeReview()">Batal</button>
-          <button class="btn btn-success" style="padding: 12px 30px; font-size: 16px;" onclick="finalizeOrder(true)">🖨️ Cetak & Simpan</button>
-          <button class="btn btn-primary" style="padding: 12px 30px; font-size: 16px;" onclick="finalizeOrder(false)">💾 Simpan Saja</button>
+          <button class="btn btn-danger" onclick="window.closeReview()">Batal</button>
+          <button class="btn btn-success" style="padding: 12px 30px; font-size: 16px;" onclick="window.finalizeOrder(true)">🖨️ Cetak & Simpan</button>
+          <button class="btn btn-primary" style="padding: 12px 30px; font-size: 16px;" onclick="window.finalizeOrder(false)">💾 Simpan Saja</button>
         </div>
       </div>
     </div>
@@ -240,8 +237,10 @@
       <div class="modal-content" style="max-width: 650px;">
         <div class="modal-header">
           <span>📊 Ringkasan Shift Berjalan</span>
+          <button onclick="document.getElementById('shift-detail-modal').classList.add('hidden')" style="background: transparent; border: none; color: white; font-size: 22px; cursor: pointer; line-height: 1;">&times;</button>
         </div>
         <div class="modal-body" style="display: flex; gap: 15px; font-size: 13px; padding: 15px;">
+          
           <div style="flex: 1; display: flex; flex-direction: column; gap: 10px;">
               <table style="width: 100%; border-collapse: collapse; background: #f8f9fa; border-radius: 6px; font-size: 12px;">
                 <tr><td style="padding: 4px 8px; color: #666;">ID Shift:</td><td id="sd-id" style="padding: 4px 8px; font-weight: bold; text-align: right;">-</td></tr>
@@ -270,6 +269,7 @@
                   </div>
               </div>
           </div>
+
           <div style="flex: 1; display: flex; flex-direction: column; gap: 10px;">
               <div style="background: #f5eef8; padding: 8px 12px; border-radius: 6px; border: 1px solid #ebdef0;">
                   <h4 style="margin: 0 0 5px 0; color: #8e44ad; font-size: 12px;">Statistik Promo</h4>
@@ -293,6 +293,7 @@
                   </div>
               </div>
           </div>
+
         </div>
         <div class="modal-footer" style="justify-content: space-between;">
           <button onclick="document.getElementById('shift-detail-modal').classList.add('hidden')" style="background: #95a5a6; color: white; border: none; padding: 10px 15px; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 13px;">❌ Batal</button>
@@ -305,11 +306,11 @@
     <div id="edit-member-modal" class="modal-backdrop hidden">
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header" style="background: #f39c12;">
-                <span>✏️ Ubah Nomor WhatsApp Pelanggan</span>
+                <span>✏️ Ubah Nomor WhatsApp</span>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>Nomor Lama (Target yang diubah)</label>
+                    <label>Nomor Lama</label>
                     <input type="text" inputmode="numeric" id="edit-old-phone" readonly style="background: #ecf0f1; cursor: not-allowed;">
                 </div>
                 <div class="form-group">
@@ -319,7 +320,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="document.getElementById('edit-member-modal').classList.add('hidden')">Batal</button>
-                <button class="btn btn-primary" onclick="submitEditMember()">Simpan Perubahan</button>
+                <button class="btn btn-primary" onclick="window.submitEditMember()">Simpan Perubahan</button>
             </div>
         </div>
     </div>
@@ -327,18 +328,18 @@
     <div id="lottery-modal" class="modal-backdrop hidden">
         <div class="modal-content" style="max-width: 450px;">
             <div class="modal-header" style="background: #8e44ad;">
-                <span>🎫 Pendaftaran Program Undian</span>
+                <span>🎫 Pendaftaran Undian</span>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>Pilih Promo/Undian Tersedia</label>
-                    <select id="lottery-select" onchange="updateLotteryDesc()" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; font-size: 15px;"></select>
+                    <label>Pilih Promo/Undian</label>
+                    <select id="lottery-select" onchange="window.updateLotteryDesc()" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; font-size: 15px;"></select>
                 </div>
                 <div id="lottery-desc"></div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="document.getElementById('lottery-modal').classList.add('hidden')">Batal</button>
-                <button class="btn btn-primary" style="background: #8e44ad;" onclick="submitLotteryCode()">Daftarkan ke Nota Ini</button>
+                <button class="btn btn-primary" style="background: #8e44ad;" onclick="window.submitLotteryCode()">Daftarkan ke Nota Ini</button>
             </div>
         </div>
     </div>
@@ -349,25 +350,25 @@
                 <span>🔢 Masukkan Kuantitas</span>
             </div>
             <div class="modal-body" style="padding: 15px;">
-                <div id="numpad-display" style="background: #ecf0f1; padding: 15px; font-size: 28px; font-weight: bold; text-align: right; border-radius: 6px; margin-bottom: 15px; overflow: hidden;">0</div>
+                <div id="numpad-display" style="background: #ecf0f1; padding: 15px; font-size: 28px; font-weight: bold; text-align: right; border-radius: 6px; margin-bottom: 15px;">0</div>
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
-                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="numpadPress(1)">1</button>
-                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="numpadPress(2)">2</button>
-                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="numpadPress(3)">3</button>
-                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="numpadPress(4)">4</button>
-                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="numpadPress(5)">5</button>
-                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="numpadPress(6)">6</button>
-                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="numpadPress(7)">7</button>
-                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="numpadPress(8)">8</button>
-                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="numpadPress(9)">9</button>
-                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px; font-weight: bold;" onclick="numpadPress('.')">.</button>
-                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="numpadPress(0)">0</button>
-                    <button class="btn btn-danger" style="padding: 15px; font-size: 20px;" onclick="numpadPress('DEL')">DEL</button>
+                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="window.numpadPress(1)">1</button>
+                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="window.numpadPress(2)">2</button>
+                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="window.numpadPress(3)">3</button>
+                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="window.numpadPress(4)">4</button>
+                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="window.numpadPress(5)">5</button>
+                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="window.numpadPress(6)">6</button>
+                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="window.numpadPress(7)">7</button>
+                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="window.numpadPress(8)">8</button>
+                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="window.numpadPress(9)">9</button>
+                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px; font-weight: bold;" onclick="window.numpadPress('.')">.</button>
+                    <button class="btn btn-secondary" style="padding: 15px; font-size: 20px;" onclick="window.numpadPress(0)">0</button>
+                    <button class="btn btn-danger" style="padding: 15px; font-size: 20px;" onclick="window.numpadPress('DEL')">DEL</button>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeNumpad()">Batal</button>
-                <button class="btn btn-success" onclick="confirmNumpad()">Masukkan</button>
+                <button class="btn btn-secondary" onclick="window.closeNumpad()">Batal</button>
+                <button class="btn btn-success" onclick="window.confirmNumpad()">Masukkan</button>
             </div>
         </div>
     </div>
@@ -375,16 +376,16 @@
     <div id="expense-modal" class="modal-backdrop hidden">
       <div class="modal-content">
         <div class="modal-header">
-          <span>💸 Catat Pengeluaran Laci Kasir</span>
+          <span>💸 Catat Pengeluaran Laci</span>
         </div>
         <div class="modal-body">
           <div class="form-group">
-              <label>Kategori (Pilih atau Ketik Baru)</label>
+              <label>Kategori (Pilih/Ketik)</label>
               <input type="text" id="exp-category" list="expense-category-list" placeholder="Contoh: Beli Token Listrik">
               <datalist id="expense-category-list"></datalist>
           </div>
           <div class="form-group">
-              <label>Nominal Pengeluaran (Rp)</label>
+              <label>Nominal (Rp)</label>
               <input type="number" id="exp-amount" min="0" placeholder="0">
           </div>
           <div class="form-group">
@@ -394,7 +395,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="document.getElementById('expense-modal').classList.add('hidden')">Batal</button>
-          <button class="btn btn-primary" onclick="saveExpense()">Simpan Pengeluaran</button>
+          <button class="btn btn-primary" onclick="window.saveExpense()">Simpan Pengeluaran</button>
         </div>
       </div>
     </div>
@@ -402,30 +403,18 @@
     <div id="cashdrop-modal" class="modal-backdrop hidden">
       <div class="modal-content">
         <div class="modal-header" style="background:#f39c12;">
-          <span>💰 Manajemen Laci Uang (Setor Tunai)</span>
+          <span>💰 Setor Tunai Laci Uang</span>
         </div>
         <div class="modal-body">
-          <p style="font-size: 13px; color: #666; margin-top:0;">Gunakan menu ini jika Anda mengambil uang tunai dari laci untuk diserahkan ke Admin atau disetor ke Bank.</p>
-          <div class="form-group">
-              <label>Disetor Ke Admin Secara Fisik (Rp)</label>
-              <input type="number" id="drop-admin" min="0" placeholder="0">
-          </div>
-          <div class="form-group">
-              <label>Disetor Tunai Ke Bank (Rp)</label>
-              <input type="number" id="drop-bank" min="0" placeholder="0">
-          </div>
-          <div class="form-group">
-              <label>Catat Sisa Uang Fisik di Laci (Opsional)</label>
-              <input type="number" id="drop-drawer" min="0" placeholder="0">
-          </div>
-          <div class="form-group">
-              <label>Keterangan (Wajib)</label>
-              <input type="text" id="drop-notes" placeholder="Contoh: Setoran Shift Pagi">
-          </div>
+          <p style="font-size: 13px; color: #666; margin-top:0;">Gunakan menu ini jika mengambil uang dari laci untuk Admin/Bank.</p>
+          <div class="form-group"><label>Ke Admin (Rp)</label><input type="number" id="drop-admin" min="0" placeholder="0"></div>
+          <div class="form-group"><label>Ke Bank (Rp)</label><input type="number" id="drop-bank" min="0" placeholder="0"></div>
+          <div class="form-group"><label>Sisa di Laci (Opsional)</label><input type="number" id="drop-drawer" min="0" placeholder="0"></div>
+          <div class="form-group"><label>Keterangan (Wajib)</label><input type="text" id="drop-notes" placeholder="Contoh: Setoran Shift Pagi"></div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="document.getElementById('cashdrop-modal').classList.add('hidden')">Batal</button>
-          <button class="btn btn-warning" onclick="submitCashDrop()">Catat Setoran</button>
+          <button class="btn btn-warning" onclick="window.submitCashDrop()">Catat Setoran</button>
         </div>
       </div>
     </div>
@@ -433,23 +422,21 @@
     <div id="coin-management-modal" class="modal-backdrop hidden">
       <div class="modal-content">
         <div class="modal-header" style="background:#34495e;">
-          <span>🪙 Lapor / Manajemen Koin Fisik</span>
+          <span>🪙 Manajemen Koin Fisik</span>
         </div>
         <div class="modal-body">
           <div style="background:#ecf0f1; padding:15px; border-radius:8px; margin-bottom:15px;">
-              <h4 style="margin:0 0 10px 0;">♻️ Ambil (Daur Ulang) Koin dari Mesin</h4>
-              <p style="font-size:12px; margin-bottom:10px; color:#555;">Digunakan saat kasir mengambil tumpukan koin kotor dari dalam mesin untuk dijadikan koin stok kasir lagi (Membutuhkan Approval Admin online).</p>
+              <h4 style="margin:0 0 10px 0;">♻️ Ambil (Daur Ulang) Koin Mesin</h4>
               <div style="display:flex; gap:10px;">
-                  <input type="number" id="coin-retrieval-qty" placeholder="Jumlah koin fisik yang diambil">
-                  <button class="btn btn-primary" onclick="saveCoinRetrieval()">Catat (Pending)</button>
+                  <input type="number" id="coin-retrieval-qty" placeholder="Jumlah koin">
+                  <button class="btn btn-primary" onclick="window.saveCoinRetrieval()">Catat (Pending)</button>
               </div>
           </div>
           <div style="background:#fdebd0; padding:15px; border-radius:8px; border:1px solid #f5b041;">
-              <h4 style="margin:0 0 10px 0; color:#d35400;">⚠️ Lapor Koin Macet / Tertelan Mesin</h4>
-              <p style="font-size:12px; margin-bottom:10px; color:#555;">Gunakan fitur ini jika pelanggan melapor koinnya tertelan, untuk memotong stok koin laci tanpa menghasilkan uang tunai (Otomatis Approved).</p>
+              <h4 style="margin:0 0 10px 0; color:#d35400;">⚠️ Lapor Koin Macet / Tertelan</h4>
               <div style="display:flex; gap:10px;">
-                  <input type="number" id="coin-jammed-qty" placeholder="Jumlah koin yang macet">
-                  <button class="btn btn-warning" onclick="saveCoinJammed()">Lapor Macet</button>
+                  <input type="number" id="coin-jammed-qty" placeholder="Jumlah koin">
+                  <button class="btn btn-warning" onclick="window.saveCoinJammed()">Lapor Macet</button>
               </div>
           </div>
         </div>
@@ -462,20 +449,20 @@
     <div id="settlement-modal" class="modal-backdrop hidden">
       <div class="modal-content" style="max-width: 400px;">
         <div class="modal-header" style="background: #2ecc71;">
-          <span>🛍️ Ambil Cucian & Bayar Sisa Tagihan</span>
+          <span>🛍️ Ambil Cucian & Bayar Sisa</span>
         </div>
         <div class="modal-body">
           <div style="text-align: center; margin-bottom: 20px;">
               <div style="font-size: 14px; color: #7f8c8d;">Kekurangan Pembayaran:</div>
               <div id="settle-amount" style="font-size: 28px; font-weight: bold; color: #e74c3c;">Rp 0</div>
           </div>
-          <div class="form-group"><label>Uang Tunai (Cash)</label><input type="number" id="settle-cash" value="0" min="0"></div>
+          <div class="form-group"><label>Cash</label><input type="number" id="settle-cash" value="0" min="0"></div>
           <div class="form-group"><label>QRIS</label><input type="number" id="settle-qris" value="0" min="0"></div>
           <div class="form-group"><label>Transfer Bank</label><input type="number" id="settle-transfer" value="0" min="0"></div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="document.getElementById('settlement-modal').classList.add('hidden')">Batal</button>
-          <button class="btn btn-success" onclick="confirmSettlement()">Selesaikan & Serahkan Laundry</button>
+          <button class="btn btn-success" onclick="window.confirmSettlement()">Selesaikan & Serahkan</button>
         </div>
       </div>
     </div>
@@ -486,16 +473,16 @@
           <span>✅ Konfirmasi Selesai Cuci</span>
         </div>
         <div class="modal-body">
-          <p style="font-size: 14px;">Berdasarkan pesanan, jumlah koin minimal yang seharusnya masuk ke mesin adalah <strong id="done-expected-coins" style="font-size: 18px; color: #d35400;">0</strong> koin.</p>
+          <p style="font-size: 14px;">Ekspektasi koin: <strong id="done-expected-coins" style="font-size: 18px; color: #d35400;">0</strong> koin.</p>
           <div class="form-group">
-              <label>Berapa koin aktual yang Anda pakai ke dalam mesin untuk menyelesaikan order ini?</label>
+              <label>Koin aktual yang dimasukkan ke mesin?</label>
               <input type="number" id="done-actual-coins" value="0" min="0" style="font-weight: bold; font-size: 18px;">
           </div>
-          <p style="font-size: 12px; color: #7f8c8d;">Catatan: Jika angka aktual lebih besar dari ekspektasi (misal cucian sangat tebal/keset), selisih koin akan dilaporkan sebagai pemakaian berlebih / overuse dan memotong stok laci.</p>
+          <p style="font-size: 12px; color: #7f8c8d;">Catatan: Selisih koin akan memotong stok otomatis.</p>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="document.getElementById('ticket-done-modal').classList.add('hidden')">Batal</button>
-          <button class="btn btn-warning" onclick="submitTicketDone()">Konfirmasi</button>
+          <button class="btn btn-warning" onclick="window.submitTicketDone()">Konfirmasi</button>
         </div>
       </div>
     </div>
@@ -507,13 +494,12 @@
           <button onclick="document.getElementById('history-modal').classList.add('hidden')" style="background: transparent; border: none; color: white; font-size: 20px; cursor: pointer;">&times;</button>
         </div>
         <div style="display: flex; background: #ecf0f1; border-bottom: 1px solid #bdc3c7;">
-            <button class="btn" style="flex: 1; border-radius: 0; background: transparent; color: #333;" onclick="renderHistoryList('orders')">📦 Riwayat Penjualan Nota</button>
-            <button class="btn" style="flex: 1; border-radius: 0; background: transparent; color: #333;" onclick="renderHistoryList('expenses')">💸 Riwayat Pengeluaran Laci</button>
-            <button id="tab-hist-shifts" class="btn" style="flex: 1; border-radius: 0; background: transparent; color: #333;" onclick="renderHistoryList('shifts')">🧾 Laporan Shift Sebelumnya (Cloud)</button>
+            <button class="btn" style="flex: 1; border-radius: 0; background: transparent; color: #333;" onclick="window.renderHistoryList('orders')">📦 Penjualan</button>
+            <button class="btn" style="flex: 1; border-radius: 0; background: transparent; color: #333;" onclick="window.renderHistoryList('expenses')">💸 Pengeluaran</button>
+            <button id="tab-hist-shifts" class="btn" style="flex: 1; border-radius: 0; background: transparent; color: #333;" onclick="window.renderHistoryList('shifts')">🧾 Laporan Shift</button>
         </div>
         <div class="modal-body" style="padding: 0;">
-            <div id="history-container" style="display: flex; flex-direction: column;">
-                </div>
+            <div id="history-container" style="display: flex; flex-direction: column;"></div>
         </div>
       </div>
     </div>
@@ -521,15 +507,15 @@
     <div id="order-detail-modal" class="modal-backdrop hidden">
       <div class="modal-content" style="max-width: 450px;">
         <div class="modal-header">
-          <span>🧾 Rincian Nota Order</span>
+          <span>🧾 Rincian Nota</span>
         </div>
         <div class="modal-body">
           <div id="detail-items" style="border-bottom: 1px solid #ddd; padding-bottom: 15px; margin-bottom: 15px;"></div>
           <table style="width: 100%; font-size: 14px;">
               <tr><td style="padding: 4px 0;">Subtotal:</td><td id="detail-subtotal" style="text-align: right; font-weight: bold;">Rp 0</td></tr>
-              <tr><td style="padding: 4px 0;">Diskon Promosi:</td><td id="detail-discount" style="text-align: right; font-weight: bold; color: #e74c3c;">-Rp 0</td></tr>
+              <tr><td style="padding: 4px 0;">Diskon:</td><td id="detail-discount" style="text-align: right; font-weight: bold; color: #e74c3c;">-Rp 0</td></tr>
               <tr style="font-size: 18px; border-top: 2px solid #2c3e50;"><td style="padding: 10px 0; font-weight: bold;">Grand Total:</td><td id="detail-grandtotal" style="text-align: right; font-weight: bold; color: #2980b9;">Rp 0</td></tr>
-              <tr><td style="padding: 4px 0; color: #7f8c8d;">Metode Bayar:</td><td id="detail-paymethod" style="text-align: right;">-</td></tr>
+              <tr><td style="padding: 4px 0; color: #7f8c8d;">Bayar:</td><td id="detail-paymethod" style="text-align: right;">-</td></tr>
           </table>
         </div>
         <div class="modal-footer">
@@ -541,42 +527,29 @@
     <div id="void-auth-modal" class="modal-backdrop hidden" style="z-index: 999999;">
       <div class="modal-content" style="max-width: 350px;">
         <div class="modal-header" style="background:#e74c3c;">
-          <span>⚠️ Otorisasi Pembatalan (Void)</span>
+          <span>⚠️ Otorisasi Void</span>
         </div>
         <div class="modal-body">
-            <p style="font-size: 13px;">Proses pembatalan transaksi yang sudah dicetak membutuhkan konfirmasi otoritas dari Manager/Supervisor.</p>
-            <div class="form-group"><label>Nama Otorisator (Mgr/Spv)</label><input type="text" id="void-auth-name" placeholder="Nama Supervisor"></div>
-            <div class="form-group"><label>PIN Otorisasi Rahasia</label><input type="password" id="void-auth-pin" placeholder="****"></div>
-            <p style="font-size: 12px; color: #e67e22; font-weight: bold;">Status akan berubah menjadi "Void Pending". Admin pusat akan memverifikasi PIN ini untuk mengunci pembatalan (Voided) pada Google Sheets.</p>
+            <div class="form-group"><label>Nama Spv</label><input type="text" id="void-auth-name" placeholder="Nama Supervisor"></div>
+            <div class="form-group"><label>PIN Otorisasi</label><input type="password" id="void-auth-pin" placeholder="****"></div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="document.getElementById('void-auth-modal').classList.add('hidden')">Batal Kembali</button>
-          <button class="btn btn-danger" onclick="submitVoidRequest()">Ajukan Batal Transaksi</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('void-auth-modal').classList.add('hidden')">Batal</button>
+          <button class="btn btn-danger" onclick="submitVoidRequest()">Ajukan Void</button>
         </div>
       </div>
     </div>
 
     <script src="App.js"></script>
     <script>
-        // Inline functions for Void submission
         async function submitVoidRequest() {
             const authName = document.getElementById("void-auth-name").value.trim();
             const authPin = document.getElementById("void-auth-pin").value.trim();
             if(!authName || !authPin) return alert("Mohon isi Nama & PIN Otorisasi!");
-            
             try {
                 const hashedAuthPin = await hashString(authPin);
-                const reqPayload = {
-                    id: currentVoidTarget.id,
-                    type: currentVoidTarget.type,
-                    authName: authName,
-                    authPinHashed: hashedAuthPin,
-                    status: "Void Pending",
-                    timestamp: new Date().toISOString()
-                };
-                
+                const reqPayload = { id: currentVoidTarget.id, type: currentVoidTarget.type, authName: authName, authPinHashed: hashedAuthPin, status: "Void Pending", timestamp: new Date().toISOString() };
                 db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add(reqPayload);
-                
                 let targetStore = currentVoidTarget.type === 'orders' ? "orders" : "expenses";
                 db.transaction([targetStore], "readonly").objectStore(targetStore).get(currentVoidTarget.id).onsuccess = (e) => {
                     let record = e.target.result;
@@ -586,7 +559,7 @@
                         db.transaction([targetStore], "readwrite").objectStore(targetStore).put(record);
                     }
                     document.getElementById("void-auth-modal").classList.add("hidden");
-                    alert("Permintaan Void berhasil dikirim ke server pusat. Menunggu Admin menyetujui.");
+                    alert("Permintaan Void berhasil dikirim. Menunggu Admin menyetujui.");
                     if(typeof window.renderHistoryList === 'function') window.renderHistoryList(currentVoidTarget.type);
                     if(typeof window.runBackgroundSync === 'function') window.runBackgroundSync();
                 };
