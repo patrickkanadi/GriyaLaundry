@@ -284,6 +284,9 @@ window.attemptLogin = async function() {
                 document.getElementById("pos-screen").classList.remove("hidden");
                 document.getElementById("display-cashier").innerText = currentCashier;
                 
+                window.switchWorkspace('new'); // <--- INI MENCEGAH LAYAR BLANK
+                window.lockMenu();
+                
                 // ==========================================
                 // TAMBAHAN BARU: Paksa load menu dari memori lokal saat login
                 // ==========================================
