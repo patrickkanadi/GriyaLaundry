@@ -549,19 +549,11 @@ window.handleAutocomplete = function(e) {
     
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
         let matches = ev.target.result; 
-        
-        // Filter jika kasir mengetik sesuatu
         if (val.length > 0) {
             matches = matches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
         }
         
-        // Urutkan pelanggan setia (berdasarkan nominal belanja tertinggi)
         matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
-
-        // JIKA KOSONG (Baru di-klik): Ambil top 15 saja agar tidak lag
-        if (val.length === 0) {
-            matches = matches.slice(0, 15);
-        }
 
         if (matches.length > 0) {
             resBox.innerHTML = matches.map(m => `
@@ -573,8 +565,7 @@ window.handleAutocomplete = function(e) {
             resBox.classList.remove("hidden");
             resBox.style.display = "block";
         } else { 
-            resBox.classList.add("hidden"); 
-            resBox.style.display = "none"; 
+            resBox.classList.add("hidden"); resBox.style.display = "none"; 
         }
     };
 };
