@@ -540,14 +540,15 @@
       </div>
     </div>
 
-    <script src="app.js"></script>
+    <script src="App.js"></script>
     <script>
         async function submitVoidRequest() {
             const authName = document.getElementById("void-auth-name").value.trim();
             const authPin = document.getElementById("void-auth-pin").value.trim();
             if(!authName || !authPin) return alert("Mohon isi Nama & PIN Otorisasi!");
             try {
-                const hashedAuthPin = await hashString(authPin);
+                // hashString memanggil global function di App.js
+                const hashedAuthPin = await window.hashString(authPin);
                 const reqPayload = { id: currentVoidTarget.id, type: currentVoidTarget.type, authName: authName, authPinHashed: hashedAuthPin, status: "Void Pending", timestamp: new Date().toISOString() };
                 db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add(reqPayload);
                 let targetStore = currentVoidTarget.type === 'orders' ? "orders" : "expenses";
