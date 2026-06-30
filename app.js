@@ -645,6 +645,16 @@ window.updateCartItemQty = function(itemId, delta) {
     }
 };
 
+window.clearCart = function() {
+    if (currentCart.length === 0) return alert("Keranjang sudah kosong!");
+    if (confirm("Apakah Anda yakin ingin membatalkan order (mengosongkan keranjang)?")) {
+        currentCart = [];
+        window.renderCart();
+        let pf = document.getElementById("pay-free"); 
+        if(pf) { if(pf.tagName === 'INPUT') pf.value = 0; else pf.innerText = 0; }
+    }
+};
+
 window.renderCart = function() {
     const container = document.getElementById("cart-items"); if(!container) return;
     container.innerHTML = ""; let total = 0;
@@ -933,6 +943,22 @@ window.submitTicketDone = function() {
 
 window.openSettlement = function(orderId, remainingDue) {
     activeSettlementTicket = activeLaundryTickets.find(t => t.orderId === orderId);
+    
+    // --- TAMBAHAN BARU: Bypass pop-up pelunasan jika sudah Lunas ---
+    if (remainingDue <= 0) {
+        if(confirm("Cucian ini sudah LUNAS. Tandai sudah diambil pelanggan?")) {
+            activeSettlementTicket.orderStatus = "Completed"; 
+            activeSettlementTicket.syncStatus = "Pending";
+            db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
+            activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
+            window.renderActiveTickets(); 
+            window.runBackgroundSync();
+            activeSettlementTicket = null;
+        }
+        return; // Hentikan fungsi agar modal pembayaran tidak muncul
+    }
+    // ---------------------------------------------------------------
+
     let elAmt = document.getElementById("settle-amount"); if(elAmt) elAmt.innerText = `Rp ${remainingDue.toLocaleString('id-ID')}`;
     let elCash = document.getElementById("settle-cash"); if(elCash) elCash.value = remainingDue;
     let elQris = document.getElementById("settle-qris"); if(elQris) elQris.value = 0;
@@ -1385,6 +1411,12 @@ window.printCurrentShiftReport = async function() {
     
     let mt = document.getElementById("meter-token"); data.meterToken = mt ? (Number(mt.value) || 0) : (data.meterToken || 0);
     let mp = document.getElementById("meter-pasca"); data.meterPasca = mp ? (Number(mp.value) || 0) : (data.meterPasca || 0);
+    
+    // --- VALIDASI METERAN LISTRIK ---
+    if (data.meterToken <= 0 && data.meterPasca <= 0) {
+        return alert("⚠️ Harap isi Meteran Listrik (Sisa Token atau Total Pasca) terlebih dahulu sebelum mencetak!");
+    }
+    // --------------------------------
     
     try {
         if (typeof window.buildShiftReportReceipt === "function") {
