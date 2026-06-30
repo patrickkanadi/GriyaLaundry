@@ -66,13 +66,20 @@
 </head>
 <body>
 
-    <div id="login-screen" style="height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--secondary);">
+<div id="login-screen" style="height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--secondary);">
         <div style="background: white; padding: 40px; border-radius: 12px; text-align: center; width: 320px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
             <h1 style="color: var(--primary); margin-top: 0;">Griya Laundry</h1>
             <p style="color: #7f8c8d; margin-bottom: 25px;">Masukkan PIN Kasir</p>
+            
             <input type="password" id="cashier-pin" placeholder="****" style="text-align: center; font-size: 24px; letter-spacing: 5px; margin-bottom: 20px; padding: 15px;" onkeypress="if(event.key === 'Enter') attemptLogin()">
-            <button id="btn-login" class="btn btn-primary" style="width: 100%; padding: 15px; font-size: 16px;" onclick="attemptLogin()">Masuk / Buka Shift</button>
-            <div style="margin-top: 20px; font-size: 12px; color: #95a5a6; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <button id="btn-login" class="btn btn-primary" style="width: 100%; padding: 15px; font-size: 16px; margin-bottom: 15px;" onclick="attemptLogin()">Masuk / Buka Shift</button>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button class="btn btn-secondary" style="flex: 1; padding: 10px; font-size: 12px;" onclick="manualPushSync()">🔄 Sync Data</button>
+                <button id="btn-install" class="btn btn-success hidden" style="flex: 1; padding: 10px; font-size: 12px;" onclick="installPWA()">📲 Install App</button>
+            </div>
+
+            <div style="margin-top: 10px; font-size: 12px; color: #95a5a6; display: flex; align-items: center; justify-content: center; gap: 6px;">
                 <div id="login-network-dot" style="width: 10px; height: 10px; border-radius: 50%; background: #f39c12;"></div>
                 <span id="login-network-text">Menarik Database...</span>
             </div>
