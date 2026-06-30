@@ -1135,33 +1135,24 @@ window.syncMasterData = async function(forceAwait = false) {
             // PRIORITAS 2: BACKGROUND SYNC MEMBER & SETTINGS
             let txOthers = db.transaction(["settings", "members", "expense_categories"], "readwrite");
             let unMems = [];
-            // PRIORITAS 2: BACKGROUND SYNC MEMBER & SETTINGS
             db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = (ue) => {
-                let unMems = ue.target.result.map(u => u.phone);
-                
-                // Buka transaksi BARU di sini agar tidak mati sebelum data siap
-                let txOthers = db.transaction(["settings", "members", "expense_categories"], "readwrite");
-                
-                // 1. Masukkan data member dari Cloud ke Local
+                unMems = ue.target.result.map(u => u.phone);
                 result.data.members.forEach(m => {
                     if (!unMems.includes(m.phone)) txOthers.objectStore("members").put(m);
                 });
-                
-                // 2. Kategori Pengeluaran
-                let expCatStore = txOthers.objectStore("expense_categories"); expCatStore.clear(); 
-                if(result.data.expenseCategories) result.data.expenseCategories.forEach(c => expCatStore.add({name: c}));
-                
-                // 3. Pengaturan Sistem
-                let settingsStore = txOthers.objectStore("settings"); settingsStore.clear();
-                for (const [key, value] of Object.entries(result.data.settings)) { settingsStore.add({ key: key, value: value }); }
-                
-                txOthers.oncomplete = () => {
-                    activeLaundryTickets = result.data.activeLaundryOrders || [];
-                    let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = activeLaundryTickets.length;
-                    if (!document.getElementById("pos-screen").classList.contains("hidden")) window.renderActiveTickets();
-                    if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
-                };
             };
+            let expCatStore = txOthers.objectStore("expense_categories"); expCatStore.clear(); 
+            if(result.data.expenseCategories) result.data.expenseCategories.forEach(c => expCatStore.add({name: c}));
+            let settingsStore = txOthers.objectStore("settings"); settingsStore.clear();
+            for (const [key, value] of Object.entries(result.data.settings)) { settingsStore.add({ key: key, value: value }); }
+            
+            txOthers.oncomplete = () => {
+                activeLaundryTickets = result.data.activeLaundryOrders || [];
+                let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = activeLaundryTickets.length;
+                if (!document.getElementById("pos-screen").classList.contains("hidden")) window.renderActiveTickets();
+                if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
+            };
+        }
     } catch (e) { if(nTxt) nTxt.innerText = "Gagal Sinkron"; if(nDot) nDot.style.backgroundColor = "#e74c3c"; }
 };
 
