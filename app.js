@@ -56,8 +56,14 @@ let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault(); 
     deferredPrompt = e; 
+    
+    // Tampilkan tombol di menu POS atas
     const installBtn = document.getElementById('btn-install'); 
     if(installBtn) installBtn.classList.remove('hidden'); 
+    
+    // Tampilkan tombol di layar Login
+    const loginInstallBtn = document.getElementById('btn-install-login');
+    if(loginInstallBtn) loginInstallBtn.classList.remove('hidden');
 });
 
 window.installPWA = function() { 
@@ -65,8 +71,12 @@ window.installPWA = function() {
         deferredPrompt.prompt(); 
         deferredPrompt.userChoice.then((choiceResult) => {
             if (choiceResult.outcome === 'accepted') {
+                // Sembunyikan kedua tombol jika user setuju menginstal
                 let btn = document.getElementById('btn-install');
                 if(btn) btn.classList.add('hidden');
+                
+                let loginBtn = document.getElementById('btn-install-login');
+                if(loginBtn) loginBtn.classList.add('hidden');
             }
             deferredPrompt = null; 
         }); 
