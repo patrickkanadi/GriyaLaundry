@@ -325,7 +325,7 @@
             <h2 style="margin-top:0; color:#856404;">🪙 Manajemen Koin Fisik</h2>
             <div class="form-box" style="text-align:left;">
                 <label>Jenis Tindakan</label>
-                <select id="coin-action-type">
+                <select id="coin-action-type" onchange="document.getElementById('coin-note-container').style.display = this.value === 'jammed' ? 'block' : 'none'">
                     <option value="recycle">♻️ Daur Ulang (Ambil dari Mesin ke Laci)</option>
                     <option value="jammed">⚠️ Koin Macet / Rusak di Mesin</option>
                 </select>
