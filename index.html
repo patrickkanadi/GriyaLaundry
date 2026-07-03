@@ -541,7 +541,7 @@
     <div style="background: #f8f9fa; padding: 12px 20px; display: flex; justify-content: flex-end; align-items: center; border-top: 1px solid #e2e8f0; gap: 10px;">
       <button onclick="document.getElementById('shift-detail-modal').classList.add('hidden')" style="background: #95a5a6; color: white; border: none; padding: 10px 15px; font-weight: bold; border-radius: 6px; cursor: pointer;">❌ Batal / Tutup</button>
       <button onclick="window.printCurrentShiftReport()" style="background: #3498db; color: white; border: none; padding: 10px 15px; font-weight: bold; border-radius: 6px; cursor: pointer;">🖨️ Cetak Laporan</button>
-      <button onclick="window.triggerEndShift()" style="background: #e74c3c; color: white; border: none; padding: 10px 15px; font-weight: bold; border-radius: 6px; cursor: pointer;">🚪 Akhiri Shift & Logout</button>
+      <button id="btn-end-shift-modal" onclick="window.triggerEndShift()" style="background: #e74c3c; color: white; border: none; padding: 10px 15px; font-weight: bold; border-radius: 6px; cursor: pointer;">🚪 Akhiri Shift & Logout</button>
     </div>
 
   </div>
