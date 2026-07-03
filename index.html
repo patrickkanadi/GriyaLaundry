@@ -450,51 +450,6 @@
         </div>
     </div>
      
-    <div id="shift-report-modal" class="modal-overlay hidden">
-        <div class="modal-content modal-large">
-            <div style="text-align: center; margin-bottom: 20px;"><h2 style="margin:0; color: #2c3e50;">📊 Laporan Akhir Shift</h2><p style="color: #7f8c8d; margin: 5px 0 0 0;">Harap pastikan semua angka sudah benar sebelum Logout.</p></div>
-            <div class="stats-grid">
-                <div class="ticket-card" style="border-left:none; padding:10px; margin-bottom:0;"><div class="stat-box"><div class="stat-label">Total Nota</div><div class="stat-value" id="sr-orders">0</div></div></div>
-                <div class="ticket-card" style="border-left:none; padding:10px; margin-bottom:0;"><div class="stat-box"><div class="stat-label">Pelanggan</div><div class="stat-value" id="sr-customers">0</div></div></div>
-                <div class="stat-box" style="grid-column: span 2; background: #e8f4f8; border-color: #bee5eb;"><div class="stat-label" style="color: #0c5460;">Total Omset Kotor</div><div class="stat-value" id="sr-omset" style="font-size: 28px; color: #0c5460;">Rp 0</div></div>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                <div class="revenue-breakdown">
-                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">💰 Rincian Pembayaran Masuk</div>
-                    <div class="revenue-row"><span>Tunai</span> <strong id="sr-cash">Rp 0</strong></div>
-                    <div class="revenue-row"><span>QRIS</span> <strong id="sr-qris">Rp 0</strong></div>
-                    <div class="revenue-row"><span>Transfer Bank</span> <strong id="sr-transfer">Rp 0</strong></div>
-                    <div class="revenue-row"><span>Gratis/Promo</span> <strong id="sr-free">Rp 0</strong></div>
-                </div>
-                <div class="revenue-breakdown">
-                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">⚠️ Piutang & Pengeluaran</div>
-                    <div class="revenue-row"><span>Piutang B2B Hotel</span> <strong id="sr-hotel-piutang" style="color:#e74c3c;">Rp 0</strong></div>
-                    <div class="revenue-row"><span>Piutang Tamu Kamar</span> <strong id="sr-tamu-piutang" style="color:#e74c3c;">Rp 0</strong></div>
-                    <div class="revenue-row"><span>Pengeluaran Laci</span> <strong id="sr-expense" style="color:#e67e22;">Rp 0</strong></div>
-                </div>
-                <div class="revenue-breakdown" style="grid-column: span 2; margin-top: 5px;">
-                    <div style="font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">🍔 Makanan Terjual</div>
-                    <div id="sr-items-summary" style="max-height: 140px; overflow-y: auto; font-size: 14px; display: flex; flex-direction: column; gap: 4px;"></div>
-                </div>
-            </div>
-            <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 15px;">
-                <div id="sr-net-title" style="font-size: 14px; font-weight: bold; color: #155724; text-transform: uppercase;">Uang Tunai Seharusnya di Laci</div>
-                <div id="sr-net" style="font-size: 32px; font-weight: bold; color: #155724; margin-top: 5px;">Rp 0</div>
-            </div>
-            <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left;">
-                <div style="font-weight: bold; color: #856404; margin-bottom: 10px;">⚡ Cek Meteran Listrik (Wajib)</div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <div><label style="font-size: 12px; font-weight: bold; color: #856404;">Meteran Token (Sisa kWh)</label><input type="number" id="meter-token" placeholder="Misal: 150.5" step="0.01" style="width: 100%; padding: 10px; border: 1px solid #ffeeba; border-radius: 4px; margin-top: 5px;"></div>
-                    <div><label style="font-size: 12px; font-weight: bold; color: #856404;">Meteran Pasca (Total kWh)</label><input type="number" id="meter-pasca" placeholder="Misal: 14500" step="0.01" style="width: 100%; padding: 10px; border: 1px solid #ffeeba; border-radius: 4px; margin-top: 5px;"></div>
-                </div>
-            </div>
-            <div style="display:flex; gap:10px;">
-                <button onclick="document.getElementById('shift-report-modal').classList.add('hidden')" style="flex:1; padding:12px; border:none; border-radius:8px; font-weight:bold; background:#f1f5f7; color:#2c3e50; cursor:pointer; font-size:14px;">Tutup</button>
-                <button onclick="printCurrentShiftReport()" style="flex:1.2; padding:12px; background:#27ae60; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; gap:6px;">🖨️ Cetak Laporan</button>
-                <button onclick="initiateLogoutSequence(false)" style="flex:1.5; padding:12px; background:#c0392b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px;">Akhiri Shift & Keluar</button>
-            </div>
-        </div>
-    </div>
  
     <div id="order-detail-modal" class="modal-overlay hidden">
         <div class="modal-content">
