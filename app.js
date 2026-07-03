@@ -1150,18 +1150,38 @@ window.openCoinManagement = function() {
     document.getElementById("coin-management-modal").classList.remove("hidden");
 };
 
-window.saveCoinRetrieval = function() {
-    const qty = Number(document.getElementById("coin-retrieval-qty").value); if (qty <= 0) return alert("Jumlah koin tidak valid.");
-    const payload = { retrievalId: "RET-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: "Daur Ulang Koin Fisik", syncStatus: "Pending" };
-    db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
-    document.getElementById("coin-retrieval-qty").value = ""; alert("Pengambilan koin tercatat (Menunggu Approval)"); window.runBackgroundSync();
-};
+window.submitCoinManagement = function() {
+    const actionType = document.getElementById("coin-action-type").value;
+    const qty = Number(document.getElementById("manage-coin-qty").value);
+    let note = document.getElementById("manage-coin-note").value.trim();
 
-window.saveCoinJammed = function() {
-    const qty = Number(document.getElementById("coin-jammed-qty").value); if (qty <= 0) return alert("Jumlah koin tidak valid.");
-    const payload = { retrievalId: "JAM-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: "Mesin Macet / Tertelan", syncStatus: "Pending" };
+    if (qty <= 0) return alert("Jumlah koin tidak valid.");
+
+    // Tentukan ID dan catatan default berdasarkan pilihan dropdown
+    let prefix = actionType === "jammed" ? "JAM-" : "RET-";
+    if (!note) {
+        note = actionType === "jammed" ? "Mesin Macet / Tertelan" : "Daur Ulang Koin Fisik";
+    }
+
+    const payload = { 
+        retrievalId: prefix + Date.now(), 
+        timestamp: new Date().toISOString(), 
+        cashier: currentCashier, 
+        qty: qty, 
+        notes: note, 
+        syncStatus: "Pending" 
+    };
+
+    // Simpan ke IndexedDB
     db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
-    document.getElementById("coin-jammed-qty").value = ""; alert("Koin macet tercatat!"); window.runBackgroundSync();
+    
+    // Bersihkan form & Tutup modal
+    document.getElementById("manage-coin-qty").value = ""; 
+    document.getElementById("manage-coin-note").value = "";
+    document.getElementById("coin-management-modal").classList.add("hidden");
+    
+    alert("Laporan koin berhasil dicatat!"); 
+    window.runBackgroundSync();
 };
 
 // ==========================================
