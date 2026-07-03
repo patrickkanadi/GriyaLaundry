@@ -1476,6 +1476,26 @@ function populateShiftModal(data, isActive) {
     
     if (document.getElementById("sd-food")) document.getElementById("sd-food").innerHTML = foodHtml || "Belum ada item terjual";
 
+    // --- MENGISI & MENGUNCI METERAN JIKA MELIHAT RIWAYAT ---
+    let mt = document.getElementById("meter-token");
+    if (mt) {
+        mt.value = data.meterToken || 0;
+        mt.readOnly = !isActive; // Kunci jika riwayat
+        mt.style.backgroundColor = isActive ? "#fff" : "#e9ecef"; // Ubah warna jadi abu-abu jika terkunci
+    }
+    
+    let mp = document.getElementById("meter-pasca");
+    if (mp) {
+        mp.value = data.meterPasca || 0;
+        mp.readOnly = !isActive;
+        mp.style.backgroundColor = isActive ? "#fff" : "#e9ecef";
+    }
+
+    // --- MENYEMBUNYIKAN TOMBOL "AKHIRI SHIFT" SAAT MELIHAT RIWAYAT ---
+    let endBtn = document.getElementById("btn-end-shift-modal");
+    if (endBtn) {
+        endBtn.style.display = isActive ? "block" : "none";
+    }
     let modal = document.getElementById("shift-detail-modal"); if (modal) modal.classList.remove("hidden");
 }
 
