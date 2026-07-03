@@ -935,8 +935,6 @@ window.finalizeOrder = async function(shouldPrint) {
         let tc = document.getElementById("ticket-count"); 
         if(tc) tc.innerText = activeLaundryTickets.length;
     }
-
-    db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     
     if (shouldPrint && typeof window.buildEscPosReceipt === "function") {
         await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, "Split", newPoints, newFree);
