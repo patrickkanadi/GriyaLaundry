@@ -624,8 +624,21 @@ function renderProductGrid() {
     grid.innerHTML = "";
     globalMenuData.filter(i => i.category === currentCategory).forEach(item => {
         const card = document.createElement("div"); card.className = "product-card";
-        card.innerHTML = `<div><h4>${item.name}</h4></div><div class="price-badge">Rp ${item.price.toLocaleString('id-ID')}</div>`;
-        card.onclick = () => { if(!isMenuLocked) { if(item.inputMode === "DECIMAL") window.openNumpad(item); else window.addToCart(item, 1); } };
+        
+        // Cek dan tampilkan stok jika trackStock = TRUE
+        let stockHtml = "";
+        if (item.trackStock) {
+            let stockColor = item.currentStock <= 5 ? "color: #e74c3c;" : "color: #27ae60;";
+            stockHtml = `<div style="font-size: 11px; font-weight: bold; margin-top: 5px; ${stockColor}">Sisa Stok: ${item.currentStock}</div>`;
+        }
+        
+        card.innerHTML = `<div><h4>${item.name}</h4>${stockHtml}</div><div class="price-badge">Rp ${item.price.toLocaleString('id-ID')}</div>`;
+        card.onclick = () => { 
+            if(!isMenuLocked) { 
+                if(item.inputMode === "DECIMAL") window.openNumpad(item); 
+                else window.addToCart(item, 1); 
+            } 
+        };
         grid.appendChild(card);
     });
 }
@@ -640,16 +653,49 @@ window.confirmNumpad = function() { let qty = parseFloat(numpadValue); if (qty >
 
 window.addToCart = function(item, qty) {
     let finalQty = qty; const existing = currentCart.find(i => i.itemId === item.itemId);
-    if (!existing && item.hasMoq && item.moqQty > 0 && finalQty < item.moqQty) { alert(`⚠️ Minimum Order (MOQ) untuk ${item.name} adalah ${item.moqQty}.\nJumlah otomatis disesuaikan.`); finalQty = item.moqQty; }
-    if (existing) { existing.qty += finalQty; } else { currentCart.push({ ...item, qty: finalQty, originalPrice: item.price, expectedCoins: item.expectedCoins, hasMoq: item.hasMoq, moqQty: item.moqQty }); }
+    let currentQtyInCart = existing ? existing.qty : 0;
+    
+    // Validasi Stok
+    if (item.trackStock) {
+        if (currentQtyInCart + finalQty > item.currentStock) {
+            alert(`⚠️ Stok tidak cukup!\nSisa stok ${item.name} hanya tinggal ${item.currentStock}.`);
+            finalQty = item.currentStock - currentQtyInCart;
+            if (finalQty <= 0) return; // Batal masuk keranjang
+        }
+    }
+    
+    // Validasi Minimum Order (MOQ)
+    if (!existing && item.hasMoq && item.moqQty > 0 && finalQty < item.moqQty) { 
+        alert(`⚠️ Minimum Order (MOQ) untuk ${item.name} adalah ${item.moqQty}.\nJumlah otomatis disesuaikan.`); 
+        finalQty = item.moqQty; 
+        // Cek lagi apakah MOQ melebihi stok yang ada
+        if (item.trackStock && (currentQtyInCart + finalQty > item.currentStock)) {
+             alert(`⚠️ Stok tidak cukup untuk memenuhi minimum order!`);
+             return;
+        }
+    }
+    
+    if (existing) { existing.qty += finalQty; } 
+    else { currentCart.push({ ...item, qty: finalQty, originalPrice: item.price, expectedCoins: item.expectedCoins, hasMoq: item.hasMoq, moqQty: item.moqQty }); }
     window.renderCart();
 };
 
 window.updateCartItemQty = function(itemId, delta) {
     let existing = currentCart.find(i => i.itemId === itemId);
     if (existing) {
+        // Validasi tombol Tambah (+) agar tidak melebihi stok
+        if (delta > 0 && existing.trackStock) {
+            if (existing.qty + delta > existing.currentStock) {
+                return alert(`⚠️ Maksimal stok ${existing.name} hanya ${existing.currentStock}!`);
+            }
+        }
+        
         existing.qty += delta;
-        if (existing.hasMoq && existing.moqQty > 0) { if (existing.qty > 0 && existing.qty < existing.moqQty) { if (delta < 0) existing.qty = 0; else existing.qty = existing.moqQty; } }
+        if (existing.hasMoq && existing.moqQty > 0) { 
+            if (existing.qty > 0 && existing.qty < existing.moqQty) { 
+                if (delta < 0) existing.qty = 0; else existing.qty = existing.moqQty; 
+            } 
+        }
         if (existing.qty <= 0) currentCart = currentCart.filter(i => i.itemId !== itemId);
         window.renderCart();
     }
@@ -1439,8 +1485,8 @@ window.printCurrentShiftReport = async function() {
     const data = window.currentShiftData;
     if (!data) return alert("Data ringkasan shift tidak tersedia untuk dicetak.");
     
-    let mt = document.getElementById("meter-token"); data.meterToken = mt ? (Number(mt.value) || 0) : (data.meterToken || 0);
-    let mp = document.getElementById("meter-pasca"); data.meterPasca = mp ? (Number(mp.value) || 0) : (data.meterPasca || 0);
+let mt = document.getElementById("meter-token"); data.meterToken = mt ? (parseFloat(mt.value) || 0) : (data.meterToken || 0);
+let mp = document.getElementById("meter-pasca"); data.meterPasca = mp ? (parseFloat(mp.value) || 0) : (data.meterPasca || 0);
     
     // --- VALIDASI METERAN LISTRIK ---
     if (data.meterToken <= 0 && data.meterPasca <= 0) {
@@ -1460,8 +1506,8 @@ window.printCurrentShiftReport = async function() {
 
 window.triggerEndShift = async function() {
     const data = window.currentShiftData; if (!data) return alert("Gagal mengambil data shift kasir.");
-    let mt = document.getElementById("meter-token"); let meterT = mt ? (Number(mt.value) || 0) : 0;
-    let mp = document.getElementById("meter-pasca"); let meterP = mp ? (Number(mp.value) || 0) : 0;
+    let mt = document.getElementById("meter-token"); let meterT = mt ? (parseFloat(mt.value) || 0) : 0;
+let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(mp.value) || 0) : 0;
     
     // --- VALIDASI METERAN LISTRIK ---
     if (meterT <= 0 && meterP <= 0) {
