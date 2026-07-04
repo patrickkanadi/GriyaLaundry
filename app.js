@@ -1525,7 +1525,7 @@ let mp = document.getElementById("meter-pasca"); data.meterPasca = mp ? (parseFl
 window.triggerEndShift = async function() {
     const data = window.currentShiftData; if (!data) return alert("Gagal mengambil data shift kasir.");
     let mt = document.getElementById("meter-token"); let meterT = mt ? (parseFloat(mt.value) || 0) : 0;
-let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(mp.value) || 0) : 0;
+    let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(mp.value) || 0) : 0;
     
     // --- VALIDASI METERAN LISTRIK ---
     if (meterT <= 0 && meterP <= 0) {
@@ -1535,6 +1535,19 @@ let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(m
 
     if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?\nLaporan penutupan akan langsung dikirim ke Cloud Google Sheet.")) return;
     
+    // --- OTOMATIS CETAK LAPORAN SEBELUM LOGOUT ---
+    if (btCharacteristic && typeof window.buildShiftReportReceipt === "function") {
+        try {
+            // Memastikan angka meteran yang baru diketik ikut tercetak di struk
+            data.meterToken = meterT;
+            data.meterPasca = meterP;
+            await window.buildShiftReportReceipt(data);
+        } catch (e) {
+            console.error("Gagal print otomatis:", e);
+        }
+    }
+    // ---------------------------------------------
+
     const shiftPayload = {
         shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
         totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset,
