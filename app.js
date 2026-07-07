@@ -173,7 +173,10 @@ function formatEscPosLine(left, right, isBig) {
 window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, payMethod, newPoints, newFree) {
     const settings = await window.getDynamicSettings();
     const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; const h2 = settings["Header_2"] || ""; const h3 = settings["Header_3"] || ""; 
-    const f1 = settings["Footer_1"] || "TERIMA KASIH"; const f2 = settings["Footer_2"] || ""; const f3 = settings["Footer_3"] || ""; 
+    const f1 = settings["Footer_1"] || "TERIMA KASIH"; 
+    const f2 = settings["Footer_2"] || ""; 
+    const f3 = settings["Footer_3"] || ""; 
+    const f4 = settings["Footer_4"] || "";
     
     const CMD_INIT = "\x1B\x40"; const CMD_CENTER = "\x1B\x61\x01"; const CMD_LEFT = "\x1B\x61\x00";
     const CMD_BOLD_ON = "\x1B\x45\x01"; const CMD_BOLD_OFF = "\x1B\x45\x00";
@@ -221,9 +224,16 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
         receipt += "Sisa Poin: " + newPoints + "/" + window.loyaltyTarget + "\nKoin Gratis: " + newFree + "\n";
     }
 
-    receipt += "--------------------------------\n" + CMD_CENTER + CMD_BOLD_ON + f1 + "\n" + CMD_BOLD_OFF;
+    receipt += "--------------------------------\n" + CMD_CENTER;
+    receipt += CMD_BOLD_ON + f1 + "\n" + CMD_BOLD_OFF;
+    
+    // Menggunakan font kecil (Font B) agar kalimat panjang muat dalam 1 baris kertas
+    receipt += "\x1B!\x01"; 
     if(f2) receipt += f2 + "\n";
     if(f3) receipt += f3 + "\n";
+    if(f4) receipt += f4 + "\n";
+    
+    receipt += CMD_NORMAL; // Kembalikan ke font normal
     receipt += "\n\n\n\n" + CMD_CUT;
 
     const encoder = new TextEncoder(); await sendToPrinter(encoder.encode(receipt));
@@ -232,17 +242,35 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
 window.buildShiftReportReceipt = async function(data) {
     const settings = await window.getDynamicSettings();
     const h1 = settings["Header_1"] || "GRIYA LAUNDRY";
-    const CMD_INIT = "\x1B\x40"; const CMD_CENTER = "\x1B\x61\x01"; const CMD_LEFT = "\x1B\x61\x00"; const CMD_BOLD_ON = "\x1B\x45\x01"; const CMD_BOLD_OFF = "\x1B\x45\x00"; const CMD_BIG = "\x1B!\x11"; const CMD_NORMAL = "\x1B!\x00"; const CMD_CUT = "\x1D\x56\x41\x10";
+    const CMD_INIT = "\x1B\x40"; const CMD_CENTER = "\x1B\x61\x01"; const CMD_LEFT = "\x1B\x61\x00"; 
+    const CMD_BOLD_ON = "\x1B\x45\x01"; const CMD_BOLD_OFF = "\x1B\x45\x00"; 
+    const CMD_BIG = "\x1B!\x11"; const CMD_NORMAL = "\x1B!\x00"; const CMD_CUT = "\x1D\x56\x41\x10";
 
     let r = CMD_INIT + CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
     r += "LAPORAN TUTUP SHIFT\n--------------------------------\n" + CMD_LEFT;
     r += "ID Shift: " + data.shiftId + "\nKasir   : " + data.cashier + "\nLogin   : " + formatTimeOnlyWIB(data.loginTime) + "\nLogout  : " + formatTimeOnlyWIB(data.logoutTime) + "\n--------------------------------\n";
-    r += formatEscPosLine("Total Nota", data.totalOrders, false) + "\n" + formatEscPosLine("Total Pelanggan", data.totalCustomers, false) + "\n--------------------------------\n";
-    r += CMD_BOLD_ON + "PENERIMAAN KASIR:" + CMD_BOLD_OFF + "\n" + formatEscPosLine("Tunai / Cash", data.totalCash.toLocaleString('id-ID'), false) + "\n" + formatEscPosLine("QRIS", data.totalQris.toLocaleString('id-ID'), false) + "\n" + formatEscPosLine("Transfer Bank", data.totalTransfer.toLocaleString('id-ID'), false) + "\n--------------------------------\n";
-    r += CMD_BOLD_ON + "PIUTANG & PENGELUARAN:" + CMD_BOLD_OFF + "\n" + formatEscPosLine("Piutang Hotel", data.totalHotelPiutang.toLocaleString('id-ID'), false) + "\n" + formatEscPosLine("Piutang Tamu", data.totalTamuPiutang.toLocaleString('id-ID'), false) + "\n" + formatEscPosLine("Pengeluaran Laci", data.totalExpenses.toLocaleString('id-ID'), false) + "\n--------------------------------\n";
+    
+    // 1. BLOK PENERIMAAN (Paling Atas)
+    r += CMD_BOLD_ON + "PENERIMAAN KASIR:" + CMD_BOLD_OFF + "\n";
+    r += formatEscPosLine("Tunai / Cash", data.totalCash.toLocaleString('id-ID'), false) + "\n";
+    r += formatEscPosLine("QRIS", data.totalQris.toLocaleString('id-ID'), false) + "\n";
+    r += formatEscPosLine("Transfer Bank", data.totalTransfer.toLocaleString('id-ID'), false) + "\n";
+    r += "--------------------------------\n";
+
+    // 2. BLOK PIUTANG & PENGELUARAN (Tengah)
+    r += CMD_BOLD_ON + "PIUTANG & PENGELUARAN:" + CMD_BOLD_OFF + "\n";
+    r += formatEscPosLine("Piutang Hotel", data.totalHotelPiutang.toLocaleString('id-ID'), false) + "\n";
+    r += formatEscPosLine("Piutang Tamu", data.totalTamuPiutang.toLocaleString('id-ID'), false) + "\n";
+    r += formatEscPosLine("Pengeluaran Laci", data.totalExpenses.toLocaleString('id-ID'), false) + "\n";
+    r += "--------------------------------\n";
+
+    // 3. RANGKUMAN & LAINNYA (Bawah)
     r += CMD_BOLD_ON + "STATISTIK PROMO:" + CMD_BOLD_OFF + "\n";
-    r += formatEscPosLine("Item Gratis", (data.totalFreeItems || 0) + " Item", false) + "\n" + formatEscPosLine("Nominal Diskon", (data.totalDiscountNominal || 0).toLocaleString('id-ID'), false) + "\n--------------------------------\n";
-    r += CMD_BOLD_ON + "RANGKUMAN AKHIR:" + CMD_BOLD_OFF + "\n" + formatEscPosLine("Omset Kotor", data.totalOmset.toLocaleString('id-ID'), false) + "\n\n";
+    r += formatEscPosLine("Item Gratis", (data.totalFreeItems || 0) + " Item", false) + "\n";
+    r += formatEscPosLine("Nominal Diskon", (data.totalDiscountNominal || 0).toLocaleString('id-ID'), false) + "\n";
+    r += "--------------------------------\n";
+    r += CMD_BOLD_ON + "RANGKUMAN AKHIR:" + CMD_BOLD_OFF + "\n";
+    r += formatEscPosLine("Omset Kotor", data.totalOmset.toLocaleString('id-ID'), false) + "\n";
     let laciTitle = window.enableDrawerTracking ? "SALDO LACI" : "SETOR ADMIN";
     r += CMD_BOLD_ON + formatEscPosLine(laciTitle, data.netCash.toLocaleString('id-ID'), false) + CMD_BOLD_OFF + "\n";
     
@@ -256,7 +284,6 @@ window.buildShiftReportReceipt = async function(data) {
     r += "\n\n\n\n" + CMD_CUT;
     const encoder = new TextEncoder(); await sendToPrinter(encoder.encode(r));
 };
-
 // ==========================================
 // 3. CORE LOGIN FAST SYNC
 // ==========================================
@@ -1101,6 +1128,34 @@ window.renderHistoryList = function(type) {
                 container.innerHTML += `<div class="history-row"><div><strong>${exp.category}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(exp.timestamp)} | Rp ${exp.amount.toLocaleString('id-ID')}</small><br><small>${exp.description}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
             });
         };
+    } else if (type === 'aruskas') {
+        Promise.all([
+            new Promise(res => db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = e => res(e.target.result)),
+            new Promise(res => db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = e => res(e.target.result))
+        ]).then(([orders, expenses]) => {
+            let shiftOrders = orders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
+            let shiftExpenses = expenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
+            
+            let combined = [];
+            shiftOrders.forEach(o => {
+                let totalIn = (o.cashAmount || 0) + (o.qrisAmount || 0) + (o.transferAmount || 0);
+                if (totalIn > 0) { combined.push({ type: 'in', time: new Date(o.timestamp), desc: `Nota: ${o.orderId}`, amount: totalIn }); }
+            });
+            shiftExpenses.forEach(e => {
+                combined.push({ type: 'out', time: new Date(e.timestamp), desc: `Pengeluaran: ${e.category}`, amount: e.amount });
+            });
+            
+            combined.sort((a, b) => b.time - a.time);
+            
+            if(combined.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada arus kas tunai di shift ini.</div>`;
+            
+            combined.forEach(log => {
+                let color = log.type === 'in' ? '#27ae60' : '#e74c3c';
+                let sign = log.type === 'in' ? '+' : '-';
+                container.innerHTML += `<div class="history-row"><div><strong>${log.desc}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(log.time.toISOString())}</small></div><div style="font-weight:bold; font-size:16px; color:${color};">${sign}Rp ${log.amount.toLocaleString('id-ID')}</div></div>`;
+            });
+        });
+        
     } else if (type === 'shifts') {
         const renderShiftsHTML = (shiftsData) => {
             const filtered = shiftsData.filter(s => s.cashier === currentCashier).slice(0, 6);
