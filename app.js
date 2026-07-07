@@ -249,31 +249,42 @@ window.buildShiftReportReceipt = async function(data) {
     let r = CMD_INIT + CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
     r += "LAPORAN TUTUP SHIFT\n--------------------------------\n" + CMD_LEFT;
     r += "ID Shift: " + data.shiftId + "\nKasir   : " + data.cashier + "\nLogin   : " + formatTimeOnlyWIB(data.loginTime) + "\nLogout  : " + formatTimeOnlyWIB(data.logoutTime) + "\n--------------------------------\n";
+    r += formatEscPosLine("Total Nota", data.totalOrders, false) + "\n" + formatEscPosLine("Total Pelanggan", data.totalCustomers, false) + "\n--------------------------------\n";
     
-    // 1. BLOK PENERIMAAN (Paling Atas)
-    r += CMD_BOLD_ON + "PENERIMAAN KASIR:" + CMD_BOLD_OFF + "\n";
+    // 1. BLOK PENERIMAAN & PIUTANG (Digabung di atas)
+    r += CMD_BOLD_ON + "PENERIMAAN KASIR & PIUTANG:" + CMD_BOLD_OFF + "\n";
     r += formatEscPosLine("Tunai / Cash", data.totalCash.toLocaleString('id-ID'), false) + "\n";
     r += formatEscPosLine("QRIS", data.totalQris.toLocaleString('id-ID'), false) + "\n";
     r += formatEscPosLine("Transfer Bank", data.totalTransfer.toLocaleString('id-ID'), false) + "\n";
-    r += "--------------------------------\n";
-
-    // 2. BLOK PIUTANG & PENGELUARAN (Tengah)
-    r += CMD_BOLD_ON + "PIUTANG & PENGELUARAN:" + CMD_BOLD_OFF + "\n";
     r += formatEscPosLine("Piutang Hotel", data.totalHotelPiutang.toLocaleString('id-ID'), false) + "\n";
     r += formatEscPosLine("Piutang Tamu", data.totalTamuPiutang.toLocaleString('id-ID'), false) + "\n";
+    r += "--------------------------------\n";
+
+    // 2. BLOK PENGELUARAN LACI (Terpisah di tengah)
+    r += CMD_BOLD_ON + "PENGELUARAN:" + CMD_BOLD_OFF + "\n";
     r += formatEscPosLine("Pengeluaran Laci", data.totalExpenses.toLocaleString('id-ID'), false) + "\n";
     r += "--------------------------------\n";
 
-    // 3. RANGKUMAN & LAINNYA (Bawah)
+    // 3. STATISTIK KOIN FISIK
+    r += CMD_BOLD_ON + "STATISTIK KOIN FISIK:" + CMD_BOLD_OFF + "\n";
+    r += formatEscPosLine("Koin Terpakai (Nota)", (data.totalCoinsUsed || 0) + " Koin", false) + "\n";
+    r += formatEscPosLine("Koin Daur Ulang", (data.totalCoinsRecycled || 0) + " Koin", false) + "\n";
+    r += formatEscPosLine("Koin Macet/Rusak", (data.totalCoinsJammed || 0) + " Koin", false) + "\n";
+    r += "--------------------------------\n";
+
+    // 4. STATISTIK PROMO
     r += CMD_BOLD_ON + "STATISTIK PROMO:" + CMD_BOLD_OFF + "\n";
     r += formatEscPosLine("Item Gratis", (data.totalFreeItems || 0) + " Item", false) + "\n";
     r += formatEscPosLine("Nominal Diskon", (data.totalDiscountNominal || 0).toLocaleString('id-ID'), false) + "\n";
     r += "--------------------------------\n";
+
+    // 5. RANGKUMAN AKHIR
     r += CMD_BOLD_ON + "RANGKUMAN AKHIR:" + CMD_BOLD_OFF + "\n";
-    r += formatEscPosLine("Omset Kotor", data.totalOmset.toLocaleString('id-ID'), false) + "\n";
+    r += formatEscPosLine("Omset Kotor", data.totalOmset.toLocaleString('id-ID'), false) + "\n\n";
     let laciTitle = window.enableDrawerTracking ? "SALDO LACI" : "SETOR ADMIN";
     r += CMD_BOLD_ON + formatEscPosLine(laciTitle, data.netCash.toLocaleString('id-ID'), false) + CMD_BOLD_OFF + "\n";
     
+    // 6. ITEM TERJUAL
     if (data.foodSummary && Object.keys(data.foodSummary).length > 0) {
         r += "--------------------------------\n" + CMD_CENTER + "RINGKASAN ITEM TERJUAL\n" + CMD_LEFT;
         for (const [name, qty] of Object.entries(data.foodSummary)) {
@@ -284,6 +295,7 @@ window.buildShiftReportReceipt = async function(data) {
     r += "\n\n\n\n" + CMD_CUT;
     const encoder = new TextEncoder(); await sendToPrinter(encoder.encode(r));
 };
+
 // ==========================================
 // 3. CORE LOGIN FAST SYNC
 // ==========================================
@@ -839,33 +851,55 @@ window.applyPromo = function() {
     let pf = document.getElementById("pay-free");
     if (pf) { if (pf.tagName === 'INPUT') pf.value = totalFreeValue; else pf.innerText = totalFreeValue; }
     
-    let elQ = document.getElementById("pay-qris"); let q = elQ ? Number(elQ.value) : 0;
-    let elT = document.getElementById("pay-transfer"); let t = elT ? Number(elT.value) : 0;
-    let elHP = document.getElementById("pay-hotel-piutang"); let hp = elHP ? Number(elHP.value) : 0;
-    let elTP = document.getElementById("pay-tamu-piutang"); let tp = elTP ? Number(elTP.value) : 0;
-    
     window.cartGrandTotal = Math.max(0, window.cartSubtotal - totalFreeValue);
     let rgt = document.getElementById("review-grandtotal");
     if(rgt) rgt.innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
     
-    let autoCash = window.cartGrandTotal - (q + t + hp + tp);
-    let pc = document.getElementById("pay-cash");
-    if(pc) pc.value = Math.max(0, autoCash); 
-    
-    window.calculateRemaining();
+    // Panggil hitung sisa (dan otomatis sesuaikan kolom Cash)
+    window.calculateRemaining(false);
 };
 
-window.calculateRemaining = function() {
-    let pc = document.getElementById("pay-cash"); let c = pc ? Number(pc.value) : 0;
+window.calculateRemaining = function(isCashManual = false) {
     let elQ = document.getElementById("pay-qris"); let q = elQ ? Number(elQ.value) : 0;
     let elT = document.getElementById("pay-transfer"); let t = elT ? Number(elT.value) : 0;
     let elHP = document.getElementById("pay-hotel-piutang"); let hp = elHP ? Number(elHP.value) : 0;
     let elTP = document.getElementById("pay-tamu-piutang"); let tp = elTP ? Number(elTP.value) : 0;
     
+    let pc = document.getElementById("pay-cash"); 
+    let c = pc ? Number(pc.value) : 0;
+
+    // Jika yang diubah BUKAN kolom cash (isCashManual = false), maka auto-fill kolom cash
+    if (!isCashManual) {
+        let autoCash = window.cartGrandTotal - (q + t + hp + tp);
+        c = Math.max(0, autoCash); // Pastikan cash tidak minus
+        if (pc) pc.value = c;
+    }
+
     const totalAccounted = c + q + t + hp + tp; 
     const remaining = Math.max(0, window.cartGrandTotal - totalAccounted);
+    
     let rr = document.getElementById("review-remaining");
-    if(rr) rr.innerText = `Rp ${remaining.toLocaleString('id-ID')}`;
+    let rrContainer = document.getElementById("review-remaining-container");
+    let rrLabel = document.getElementById("review-remaining-label");
+    
+    if(rr && rrContainer && rrLabel) {
+        rr.innerText = `Rp ${remaining.toLocaleString('id-ID')}`;
+        
+        // --- PERINGATAN VISUAL ---
+        if (remaining > 0) {
+            // Belum Lunas -> Merah Peringatan
+            rrContainer.style.background = "#f8d7da";
+            rrContainer.style.border = "1px solid #f5c6cb";
+            rrContainer.style.color = "#721c24";
+            rrLabel.innerText = "⚠️ Sisa Kurang Bayar:";
+        } else {
+            // Sudah Lunas -> Hijau Aman
+            rrContainer.style.background = "#d4edda";
+            rrContainer.style.border = "1px solid #c3e6cb";
+            rrContainer.style.color = "#155724";
+            rrLabel.innerText = "✅ Pembayaran Lunas:";
+        }
+    }
 };
 
 window.finalizeOrder = async function(shouldPrint) {
@@ -1161,9 +1195,27 @@ window.renderHistoryList = function(type) {
             const filtered = shiftsData.filter(s => s.cashier === currentCashier).slice(0, 6);
             if(filtered.length === 0) { container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada histori shift Anda di sistem.</div>`; return; }
             filtered.forEach(s => {
-                let detailBtn = `<button onclick="window.viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">👁️ Detail</button>`;
-                let printBtn = `<button onclick="window.printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">🖨️ Cetak</button>`;
-                container.innerHTML += `<div class="history-row" style="align-items:flex-start;"><div><strong>Shift: ${s.shiftId}</strong><br><small style="color:#7f8c8d;">Kasir: ${s.cashier} | Keluar: ${formatWIB(s.logoutTime)}</small></div><div style="display:flex; text-align:right; align-items:center;"><div><strong style="margin-right:15px;">Omset: Rp ${(s.totalOmset || 0).toLocaleString('id-ID')}</strong></div> ${detailBtn} ${printBtn}</div></div>`;
+                let detailBtn = `<button onclick="window.viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">👁️ Detail</button>`;
+                let printBtn = `<button onclick="window.printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">🖨️ Cetak</button>`;
+                
+                // [BARU] Menarik data item terjual dan merangkainya menjadi teks
+                let itemsStr = "Tidak ada item";
+                if (s.foodSummary && Object.keys(s.foodSummary).length > 0) {
+                    itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
+                }
+
+                container.innerHTML += `
+                <div class="history-row" style="align-items:flex-start; display:flex; gap:10px;">
+                    <div style="flex:2;">
+                        <strong>Shift: ${s.shiftId}</strong><br>
+                        <small style="color:#7f8c8d;">Keluar: ${formatWIB(s.logoutTime)}</small><br>
+                        <small style="color:#2980b9; display:block; margin-top:4px; line-height:1.4;">📦 <strong>Item:</strong> ${itemsStr}</small>
+                    </div>
+                    <div style="flex:1; text-align:right;">
+                        <strong style="color:#27ae60; display:block; margin-bottom:6px; font-size:14px;">Rp ${(s.totalOmset || 0).toLocaleString('id-ID')}</strong>
+                        <div style="display:flex; justify-content:flex-end; gap:5px;">${detailBtn} ${printBtn}</div>
+                    </div>
+                </div>`;
             });
         };
         if (window.globalRecentShifts && window.globalRecentShifts.length > 0) { renderShiftsHTML(window.globalRecentShifts); } 
@@ -1477,23 +1529,34 @@ window.openShiftReport = function(historyData = null) {
         populateShiftModal(historyData, false);
     } else {
         if (!db || !currentShiftId) return alert("Anda belum membuka shift kasir.");
-        let tx = db.transaction(["orders", "expenses"], "readonly");
-        let activeOrders = []; let activeExpenses = [];
+        // Tambahkan 'coin_retrievals' di dalam transaction agar bisa dibaca
+        let tx = db.transaction(["orders", "expenses", "coin_retrievals"], "readonly");
+        let activeOrders = []; let activeExpenses = []; let activeCoinRets = [];
+        
         tx.objectStore("orders").getAll().onsuccess = (ev) => { activeOrders = ev.target.result; };
         tx.objectStore("expenses").getAll().onsuccess = (ev) => { activeExpenses = ev.target.result; };
+        tx.objectStore("coin_retrievals").getAll().onsuccess = (ev) => { activeCoinRets = ev.target.result; };
 
         tx.oncomplete = () => {
             let shiftOrders = activeOrders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
             let shiftExpenses = activeExpenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
+            
+            // Filter koin yang diatur oleh kasir saat ini sejak waktu login
+            let loginTimeMs = new Date(currentLoginTime).getTime();
+            let shiftCoinRets = activeCoinRets.filter(cr => cr.cashier === currentCashier && new Date(cr.timestamp).getTime() >= loginTimeMs);
+
             let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0; let tTransfer = 0;
             let hPiu = 0; let tPiu = 0; let tFree = 0; let tExpense = 0; let foodSummary = {};
             
             let tFreeItems = 0; let tDiscountNom = 0;
+            let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
 
             shiftOrders.forEach(o => {
                 tOrders++; if (o.customerPhone && o.customerPhone !== "-") tCust++;
                 tOmset += o.grandTotal; tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tTransfer += (o.transferAmount || 0);
                 hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0);
+                
+                tCoinsUsed += (o.expectedCoins || 0); // Koin terpakai dari order
                 
                 tDiscountNom += (o.discounts || 0);
                 if (o.redeemedPromos && o.redeemedPromos.length > 0) {
@@ -1502,14 +1565,23 @@ window.openShiftReport = function(historyData = null) {
 
                 if (o.items) o.items.forEach(i => { foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; });
             });
+            
             shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
+            
+            // Kalkulasi koin macet dan daur ulang
+            shiftCoinRets.forEach(cr => {
+                if (cr.notes && cr.notes.includes("Macet")) tCoinsJammed += cr.qty;
+                else tCoinsRecycled += cr.qty;
+            });
+
             let netCash = Math.max(0, tCash - tExpense);
 
             window.currentShiftData = { 
                 shiftId: currentShiftId, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), cashier: currentCashier, 
                 totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer, 
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary,
-                totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom
+                totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom,
+                totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed
             };
             
             populateShiftModal(window.currentShiftData, true);
@@ -1563,6 +1635,9 @@ function populateShiftModal(data, isActive) {
     if (endBtn) {
         endBtn.style.display = isActive ? "block" : "none";
     }
+    if (document.getElementById("sd-coins-used")) document.getElementById("sd-coins-used").innerText = (data.totalCoinsUsed || 0) + " Koin";
+    if (document.getElementById("sd-coins-recycled")) document.getElementById("sd-coins-recycled").innerText = (data.totalCoinsRecycled || 0) + " Koin";
+    if (document.getElementById("sd-coins-jammed")) document.getElementById("sd-coins-jammed").innerText = (data.totalCoinsJammed || 0) + " Koin";
     let modal = document.getElementById("shift-detail-modal"); if (modal) modal.classList.remove("hidden");
 }
 
@@ -1605,13 +1680,10 @@ window.triggerEndShift = async function() {
     // --- OTOMATIS CETAK LAPORAN SEBELUM LOGOUT ---
     if (btCharacteristic && typeof window.buildShiftReportReceipt === "function") {
         try {
-            // Memastikan angka meteran yang baru diketik ikut tercetak di struk
             data.meterToken = meterT;
             data.meterPasca = meterP;
             await window.buildShiftReportReceipt(data);
-        } catch (e) {
-            console.error("Gagal print otomatis:", e);
-        }
+        } catch (e) { console.error("Gagal print otomatis:", e); }
     }
     // ---------------------------------------------
 
@@ -1621,6 +1693,7 @@ window.triggerEndShift = async function() {
         totalCash: data.totalCash, totalQris: data.totalQris, totalTransfer: data.totalTransfer,
         totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree,
         totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary,
+        totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0,
         meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", syncStatus: "Pending"
     };
     
