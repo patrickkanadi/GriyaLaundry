@@ -793,9 +793,9 @@ window.openReview = function() {
         }
 
         if (maxRedeemable > 0) {
-            promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#fef9e7; padding:10px; border-radius:6px; border:1px solid #f9e79f;">
-               <div><strong style="color:#856404;">🎁 Koin Gratis (Loyalty)</strong><br><small style="color:#7d6608;">Maks klaim: ${maxRedeemable}</small></div>
-               <input type="number" class="promo-input" data-type="loyalty" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${maxRedeemable}" min="0" oninput="window.applyPromo()" style="width:70px; padding:6px; font-weight:bold; text-align:center; border:1px solid #d4ac0d; border-radius:4px;">
+            promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#fef9e7; padding:8px; border-radius:6px; border:1px solid #f9e79f;">
+               <div><strong style="color:#856404; font-size:12px;">🎁 Koin Gratis (Loyalty)</strong><br><small style="color:#7d6608; font-size:11px;">Maks klaim: ${maxRedeemable}</small></div>
+               <input type="number" class="promo-input" data-type="loyalty" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${maxRedeemable}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #d4ac0d; border-radius:4px; font-size:14px;">
            </div>`;
         }
 
@@ -806,9 +806,9 @@ window.openReview = function() {
                     if (cartItem) {
                         let possibleClaim = Math.min(qtyOwned, Math.floor(cartItem.qty));
                         if (possibleClaim > 0) {
-                            promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#f9ebff; padding:10px; border-radius:6px; border:1px solid #d6b4fc;">
-                               <div><strong style="color:#8e44ad;">🎫 Undian: ${rewardName}</strong><br><small style="color:#6c3483;">Maks guna: ${possibleClaim}</small></div>
-                               <input type="number" class="promo-input" data-type="stored" data-item="${rewardName}" data-price="${cartItem.originalPrice}" value="0" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:70px; padding:6px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px;">
+                            promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f9ebff; padding:8px; border-radius:6px; border:1px solid #d6b4fc;">
+                               <div><strong style="color:#8e44ad; font-size:12px;">🎫 Undian: ${rewardName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks guna: ${possibleClaim}</small></div>
+                               <input type="number" class="promo-input" data-type="stored" data-item="${rewardName}" data-price="${cartItem.originalPrice}" value="0" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
                            </div>`;
                         }
                     }
