@@ -852,6 +852,19 @@ window.finalizeOrder = async function(shouldPrint) {
     const totalPiutang = hotelPiutang + tamuPiutang; 
     if ((window.cartGrandTotal - (cash + qris + transfer + totalPiutang)) > 0) return alert("⚠️ Pembayaran Belum Cukup!");
 
+    // --- LOGIC DINAMIS METODE PEMBAYARAN ---
+    let payMethod = "Split";
+    let activeMethods = [];
+    if (cash > 0) activeMethods.push("Cash");
+    if (qris > 0) activeMethods.push("QRIS");
+    if (transfer > 0) activeMethods.push("Transfer");
+    if (hotelPiutang > 0) activeMethods.push("Piutang Hotel");
+    if (tamuPiutang > 0) activeMethods.push("Piutang Tamu");
+    
+    if (activeMethods.length === 1) payMethod = activeMethods[0];
+    else if (activeMethods.length === 0) payMethod = (free > 0 && window.cartGrandTotal === 0) ? "Gratis" : "Unpaid";
+    // ---------------------------------------
+
     let redeemedList = []; let redeemedLoyaltyCoins = 0;
     document.querySelectorAll('.promo-input').forEach(input => {
         let val = Number(input.value) || 0;
@@ -870,25 +883,23 @@ window.finalizeOrder = async function(shouldPrint) {
     let paidCoins = Math.max(0, cartCoins - redeemedLoyaltyCoins);
     let expectedCoinsTotal = currentCart.reduce((sum, item) => { let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; let multiplier = Math.ceil(item.qty / divisor); return sum + ((item.expectedCoins || 0) * multiplier); }, 0);
 
+    let newEarnedRewards = []; // Mengirim data hadiah ke Google Sheets
+
     if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
         activeCustomerProfile.spent += window.cartGrandTotal;
         
         let initialPoints = activeCustomerProfile.points || 0;
         let initialFree = activeCustomerProfile.freeCoins || 0;
-        
         let totalPoints = initialPoints + paidCoins;
         let newlyEarnedFree = Math.floor(totalPoints / window.loyaltyTarget);
         let remainingPoints = totalPoints % window.loyaltyTarget;
-        let totalFreeGenerated = initialFree + newlyEarnedFree;
-        let finalFreeCoins = Math.max(0, totalFreeGenerated - redeemedLoyaltyCoins);
+        let finalFreeCoins = Math.max(0, (initialFree + newlyEarnedFree) - redeemedLoyaltyCoins);
 
         redeemedList.forEach(rp => {
-            if (rp.source === 'stored' && activeCustomerProfile.storedRewards) {
-                if (activeCustomerProfile.storedRewards[rp.item] !== undefined) {
-                    activeCustomerProfile.storedRewards[rp.item] -= rp.qty;
-                    if (activeCustomerProfile.storedRewards[rp.item] <= 0) delete activeCustomerProfile.storedRewards[rp.item]; 
-                }
+            if (rp.source === 'stored' && activeCustomerProfile.storedRewards && activeCustomerProfile.storedRewards[rp.item] !== undefined) {
+                activeCustomerProfile.storedRewards[rp.item] -= rp.qty;
+                if (activeCustomerProfile.storedRewards[rp.item] <= 0) delete activeCustomerProfile.storedRewards[rp.item]; 
             }
         });
 
@@ -896,11 +907,12 @@ window.finalizeOrder = async function(shouldPrint) {
         if (pendingPromoCode) {
             let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
             if (promo) {
+                newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty }); // Simpan di payload
+                
                 if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
                 
-                let d = new Date();
-                let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
+                let d = new Date(); let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
                 
                 db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({
@@ -916,17 +928,17 @@ window.finalizeOrder = async function(shouldPrint) {
         window.saveMemberToDB(activeCustomerProfile);
     }
 
-// Cek apakah ada layanan cuci (bukan sekadar beli koin/minuman)
-    let isLaundry = currentCart.some(i => !String(i.category).toUpperCase().includes("MINUMAN") && !String(i.category).toUpperCase().includes("FOOD") && !String(i.name).toUpperCase().includes("KOIN"));
+    // CEK WORKFLOW (KOLOM I): Jika TICKET masuk antrean cuci, jika INSTANT langsung selesai
+    let isLaundry = currentCart.some(i => i.workflow === "TICKET");
     let finalStatus = isLaundry ? "Processing" : (totalPiutang > 0 ? "Pending Debt" : "Completed");
 
     const orderPayload = {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
-        paymentMethod: "Split", cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: paidCoins, redeemedPromos: redeemedList, expectedCoins: expectedCoinsTotal, internalCoinsUsed: 0, syncStatus: "Pending" 
+        paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
+        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, internalCoinsUsed: 0, syncStatus: "Pending" 
     };
-
+    
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     
     // [BARU] Langsung tampilkan di tab "Cucian Aktif" tanpa harus nunggu Cloud Sync
@@ -937,7 +949,7 @@ window.finalizeOrder = async function(shouldPrint) {
     }
     
     if (shouldPrint && typeof window.buildEscPosReceipt === "function") {
-        await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, "Split", newPoints, newFree);
+        await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, payMethod, newPoints, newFree);
     }
     
     let mod = document.getElementById("review-modal"); if(mod) mod.classList.add("hidden");
