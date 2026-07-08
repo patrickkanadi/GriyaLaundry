@@ -967,9 +967,39 @@ window.finalizeOrder = async function(shouldPrint) {
 
     let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
     let paidCoins = Math.max(0, cartCoins - redeemedLoyaltyCoins);
-    let expectedCoinsTotal = currentCart.reduce((sum, item) => { let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; let multiplier = Math.ceil(item.qty / divisor); return sum + ((item.expectedCoins || 0) * multiplier); }, 0);
 
-    let newEarnedRewards = []; // Mengirim data hadiah ke Google Sheets
+    // --- PENGHITUNGAN ASUMSI KOIN DENGAN LOGIKA BATCH/KILOAN ---
+    const settings = await window.getDynamicSettings();
+    let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
+    let bantalPerBatch = Number(settings["Sarung_Bantal_Per_Batch"]) || 10;
+    
+    let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0;
+
+    currentCart.forEach(item => {
+        let name = String(item.name).toUpperCase();
+        if (name.includes("KESET")) {
+            kesetQty += item.qty;
+        } else if (name.includes("BANTAL")) {
+            bantalQty += item.qty;
+        } else if (item.inputMode === "DECIMAL") { // Asumsi Kiloan (Reguler/CKS)
+            regularWeight += item.qty;
+        } else {
+            // Logika koin standar untuk item satuan lainnya (jika ada)
+            let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; 
+            let multiplier = Math.ceil(item.qty / divisor); 
+            otherCoins += ((item.expectedCoins || 0) * multiplier);
+        }
+    });
+
+    // Kiloan: per 10kg = 1 Batch (2 koin). Keset: 1 Batch = 3 koin. Bantal: 1 Batch = 2 koin.
+    let expectedCoinsTotal = 
+        (regularWeight > 0 ? Math.ceil(regularWeight / 10) * 2 : 0) + 
+        (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + 
+        (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + 
+        otherCoins;
+    // -----------------------------------------------------------
+
+    let newEarnedRewards = [];
 
     if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
