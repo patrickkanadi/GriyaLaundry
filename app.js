@@ -1047,17 +1047,17 @@ window.renderActiveTickets = function() {
     const grid = document.getElementById("ticket-grid-container"); if(!grid) return;
     grid.innerHTML = "";
     
-    let tickets = activeLaundryTickets.filter(t => 
-        (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && 
-        t.items && t.items.some(i => i.workflow === "TICKET")
-    );
+    // HAPUS Pengecekan t.items karena Cloud hanya mengirim readableReceipt
+    let tickets = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup");
     
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada cucian aktif.</p>";
     
     tickets.forEach((ticket) => {
         const isReady = ticket.orderStatus === "Ready for Pickup";
-        let receiptText = ticket.items ? ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n') : "";
-        let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil & Selesai</button>`;
+        let receiptText = ticket.readableReceipt || (ticket.items ? ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n') : "");
+        let expected = ticket.expectedCoins || 0;
+        
+        let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${expected})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil & Selesai</button>`;
         grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:13px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>${buttonsHtml}</div>`;
     });
 };
