@@ -13,7 +13,7 @@ let currentAntreanIndex = 0;
 let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
 let globalMenuData = []; let currentCategory = ""; let activeLaundryTickets = []; let currentCart = []; 
 let activeNumpadItem = null; let numpadValue = "0"; let activeSettlementTicket = null;
-window.masterDrawerBalance = 0; let isLoggingOut = false; let currentVoidTarget = { type: null, id: null };
+window.masterDrawerBalance = 0; window.coinsInMachine = 0; let isLoggingOut = false; let currentVoidTarget = { type: null, id: null };
 let isMenuLocked = true; let isSyncing = false; let activeCustomerProfile = null; let activeCoinPrice = 10000;
 window.loyaltyTarget = 10; window.globalPromos = []; window.enableDrawerTracking = true;
 
@@ -54,16 +54,9 @@ function initDB() {
 // LOGIKA PWA INSTALL
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault(); 
-    deferredPrompt = e; 
-    
-    // Tampilkan tombol di menu POS atas
-    const installBtn = document.getElementById('btn-install'); 
-    if(installBtn) installBtn.classList.remove('hidden'); 
-    
-    // Tampilkan tombol di layar Login
-    const loginInstallBtn = document.getElementById('btn-install-login');
-    if(loginInstallBtn) loginInstallBtn.classList.remove('hidden');
+    e.preventDefault(); deferredPrompt = e; 
+    const installBtn = document.getElementById('btn-install'); if(installBtn) installBtn.classList.remove('hidden'); 
+    const loginInstallBtn = document.getElementById('btn-install-login'); if(loginInstallBtn) loginInstallBtn.classList.remove('hidden');
 });
 
 window.installPWA = function() { 
@@ -71,12 +64,8 @@ window.installPWA = function() {
         deferredPrompt.prompt(); 
         deferredPrompt.userChoice.then((choiceResult) => {
             if (choiceResult.outcome === 'accepted') {
-                // Sembunyikan kedua tombol jika user setuju menginstal
-                let btn = document.getElementById('btn-install');
-                if(btn) btn.classList.add('hidden');
-                
-                let loginBtn = document.getElementById('btn-install-login');
-                if(loginBtn) loginBtn.classList.add('hidden');
+                let btn = document.getElementById('btn-install'); if(btn) btn.classList.add('hidden');
+                let loginBtn = document.getElementById('btn-install-login'); if(loginBtn) loginBtn.classList.add('hidden');
             }
             deferredPrompt = null; 
         }); 
@@ -89,10 +78,7 @@ function processVoidApprovals(authStatuses) {
         for (const [orderId, info] of Object.entries(authStatuses.orders)) {
             db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = (e) => {
                 let order = e.target.result;
-                if (order && order.orderStatus !== info.status) {
-                    order.orderStatus = info.status; order.voidAuth = info.auth;
-                    db.transaction(["orders"], "readwrite").objectStore("orders").put(order);
-                }
+                if (order && order.orderStatus !== info.status) { order.orderStatus = info.status; order.voidAuth = info.auth; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); }
             };
         }
     }
@@ -100,10 +86,7 @@ function processVoidApprovals(authStatuses) {
         for (const [expenseId, info] of Object.entries(authStatuses.expenses)) {
             db.transaction(["expenses"], "readonly").objectStore("expenses").get(expenseId).onsuccess = (e) => {
                 let expense = e.target.result;
-                if (expense && expense.status !== info.status) {
-                    expense.status = info.status;
-                    db.transaction(["expenses"], "readwrite").objectStore("expenses").put(expense);
-                }
+                if (expense && expense.status !== info.status) { expense.status = info.status; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(expense); }
             };
         }
     }
@@ -145,11 +128,9 @@ function logUserActivity() {
 window.connectBluetoothPrinter = async function() {
     try {
         btDevice = await navigator.bluetooth.requestDevice({ filters: [{ services: [0x18F0] }], optionalServices: [0x18F0] });
-        const server = await btDevice.gatt.connect();
-        const service = await server.getPrimaryService(0x18F0);
+        const server = await btDevice.gatt.connect(); const service = await server.getPrimaryService(0x18F0);
         btCharacteristic = await service.getCharacteristic(0x2AF1);
-        const btn = document.getElementById("btn-printer");
-        if(btn) { btn.innerText = "🖨️ Printer: Terhubung"; btn.style.background = "#2ecc71"; }
+        const btn = document.getElementById("btn-printer"); if(btn) { btn.innerText = "🖨️ Printer: Terhubung"; btn.style.background = "#2ecc71"; }
     } catch (err) { alert("Gagal terhubung ke printer Bluetooth."); }
 };
 
@@ -158,8 +139,7 @@ async function sendToPrinter(payloadUint8) {
     const chunkSize = 20; 
     for (let i = 0; i < payloadUint8.length; i += chunkSize) {
         const chunk = payloadUint8.slice(i, i + chunkSize);
-        await btCharacteristic.writeValue(chunk);
-        await new Promise(r => setTimeout(r, 10)); 
+        await btCharacteristic.writeValue(chunk); await new Promise(r => setTimeout(r, 10)); 
     }
 }
 
@@ -173,10 +153,7 @@ function formatEscPosLine(left, right, isBig) {
 window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, payMethod, newPoints, newFree) {
     const settings = await window.getDynamicSettings();
     const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; const h2 = settings["Header_2"] || ""; const h3 = settings["Header_3"] || ""; 
-    const f1 = settings["Footer_1"] || "TERIMA KASIH"; 
-    const f2 = settings["Footer_2"] || ""; 
-    const f3 = settings["Footer_3"] || ""; 
-    const f4 = settings["Footer_4"] || "";
+    const f1 = settings["Footer_1"] || "TERIMA KASIH"; const f2 = settings["Footer_2"] || ""; const f3 = settings["Footer_3"] || ""; const f4 = settings["Footer_4"] || ""; 
     
     const CMD_INIT = "\x1B\x40"; const CMD_CENTER = "\x1B\x61\x01"; const CMD_LEFT = "\x1B\x61\x00";
     const CMD_BOLD_ON = "\x1B\x45\x01"; const CMD_BOLD_OFF = "\x1B\x45\x00";
@@ -186,23 +163,31 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
     receipt += CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
     if(h2) receipt += h2 + "\n";
     if(h3) receipt += h3 + "\n";
-    receipt += formatWIB(order.timestamp || new Date().toISOString()) + "\n";
+    
     receipt += "--------------------------------\n" + CMD_LEFT;
-    receipt += "Nota: " + orderId + "\nPlgn: " + order.customerName + "\nKsr : " + order.cashier + "\n--------------------------------\n";
+    receipt += "Nota: " + orderId + "\n";
+    receipt += "Tgl : " + formatWIB(order.timestamp || new Date().toISOString()) + "\n";
+    receipt += "Ksr : " + order.cashier + "\n";
+    receipt += "Plgn: " + order.customerName + "\n";
+    receipt += "--------------------------------\n";
 
     let remainingPromos = [...(order.redeemedPromos || []).map(p => ({...p}))];
 
     order.items.forEach(item => {
         const qtyDisplay = item.qty % 1 !== 0 ? item.qty.toFixed(2) : item.qty;
+        const priceDisplay = item.originalPrice.toLocaleString('id-ID');
         const lineTotal = (item.qty * item.originalPrice).toLocaleString('id-ID');
-        receipt += formatEscPosLine(`${qtyDisplay}x ${item.name.substring(0,18)}`, lineTotal, false) + "\n";
+        
+        receipt += CMD_BOLD_ON + item.name + CMD_BOLD_OFF + "\n";
+        receipt += formatEscPosLine(`  ${qtyDisplay} x ${priceDisplay}`, lineTotal, false) + "\n";
+        
         for (let i = 0; i < remainingPromos.length; i++) {
             let rp = remainingPromos[i];
             if (rp.qty > 0 && (rp.item === item.name || rp.item === item.subCategory || rp.item === item.category)) {
                 let applyQty = Math.min(rp.qty, item.qty);
                 if (applyQty > 0) {
                     let discountValue = applyQty * rp.price;
-                    receipt += CMD_BOLD_ON + formatEscPosLine(`  >> Promo Hemat!`, "-" + discountValue.toLocaleString('id-ID'), false) + CMD_BOLD_OFF + "\n";
+                    receipt += formatEscPosLine(`  >> Promo/Diskon`, "-" + discountValue.toLocaleString('id-ID'), false) + "\n";
                     rp.qty -= applyQty;
                 }
             }
@@ -212,29 +197,32 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
     receipt += "--------------------------------\n";
     receipt += formatEscPosLine("Subtotal", order.subtotal.toLocaleString('id-ID'), false) + "\n";
     if (order.discounts && order.discounts > 0) { receipt += formatEscPosLine("Total Diskon", "-" + order.discounts.toLocaleString('id-ID'), false) + "\n"; }
+    receipt += "--------------------------------\n";
     receipt += CMD_BOLD_ON + CMD_BIG + formatEscPosLine("TOTAL", order.grandTotal.toLocaleString('id-ID'), true) + "\n" + CMD_NORMAL + CMD_BOLD_OFF + "\n";
-    receipt += formatEscPosLine(`Tercatat(${payMethod})`, deposit.toLocaleString('id-ID'), false) + "\n";
+    
+    // --- BREAKDOWN PEMBAYARAN ---
+    if (order.cashAmount > 0) receipt += formatEscPosLine(" - Tunai/Cash", order.cashAmount.toLocaleString('id-ID'), false) + "\n";
+    if (order.qrisAmount > 0) receipt += formatEscPosLine(" - QRIS", order.qrisAmount.toLocaleString('id-ID'), false) + "\n";
+    if (order.transferAmount > 0) receipt += formatEscPosLine(" - Transfer", order.transferAmount.toLocaleString('id-ID'), false) + "\n";
+    if (order.freeAmount > 0) receipt += formatEscPosLine(" - Diskon/Promo", order.freeAmount.toLocaleString('id-ID'), false) + "\n";
 
     let piutangCount = (order.hotelPiutangAmount || 0) + (order.tamuPiutangAmount || 0);
-    if (piutangCount > 0) { receipt += CMD_BOLD_ON + formatEscPosLine("TOTAL PIUTANG", piutangCount.toLocaleString('id-ID'), false) + "\n" + CMD_BOLD_OFF; } 
+    if (piutangCount > 0) { receipt += CMD_BOLD_ON + formatEscPosLine("SISA PIUTANG", piutangCount.toLocaleString('id-ID'), false) + "\n" + CMD_BOLD_OFF; } 
     else { receipt += CMD_BOLD_ON + formatEscPosLine("STATUS", "LUNAS", false) + "\n" + CMD_BOLD_OFF; }
 
     if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in" && !order.customerPhone.startsWith("999")) {
-        receipt += "--------------------------------\n" + CMD_CENTER + "-- INFO POIN LAUNDRY --\n";
-        receipt += "Sisa Poin: " + newPoints + "/" + window.loyaltyTarget + "\nKoin Gratis: " + newFree + "\n";
+        receipt += "--------------------------------\n" + CMD_CENTER + "-- INFO LOYALTY --\n" + CMD_LEFT;
+        receipt += formatEscPosLine("Sisa Poin", newPoints + " / " + window.loyaltyTarget, false) + "\n";
+        receipt += formatEscPosLine("Koin Gratis", newFree, false) + "\n";
     }
 
     receipt += "--------------------------------\n" + CMD_CENTER;
     receipt += CMD_BOLD_ON + f1 + "\n" + CMD_BOLD_OFF;
-    
-    // Menggunakan font kecil (Font B) agar kalimat panjang muat dalam 1 baris kertas
-    receipt += "\x1B!\x01"; 
+    receipt += "\x1B!\x01" + CMD_LEFT; 
     if(f2) receipt += f2 + "\n";
     if(f3) receipt += f3 + "\n";
     if(f4) receipt += f4 + "\n";
-    
-    receipt += CMD_NORMAL; // Kembalikan ke font normal
-    receipt += "\n\n\n\n" + CMD_CUT;
+    receipt += CMD_NORMAL; receipt += "\n\n\n\n" + CMD_CUT;
 
     const encoder = new TextEncoder(); await sendToPrinter(encoder.encode(receipt));
 };
@@ -242,16 +230,13 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
 window.buildShiftReportReceipt = async function(data) {
     const settings = await window.getDynamicSettings();
     const h1 = settings["Header_1"] || "GRIYA LAUNDRY";
-    const CMD_INIT = "\x1B\x40"; const CMD_CENTER = "\x1B\x61\x01"; const CMD_LEFT = "\x1B\x61\x00"; 
-    const CMD_BOLD_ON = "\x1B\x45\x01"; const CMD_BOLD_OFF = "\x1B\x45\x00"; 
-    const CMD_BIG = "\x1B!\x11"; const CMD_NORMAL = "\x1B!\x00"; const CMD_CUT = "\x1D\x56\x41\x10";
+    const CMD_INIT = "\x1B\x40"; const CMD_CENTER = "\x1B\x61\x01"; const CMD_LEFT = "\x1B\x61\x00"; const CMD_BOLD_ON = "\x1B\x45\x01"; const CMD_BOLD_OFF = "\x1B\x45\x00"; const CMD_BIG = "\x1B!\x11"; const CMD_NORMAL = "\x1B!\x00"; const CMD_CUT = "\x1D\x56\x41\x10";
 
     let r = CMD_INIT + CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
     r += "LAPORAN TUTUP SHIFT\n--------------------------------\n" + CMD_LEFT;
     r += "ID Shift: " + data.shiftId + "\nKasir   : " + data.cashier + "\nLogin   : " + formatTimeOnlyWIB(data.loginTime) + "\nLogout  : " + formatTimeOnlyWIB(data.logoutTime) + "\n--------------------------------\n";
     r += formatEscPosLine("Total Nota", data.totalOrders, false) + "\n" + formatEscPosLine("Total Pelanggan", data.totalCustomers, false) + "\n--------------------------------\n";
     
-    // 1. BLOK PENERIMAAN & PIUTANG (Digabung di atas)
     r += CMD_BOLD_ON + "PENERIMAAN KASIR & PIUTANG:" + CMD_BOLD_OFF + "\n";
     r += formatEscPosLine("Tunai / Cash", data.totalCash.toLocaleString('id-ID'), false) + "\n";
     r += formatEscPosLine("QRIS", data.totalQris.toLocaleString('id-ID'), false) + "\n";
@@ -260,31 +245,28 @@ window.buildShiftReportReceipt = async function(data) {
     r += formatEscPosLine("Piutang Tamu", data.totalTamuPiutang.toLocaleString('id-ID'), false) + "\n";
     r += "--------------------------------\n";
 
-    // 2. BLOK PENGELUARAN LACI (Terpisah di tengah)
     r += CMD_BOLD_ON + "PENGELUARAN:" + CMD_BOLD_OFF + "\n";
     r += formatEscPosLine("Pengeluaran Laci", data.totalExpenses.toLocaleString('id-ID'), false) + "\n";
     r += "--------------------------------\n";
 
-    // 3. STATISTIK KOIN FISIK
     r += CMD_BOLD_ON + "STATISTIK KOIN FISIK:" + CMD_BOLD_OFF + "\n";
-    r += formatEscPosLine("Koin Terpakai (Nota)", (data.totalCoinsUsed || 0) + " Koin", false) + "\n";
-    r += formatEscPosLine("Koin Daur Ulang", (data.totalCoinsRecycled || 0) + " Koin", false) + "\n";
-    r += formatEscPosLine("Koin Macet/Rusak", (data.totalCoinsJammed || 0) + " Koin", false) + "\n";
+    r += formatEscPosLine("Total Terpakai", (data.totalCoinsUsed || 0) + " Koin", false) + "\n";
+    if (data.coinCategorySummary) {
+        for (const [cat, val] of Object.entries(data.coinCategorySummary)) {
+            if (val > 0) r += formatEscPosLine(" - " + cat.substring(0, 15), val.toFixed(1).replace(".0","") + " Koin", false) + "\n";
+        }
+    }
+    r += formatEscPosLine("Daur Ulang (Ambil)", (data.totalCoinsRecycled || 0) + " Koin", false) + "\n";
+    r += formatEscPosLine("Macet/Rusak", (data.totalCoinsJammed || 0) + " Koin", false) + "\n";
     r += "--------------------------------\n";
 
-    // 4. STATISTIK PROMO
     r += CMD_BOLD_ON + "STATISTIK PROMO:" + CMD_BOLD_OFF + "\n";
-    r += formatEscPosLine("Item Gratis", (data.totalFreeItems || 0) + " Item", false) + "\n";
-    r += formatEscPosLine("Nominal Diskon", (data.totalDiscountNominal || 0).toLocaleString('id-ID'), false) + "\n";
-    r += "--------------------------------\n";
-
-    // 5. RANGKUMAN AKHIR
-    r += CMD_BOLD_ON + "RANGKUMAN AKHIR:" + CMD_BOLD_OFF + "\n";
-    r += formatEscPosLine("Omset Kotor", data.totalOmset.toLocaleString('id-ID'), false) + "\n\n";
+    r += formatEscPosLine("Item Gratis", (data.totalFreeItems || 0) + " Item", false) + "\n" + formatEscPosLine("Nominal Diskon", (data.totalDiscountNominal || 0).toLocaleString('id-ID'), false) + "\n--------------------------------\n";
+    
+    r += CMD_BOLD_ON + "RANGKUMAN AKHIR:" + CMD_BOLD_OFF + "\n" + formatEscPosLine("Omset Kotor", data.totalOmset.toLocaleString('id-ID'), false) + "\n\n";
     let laciTitle = window.enableDrawerTracking ? "SALDO LACI" : "SETOR ADMIN";
     r += CMD_BOLD_ON + formatEscPosLine(laciTitle, data.netCash.toLocaleString('id-ID'), false) + CMD_BOLD_OFF + "\n";
     
-    // 6. ITEM TERJUAL
     if (data.foodSummary && Object.keys(data.foodSummary).length > 0) {
         r += "--------------------------------\n" + CMD_CENTER + "RINGKASAN ITEM TERJUAL\n" + CMD_LEFT;
         for (const [name, qty] of Object.entries(data.foodSummary)) {
@@ -308,7 +290,6 @@ window.attemptLogin = async function() {
 
     try {
         const hashedPin = await hashString(rawPin);
-        
         let staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(hashedPin).onsuccess = e => res(e.target.result));
         
         if (!staff) {
@@ -328,22 +309,16 @@ window.attemptLogin = async function() {
                     db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: hashedPin, shiftId: currentShiftId, loginTime: currentLoginTime, lastActiveTime: Date.now(), cashierName: currentCashier}); 
                 }
                 
-                // Transisi Layar
                 document.getElementById("login-screen").classList.add("hidden");
                 document.getElementById("pos-screen").classList.remove("hidden");
                 document.getElementById("display-cashier").innerText = currentCashier;
                 
-                window.switchWorkspace('new'); // <--- INI MENCEGAH LAYAR BLANK
-                window.lockMenu();
+                window.switchWorkspace('new');
                 
-                // ==========================================
-                // TAMBAHAN BARU: Paksa load menu dari memori lokal saat login
-                // ==========================================
                 db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = (e) => {
                     globalMenuData = e.target.result || [];
-                    loadMenuUI();
+                    if (globalMenuData.length > 0) loadMenuUI();
                 };
-                // ==========================================
 
                 window.lockMenu(); 
             };
@@ -360,15 +335,25 @@ window.attemptLogin = async function() {
 
 window.switchWorkspace = function(type) {
     document.querySelectorAll('.ws-tab').forEach(b => b.classList.remove('active'));
-    document.getElementById("main-workspace-wrapper").classList.add("hidden");
-    document.getElementById("active-tickets-workspace").classList.add("hidden");
+    let mainWs = document.getElementById("main-workspace-wrapper");
+    let ticketWs = document.getElementById("active-tickets-workspace");
+    let piutangWs = document.getElementById("piutang-workspace");
+    
+    if(mainWs) mainWs.classList.add("hidden");
+    if(ticketWs) ticketWs.classList.add("hidden");
+    if(piutangWs) piutangWs.classList.add("hidden");
+
     if (type === 'new') {
-        document.getElementById("tab-new-order").classList.add("active");
-        document.getElementById("main-workspace-wrapper").classList.remove("hidden");
-    } else {
-        document.getElementById("tab-active-tickets").classList.add("active");
-        document.getElementById("active-tickets-workspace").classList.remove("hidden");
+        let tab = document.getElementById("tab-new-order"); if(tab) tab.classList.add("active");
+        if(mainWs) mainWs.classList.remove("hidden");
+    } else if (type === 'tickets') {
+        let tab = document.getElementById("tab-active-tickets"); if(tab) tab.classList.add("active");
+        if(ticketWs) ticketWs.classList.remove("hidden");
         window.renderActiveTickets(); 
+    } else if (type === 'piutang') {
+        let tab = document.getElementById("tab-piutang"); if(tab) tab.classList.add("active");
+        if(piutangWs) piutangWs.classList.remove("hidden");
+        window.renderPiutangTickets();
     }
 };
 
@@ -499,7 +484,7 @@ window.submitLotteryCode = async function() {
 
 window.lockMenu = function() {
     isMenuLocked = true; activeCustomerProfile = null; 
-    let promoContainer = document.getElementById("dynamic-promo-section") || document.getElementById("review-promo-section");
+    let promoContainer = document.getElementById("review-promo-section");
     if (promoContainer) promoContainer.innerHTML = "";
     
     let pf = document.getElementById("pay-free");
@@ -607,6 +592,10 @@ window.handleAutocomplete = function(e) {
         
         matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
 
+        if (val.length === 0) {
+            matches = matches.slice(0, 15);
+        }
+
         if (matches.length > 0) {
             resBox.innerHTML = matches.map(m => `
                 <div class="autocomplete-item" onmousedown="window.selectMember('${m.phone}')" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px; z-index: 10000; position:relative;">
@@ -657,6 +646,14 @@ window.submitEditMember = function() {
 // 5. MENU & NUMPAD & TRANSAKSI (CART)
 // ==========================================
 function loadMenuUI() {
+    if (!globalMenuData || globalMenuData.length === 0) {
+        db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = (e) => {
+            globalMenuData = e.target.result || [];
+            if(globalMenuData.length > 0) loadMenuUI(); 
+        };
+        return;
+    }
+
     const categories = [...new Set(globalMenuData.map(i => i.category))]; currentCategory = categories[0];
     const catContainer = document.getElementById("category-container"); if(!catContainer) return;
     catContainer.innerHTML = "";
@@ -674,7 +671,6 @@ function renderProductGrid() {
     globalMenuData.filter(i => i.category === currentCategory).forEach(item => {
         const card = document.createElement("div"); card.className = "product-card";
         
-        // Cek dan tampilkan stok jika trackStock = TRUE
         let stockHtml = "";
         if (item.trackStock) {
             let stockColor = item.currentStock <= 5 ? "color: #e74c3c;" : "color: #27ae60;";
@@ -704,20 +700,17 @@ window.addToCart = function(item, qty) {
     let finalQty = qty; const existing = currentCart.find(i => i.itemId === item.itemId);
     let currentQtyInCart = existing ? existing.qty : 0;
     
-    // Validasi Stok
     if (item.trackStock) {
         if (currentQtyInCart + finalQty > item.currentStock) {
             alert(`⚠️ Stok tidak cukup!\nSisa stok ${item.name} hanya tinggal ${item.currentStock}.`);
             finalQty = item.currentStock - currentQtyInCart;
-            if (finalQty <= 0) return; // Batal masuk keranjang
+            if (finalQty <= 0) return; 
         }
     }
     
-    // Validasi Minimum Order (MOQ)
     if (!existing && item.hasMoq && item.moqQty > 0 && finalQty < item.moqQty) { 
         alert(`⚠️ Minimum Order (MOQ) untuk ${item.name} adalah ${item.moqQty}.\nJumlah otomatis disesuaikan.`); 
         finalQty = item.moqQty; 
-        // Cek lagi apakah MOQ melebihi stok yang ada
         if (item.trackStock && (currentQtyInCart + finalQty > item.currentStock)) {
              alert(`⚠️ Stok tidak cukup untuk memenuhi minimum order!`);
              return;
@@ -732,7 +725,6 @@ window.addToCart = function(item, qty) {
 window.updateCartItemQty = function(itemId, delta) {
     let existing = currentCart.find(i => i.itemId === itemId);
     if (existing) {
-        // Validasi tombol Tambah (+) agar tidak melebihi stok
         if (delta > 0 && existing.trackStock) {
             if (existing.qty + delta > existing.currentStock) {
                 return alert(`⚠️ Maksimal stok ${existing.name} hanya ${existing.currentStock}!`);
@@ -827,7 +819,7 @@ window.openReview = function() {
         }
     }
 
-    let promoContainer = document.getElementById("dynamic-promo-section") || document.getElementById("review-promo-section");
+    let promoContainer = document.getElementById("review-promo-section");
     if (promoContainer) {
         promoContainer.innerHTML = promoHtml;
         if (promoHtml) promoContainer.classList.remove("hidden");
@@ -865,7 +857,6 @@ window.applyPromo = function() {
     let rgt = document.getElementById("review-grandtotal");
     if(rgt) rgt.innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
     
-    // Panggil hitung sisa (dan otomatis sesuaikan kolom Cash)
     window.calculateRemaining(false);
 };
 
@@ -878,10 +869,9 @@ window.calculateRemaining = function(isCashManual = false) {
     let pc = document.getElementById("pay-cash"); 
     let c = pc ? Number(pc.value) : 0;
 
-    // Jika yang diubah BUKAN kolom cash (isCashManual = false), maka auto-fill kolom cash
     if (!isCashManual) {
         let autoCash = window.cartGrandTotal - (q + t + hp + tp);
-        c = Math.max(0, autoCash); // Pastikan cash tidak minus
+        c = Math.max(0, autoCash);
         if (pc) pc.value = c;
     }
 
@@ -894,16 +884,12 @@ window.calculateRemaining = function(isCashManual = false) {
     
     if(rr && rrContainer && rrLabel) {
         rr.innerText = `Rp ${remaining.toLocaleString('id-ID')}`;
-        
-        // --- PERINGATAN VISUAL ---
         if (remaining > 0) {
-            // Belum Lunas -> Merah Peringatan
             rrContainer.style.background = "#f8d7da";
             rrContainer.style.border = "1px solid #f5c6cb";
             rrContainer.style.color = "#721c24";
             rrLabel.innerText = "⚠️ Sisa Kurang Bayar:";
         } else {
-            // Sudah Lunas -> Hijau Aman
             rrContainer.style.background = "#d4edda";
             rrContainer.style.border = "1px solid #c3e6cb";
             rrContainer.style.color = "#155724";
@@ -923,7 +909,6 @@ window.finalizeOrder = async function(shouldPrint) {
     const totalPiutang = hotelPiutang + tamuPiutang; 
     if ((window.cartGrandTotal - (cash + qris + transfer + totalPiutang)) > 0) return alert("⚠️ Pembayaran Belum Cukup!");
 
-    // --- LOGIC DINAMIS METODE PEMBAYARAN ---
     let payMethod = "Split";
     let activeMethods = [];
     if (cash > 0) activeMethods.push("Cash");
@@ -934,7 +919,6 @@ window.finalizeOrder = async function(shouldPrint) {
     
     if (activeMethods.length === 1) payMethod = activeMethods[0];
     else if (activeMethods.length === 0) payMethod = (free > 0 && window.cartGrandTotal === 0) ? "Gratis" : "Unpaid";
-    // ---------------------------------------
 
     let redeemedList = []; let redeemedLoyaltyCoins = 0;
     document.querySelectorAll('.promo-input').forEach(input => {
@@ -952,9 +936,34 @@ window.finalizeOrder = async function(shouldPrint) {
 
     let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
     let paidCoins = Math.max(0, cartCoins - redeemedLoyaltyCoins);
-    let expectedCoinsTotal = currentCart.reduce((sum, item) => { let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; let multiplier = Math.ceil(item.qty / divisor); return sum + ((item.expectedCoins || 0) * multiplier); }, 0);
 
-    let newEarnedRewards = []; // Mengirim data hadiah ke Google Sheets
+    const settings = await window.getDynamicSettings();
+    let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
+    let bantalPerBatch = Number(settings["Sarung_Bantal_Per_Batch"]) || 10;
+    let kgPerCuci = Number(settings["Kilo_Per_Koin_Cuci"]) || 5;
+    let kgPerKering = Number(settings["Kilo_Per_Koin_Kering"]) || 5;
+
+    let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0;
+
+    currentCart.forEach(item => {
+        let name = String(item.name).toUpperCase();
+        if (name.includes("KESET")) kesetQty += item.qty;
+        else if (name.includes("BANTAL")) bantalQty += item.qty;
+        else if (item.inputMode === "DECIMAL") regularWeight += item.qty;
+        else {
+            let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; 
+            let multiplier = Math.ceil(item.qty / divisor); 
+            otherCoins += ((item.expectedCoins || 0) * multiplier);
+        }
+    });
+
+    let expectedCoinsTotal = 
+        (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + 
+        (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + 
+        (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + 
+        otherCoins;
+
+    let newEarnedRewards = []; 
 
     if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
@@ -978,7 +987,7 @@ window.finalizeOrder = async function(shouldPrint) {
         if (pendingPromoCode) {
             let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
             if (promo) {
-                newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty, code: promo.code }); // Ditambah "code"
+                newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty, code: promo.code }); 
                 
                 if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
@@ -999,7 +1008,6 @@ window.finalizeOrder = async function(shouldPrint) {
         window.saveMemberToDB(activeCustomerProfile);
     }
 
-    // CEK WORKFLOW (KOLOM I): Jika TICKET masuk antrean cuci, jika INSTANT langsung selesai
     let isLaundry = currentCart.some(i => i.workflow === "TICKET");
     let finalStatus = isLaundry ? "Processing" : (totalPiutang > 0 ? "Pending Debt" : "Completed");
 
@@ -1007,12 +1015,11 @@ window.finalizeOrder = async function(shouldPrint) {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, internalCoinsUsed: 0, syncStatus: "Pending" 
+        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, syncStatus: "Pending" 
     };
-    
+
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     
-    // [BARU] Langsung tampilkan di tab "Cucian Aktif" tanpa harus nunggu Cloud Sync
     if (finalStatus === "Processing") {
         activeLaundryTickets.push(orderPayload);
         let tc = document.getElementById("ticket-count"); 
@@ -1039,16 +1046,33 @@ window.saveMemberToDB = function(profile) {
 window.renderActiveTickets = function() {
     const grid = document.getElementById("ticket-grid-container"); if(!grid) return;
     grid.innerHTML = "";
-    activeLaundryTickets.forEach((ticket) => {
+    
+    let tickets = activeLaundryTickets.filter(t => 
+        (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && 
+        t.items && t.items.some(i => i.workflow === "TICKET")
+    );
+    
+    if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada cucian aktif.</p>";
+    
+    tickets.forEach((ticket) => {
         const isReady = ticket.orderStatus === "Ready for Pickup";
-        const totalPaid = (ticket.cashAmount||0) + (ticket.qrisAmount||0) + (ticket.transferAmount||0) + (ticket.freeAmount||0);
-        const remaining = ticket.grandTotal - totalPaid;
-        let receiptText = ticket.readableReceipt || "";
-        if (!receiptText && ticket.items) receiptText = ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n');
-        let buttonsHtml = "";
-        if (!isReady) { buttonsHtml = `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>`; } 
-        else { buttonsHtml = `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', ${remaining})">Ambil Cucian & Bayar</button>`; }
-        grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="color:#7f8c8d; font-size:12px;">${ticket.orderId}</span></div><div style="font-size:14px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div><div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:10px; border-top:1px dashed #ddd; padding-top:5px;"><span>Piutang / Sisa:</span> <strong style="color:#e74c3c;">Rp ${remaining.toLocaleString('id-ID')}</strong></div>${buttonsHtml}</div>`;
+        let receiptText = ticket.items ? ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n') : "";
+        let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil & Selesai</button>`;
+        grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:13px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>${buttonsHtml}</div>`;
+    });
+};
+
+window.renderPiutangTickets = function() {
+    const grid = document.getElementById("piutang-grid-container"); if(!grid) return;
+    grid.innerHTML = "";
+    
+    let tickets = activeLaundryTickets.filter(t => t.orderStatus === "Pending Debt");
+    if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada tagihan piutang aktif.</p>";
+    
+    tickets.forEach((ticket) => {
+        const remaining = (ticket.hotelPiutangAmount || 0) + (ticket.tamuPiutangAmount || 0);
+        let btn = `<button class="ticket-btn" style="background:#e74c3c;" onclick="window.openPiutangPayment('${ticket.orderId}', ${remaining})">Bayar Piutang</button>`;
+        grid.innerHTML += `<div class="ticket-card"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:16px; font-weight:bold; margin-top:5px; color:#c0392b;">Sisa: Rp ${remaining.toLocaleString('id-ID')}</div>${btn}</div>`;
     });
 };
 
@@ -1066,13 +1090,14 @@ window.submitTicketDone = function() {
 
     const ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
     if (ticket) {
-        ticket.orderStatus = "Ready for Pickup"; ticket.syncStatus = "Pending";
+        ticket.orderStatus = "Ready for Pickup"; 
+        ticket.expectedCoins = expected;
+        ticket.actualCoins = actual; 
+        
+        if (actual !== expected) { ticket.coinDiscrepancy = true; } 
+        
+        ticket.syncStatus = "Pending";
         db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
-        if (actual > 0) {
-            let overuse = Math.max(0, actual - expected); let baseUsage = Math.min(expected, actual);
-            const payload = { logId: "TKC-" + Date.now(), orderId: window.activeDoneOrderId, timestamp: new Date().toISOString(), cashier: currentCashier, expected: baseUsage, overuse: overuse, syncStatus: "Pending" };
-            db.transaction(["ticket_coins"], "readwrite").objectStore("ticket_coins").add(payload);
-        }
         window.renderActiveTickets(); window.runBackgroundSync();
     }
     document.getElementById("ticket-done-modal").classList.add("hidden");
@@ -1081,7 +1106,6 @@ window.submitTicketDone = function() {
 window.openSettlement = function(orderId, remainingDue) {
     activeSettlementTicket = activeLaundryTickets.find(t => t.orderId === orderId);
     
-    // --- TAMBAHAN BARU: Bypass pop-up pelunasan jika sudah Lunas ---
     if (remainingDue <= 0) {
         if(confirm("Cucian ini sudah LUNAS. Tandai sudah diambil pelanggan?")) {
             activeSettlementTicket.orderStatus = "Completed"; 
@@ -1092,9 +1116,8 @@ window.openSettlement = function(orderId, remainingDue) {
             window.runBackgroundSync();
             activeSettlementTicket = null;
         }
-        return; // Hentikan fungsi agar modal pembayaran tidak muncul
+        return;
     }
-    // ---------------------------------------------------------------
 
     let elAmt = document.getElementById("settle-amount"); if(elAmt) elAmt.innerText = `Rp ${remainingDue.toLocaleString('id-ID')}`;
     let elCash = document.getElementById("settle-cash"); if(elCash) elCash.value = remainingDue;
@@ -1111,6 +1134,38 @@ window.confirmSettlement = function() {
     db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
     activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
     document.getElementById("settlement-modal").classList.add("hidden"); window.renderActiveTickets(); window.runBackgroundSync();
+};
+
+window.openPiutangPayment = function(orderId, remainingDue) {
+    activeSettlementTicket = activeLaundryTickets.find(t => t.orderId === orderId);
+    document.getElementById("piutang-settle-amount").innerText = `Rp ${remainingDue.toLocaleString('id-ID')}`;
+    document.getElementById("piutang-settle-cash").value = remainingDue;
+    document.getElementById("piutang-settle-qris").value = 0;
+    document.getElementById("piutang-settle-transfer").value = 0;
+    document.getElementById("piutang-payment-modal").classList.remove("hidden");
+};
+
+window.confirmPiutangPayment = function() {
+    if (!activeSettlementTicket) return;
+    const c = Number(document.getElementById("piutang-settle-cash").value) || 0; 
+    const q = Number(document.getElementById("piutang-settle-qris").value) || 0; 
+    const t = Number(document.getElementById("piutang-settle-transfer").value) || 0;
+    
+    activeSettlementTicket.cashAmount = (activeSettlementTicket.cashAmount || 0) + c; 
+    activeSettlementTicket.qrisAmount = (activeSettlementTicket.qrisAmount || 0) + q; 
+    activeSettlementTicket.transferAmount = (activeSettlementTicket.transferAmount || 0) + t;
+    
+    activeSettlementTicket.hotelPiutangAmount = 0;
+    activeSettlementTicket.tamuPiutangAmount = 0;
+    activeSettlementTicket.orderStatus = "Completed"; 
+    activeSettlementTicket.piutangPaidDate = new Date().toISOString(); 
+    activeSettlementTicket.syncStatus = "Pending";
+    
+    db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
+    activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
+    
+    document.getElementById("piutang-payment-modal").classList.add("hidden"); 
+    window.renderPiutangTickets(); window.runBackgroundSync();
 };
 
 // ==========================================
@@ -1179,7 +1234,6 @@ window.renderHistoryList = function(type) {
         ]).then(([orders, expenses]) => {
             let shiftOrders = orders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
             let shiftExpenses = expenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
-            
             let combined = [];
             shiftOrders.forEach(o => {
                 let totalIn = (o.cashAmount || 0) + (o.qrisAmount || 0) + (o.transferAmount || 0);
@@ -1188,18 +1242,14 @@ window.renderHistoryList = function(type) {
             shiftExpenses.forEach(e => {
                 combined.push({ type: 'out', time: new Date(e.timestamp), desc: `Pengeluaran: ${e.category}`, amount: e.amount });
             });
-            
             combined.sort((a, b) => b.time - a.time);
-            
             if(combined.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada arus kas tunai di shift ini.</div>`;
-            
             combined.forEach(log => {
                 let color = log.type === 'in' ? '#27ae60' : '#e74c3c';
                 let sign = log.type === 'in' ? '+' : '-';
                 container.innerHTML += `<div class="history-row"><div><strong>${log.desc}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(log.time.toISOString())}</small></div><div style="font-weight:bold; font-size:16px; color:${color};">${sign}Rp ${log.amount.toLocaleString('id-ID')}</div></div>`;
             });
         });
-        
     } else if (type === 'shifts') {
         const renderShiftsHTML = (shiftsData) => {
             const filtered = shiftsData.filter(s => s.cashier === currentCashier).slice(0, 6);
@@ -1207,12 +1257,8 @@ window.renderHistoryList = function(type) {
             filtered.forEach(s => {
                 let detailBtn = `<button onclick="window.viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">👁️ Detail</button>`;
                 let printBtn = `<button onclick="window.printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">🖨️ Cetak</button>`;
-                
-                // [BARU] Menarik data item terjual dan merangkainya menjadi teks
                 let itemsStr = "Tidak ada item";
-                if (s.foodSummary && Object.keys(s.foodSummary).length > 0) {
-                    itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
-                }
+                if (s.foodSummary && Object.keys(s.foodSummary).length > 0) itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
 
                 container.innerHTML += `
                 <div class="history-row" style="align-items:flex-start; display:flex; gap:10px;">
@@ -1330,37 +1376,21 @@ window.submitCoinManagement = function() {
 
     if (qty <= 0) return alert("Jumlah koin tidak valid.");
 
-    // Tentukan ID dan catatan default berdasarkan pilihan dropdown
     let prefix = actionType === "jammed" ? "JAM-" : "RET-";
-    if (!note) {
-        note = actionType === "jammed" ? "Mesin Macet / Tertelan" : "Daur Ulang Koin Fisik";
-    }
+    if (!note) { note = actionType === "jammed" ? "Mesin Macet / Tertelan" : "Daur Ulang Koin Fisik"; }
 
-    const payload = { 
-        retrievalId: prefix + Date.now(), 
-        timestamp: new Date().toISOString(), 
-        cashier: currentCashier, 
-        qty: qty, 
-        notes: note, 
-        syncStatus: "Pending" 
-    };
-
-    // Simpan ke IndexedDB
+    const payload = { retrievalId: prefix + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: note, syncStatus: "Pending" };
     db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
     
-    // Bersihkan form & Tutup modal
-    document.getElementById("manage-coin-qty").value = ""; 
-    document.getElementById("manage-coin-note").value = "";
+    document.getElementById("manage-coin-qty").value = ""; document.getElementById("manage-coin-note").value = "";
     document.getElementById("coin-management-modal").classList.add("hidden");
     
-    alert("Laporan koin berhasil dicatat!"); 
-    window.runBackgroundSync();
+    alert("Laporan koin berhasil dicatat!"); window.runBackgroundSync();
 };
 
 // ==========================================
 // 10. SINKRONISASI INTI (FAST PIN SYNC)
 // ==========================================
-
 window.syncMasterData = async function(forceAwait = false) {
     let nTxt = document.getElementById("network-text"); let nDot = document.getElementById("network-dot");
     if (!navigator.onLine) { if(nTxt) nTxt.innerText = "Mode Offline"; if(nDot) nDot.style.backgroundColor = "#e74c3c"; return; }
@@ -1368,20 +1398,23 @@ window.syncMasterData = async function(forceAwait = false) {
         const response = await fetch(API_URL, { method: 'GET', mode: 'cors' }); const result = await response.json();
         if (result.status === "Success") {
             window.masterDrawerBalance = result.masterDrawerBalance || 0;
-            window.loyaltyTarget = result.data.loyaltyTarget || 10; window.globalPromos = result.data.promos || [];
+            window.loyaltyTarget = result.data.loyaltyTarget || 10; 
+            window.globalPromos = result.data.promos || [];
             window.globalRecentShifts = result.recentShifts || [];
             
+            window.coinsInMachine = result.coinsInMachine || 0;
+            let koinMenu = result.data.menu.find(m => m.name === "Koin_Fisik");
+            let laciStock = koinMenu ? koinMenu.currentStock : 0;
+            let btnKoin = document.getElementById("btn-koin-top");
+            if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${laciStock} | Mesin: ${window.coinsInMachine}`;
+            
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
-            document.querySelectorAll("button[onclick*='openCashDrop'], #btn-drawer, #btn-cashdrop").forEach(btn => {
-                btn.style.display = window.enableDrawerTracking ? "" : "none";
-            });
+            document.querySelectorAll("button[onclick*='openCashDrop'], #btn-drawer, #btn-cashdrop").forEach(btn => { btn.style.display = window.enableDrawerTracking ? "" : "none"; });
 
-            // PRIORITAS 1: SYNC PIN KASIR & MENU ORDER
             let p1 = new Promise((resolve) => {
                 let txFast = db.transaction(["staff", "menu"], "readwrite");
                 txFast.objectStore("staff").clear(); result.data.staff.forEach(s => txFast.objectStore("staff").add(s));
                 txFast.objectStore("menu").clear(); result.data.menu.forEach(m => txFast.objectStore("menu").add(m));
-
                 txFast.oncomplete = () => {
                     globalMenuData = result.data.menu; 
                     if (!document.getElementById("pos-screen").classList.contains("hidden")) { loadMenuUI(); }
@@ -1391,24 +1424,15 @@ window.syncMasterData = async function(forceAwait = false) {
             });
             if(forceAwait) await p1; 
 
-          
-          // PRIORITAS 2: BACKGROUND SYNC MEMBER & SETTINGS
             db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = (ue) => {
                 let unMems = ue.target.result.map(u => u.phone);
-                
-                // Buka transaksi BARU di sini agar tidak mati sebelum data siap
                 let txOthers = db.transaction(["settings", "members", "expense_categories"], "readwrite");
                 
-                // 1. Masukkan data member dari Cloud ke Local
-                result.data.members.forEach(m => {
-                    if (!unMems.includes(m.phone)) txOthers.objectStore("members").put(m);
-                });
+                result.data.members.forEach(m => { if (!unMems.includes(m.phone)) txOthers.objectStore("members").put(m); });
                 
-                // 2. Kategori Pengeluaran
                 let expCatStore = txOthers.objectStore("expense_categories"); expCatStore.clear(); 
                 if(result.data.expenseCategories) result.data.expenseCategories.forEach(c => expCatStore.add({name: c}));
                 
-                // 3. Pengaturan Sistem
                 let settingsStore = txOthers.objectStore("settings"); settingsStore.clear();
                 for (const [key, value] of Object.entries(result.data.settings)) { settingsStore.add({ key: key, value: value }); }
                 
@@ -1425,26 +1449,14 @@ window.syncMasterData = async function(forceAwait = false) {
 
 window.manualPushSync = async function() {
     if (!navigator.onLine) return alert("Anda sedang offline!");
-    
-    // Update tulisan indikator online POS Screen
-    let nTxt = document.getElementById("network-text"); 
-    let nDot = document.getElementById("network-dot");
-    if(nTxt) nTxt.innerText = "Mengirim Data...";
-    if(nDot) nDot.style.backgroundColor = "#f39c12";
-
-    // Update tulisan indikator online Login Screen
-    let lTxt = document.getElementById("login-network-text");
-    let lDot = document.getElementById("login-network-dot");
-    if(lTxt) lTxt.innerText = "Mendorong Data Lokal...";
-    if(lDot) lDot.style.backgroundColor = "#f39c12";
+    let nTxt = document.getElementById("network-text"); let nDot = document.getElementById("network-dot");
+    if(nTxt) nTxt.innerText = "Mengirim Data..."; if(nDot) nDot.style.backgroundColor = "#f39c12";
+    let lTxt = document.getElementById("login-network-text"); let lDot = document.getElementById("login-network-dot");
+    if(lTxt) lTxt.innerText = "Mendorong Data Lokal..."; if(lDot) lDot.style.backgroundColor = "#f39c12";
 
     await window.runBackgroundSync();
-    
-    if(nTxt) nTxt.innerText = "Menarik Data...";
-    if(lTxt) lTxt.innerText = "Sinkronisasi Server...";
-    
-    await window.syncMasterData(); 
-    alert("Sinkronisasi Database Berhasil!");
+    if(nTxt) nTxt.innerText = "Menarik Data..."; if(lTxt) lTxt.innerText = "Sinkronisasi Server...";
+    await window.syncMasterData(); alert("Sinkronisasi Database Berhasil!");
 };
 
 window.runBackgroundSync = async function() {
