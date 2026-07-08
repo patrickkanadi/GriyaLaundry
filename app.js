@@ -382,20 +382,25 @@ window.attemptLogin = async function() {
 
 window.switchWorkspace = function(type) {
     document.querySelectorAll('.ws-tab').forEach(b => b.classList.remove('active'));
-    document.getElementById("main-workspace-wrapper").classList.add("hidden");
-    document.getElementById("active-tickets-workspace").classList.add("hidden");
-    document.getElementById("piutang-workspace").classList.add("hidden");
+    
+    let mainWs = document.getElementById("main-workspace-wrapper");
+    let ticketWs = document.getElementById("active-tickets-workspace");
+    let piutangWs = document.getElementById("piutang-workspace");
+    
+    if(mainWs) mainWs.classList.add("hidden");
+    if(ticketWs) ticketWs.classList.add("hidden");
+    if(piutangWs) piutangWs.classList.add("hidden");
 
     if (type === 'new') {
-        document.getElementById("tab-new-order").classList.add("active");
-        document.getElementById("main-workspace-wrapper").classList.remove("hidden");
+        let tab = document.getElementById("tab-new-order"); if(tab) tab.classList.add("active");
+        if(mainWs) mainWs.classList.remove("hidden");
     } else if (type === 'tickets') {
-        document.getElementById("tab-active-tickets").classList.add("active");
-        document.getElementById("active-tickets-workspace").classList.remove("hidden");
+        let tab = document.getElementById("tab-active-tickets"); if(tab) tab.classList.add("active");
+        if(ticketWs) ticketWs.classList.remove("hidden");
         window.renderActiveTickets(); 
     } else if (type === 'piutang') {
-        document.getElementById("tab-piutang").classList.add("active");
-        document.getElementById("piutang-workspace").classList.remove("hidden");
+        let tab = document.getElementById("tab-piutang"); if(tab) tab.classList.add("active");
+        if(piutangWs) piutangWs.classList.remove("hidden");
         window.renderPiutangTickets();
     }
 };
@@ -1096,28 +1101,34 @@ window.saveMemberToDB = function(profile) {
 window.renderActiveTickets = function() {
     const grid = document.getElementById("ticket-grid-container"); if(!grid) return;
     grid.innerHTML = "";
-    // HANYA MUNCUL JIKA WORKFLOW = TICKET (Processing / Ready)
-    let tickets = activeLaundryTickets.filter(t => (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && t.items.some(i => i.workflow === "TICKET"));
+    
+    // Pastikan item ada sebelum difilter
+    let tickets = activeLaundryTickets.filter(t => 
+        (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && 
+        t.items && t.items.some(i => i.workflow === "TICKET")
+    );
+    
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada cucian aktif.</p>";
     
     tickets.forEach((ticket) => {
         const isReady = ticket.orderStatus === "Ready for Pickup";
         let receiptText = ticket.items ? ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n') : "";
-        let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Selesaikan Order</button>`;
-        grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-header"><span>${ticket.customerName}</span></div><div style="font-size:13px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>${buttonsHtml}</div>`;
+        let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil & Selesai</button>`;
+        grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:13px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>${buttonsHtml}</div>`;
     });
 };
 
 window.renderPiutangTickets = function() {
     const grid = document.getElementById("piutang-grid-container"); if(!grid) return;
     grid.innerHTML = "";
+    
     let tickets = activeLaundryTickets.filter(t => t.orderStatus === "Pending Debt");
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada tagihan piutang aktif.</p>";
     
     tickets.forEach((ticket) => {
         const remaining = (ticket.hotelPiutangAmount || 0) + (ticket.tamuPiutangAmount || 0);
         let btn = `<button class="ticket-btn" style="background:#e74c3c;" onclick="window.openPiutangPayment('${ticket.orderId}', ${remaining})">Bayar Piutang</button>`;
-        grid.innerHTML += `<div class="ticket-card"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:16px; font-weight:bold; margin-top:5px;">Sisa: Rp ${remaining.toLocaleString('id-ID')}</div>${btn}</div>`;
+        grid.innerHTML += `<div class="ticket-card"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:16px; font-weight:bold; margin-top:5px; color:#c0392b;">Sisa: Rp ${remaining.toLocaleString('id-ID')}</div>${btn}</div>`;
     });
 };
 
@@ -1645,7 +1656,6 @@ window.openShiftReport = function(historyData = null) {
         populateShiftModal(historyData, false);
     } else {
         if (!db || !currentShiftId) return alert("Anda belum membuka shift kasir.");
-        // Tambahkan 'coin_retrievals' di dalam transaction agar bisa dibaca
         let tx = db.transaction(["orders", "expenses", "coin_retrievals"], "readonly");
         let activeOrders = []; let activeExpenses = []; let activeCoinRets = [];
         
@@ -1653,11 +1663,11 @@ window.openShiftReport = function(historyData = null) {
         tx.objectStore("expenses").getAll().onsuccess = (ev) => { activeExpenses = ev.target.result; };
         tx.objectStore("coin_retrievals").getAll().onsuccess = (ev) => { activeCoinRets = ev.target.result; };
 
-        tx.oncomplete = () => {
+        // HARUS ASYNC UNTUK MENGAMBIL SETTINGS
+        tx.oncomplete = async () => {
             let shiftOrders = activeOrders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
             let shiftExpenses = activeExpenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
             
-            // Filter koin yang diatur oleh kasir saat ini sejak waktu login
             let loginTimeMs = new Date(currentLoginTime).getTime();
             let shiftCoinRets = activeCoinRets.filter(cr => cr.cashier === currentCashier && new Date(cr.timestamp).getTime() >= loginTimeMs);
 
@@ -1665,43 +1675,73 @@ window.openShiftReport = function(historyData = null) {
             let hPiu = 0; let tPiu = 0; let tFree = 0; let tExpense = 0; let foodSummary = {};
             
             let tFreeItems = 0; let tDiscountNom = 0;
-            let orderTotalCoins = (o.actualCoins !== undefined) ? o.actualCoins : (o.expectedCoins || 0);
-            tCoinsUsed += orderTotalCoins;
-            let tCoinsRecycled = 0; let tCoinsJammed = 0;
-            let coinCategorySummary = {}; // <--- Variabel Baru untuk Koin per Kategori
-            
+            let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
+            let coinCategorySummary = {}; 
+            let categorySummary = {}; 
+
+            // Tarik Setting Kiloan & Batch
+            const settings = await window.getDynamicSettings();
+            let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
+            let bantalPerBatch = Number(settings["Sarung_Bantal_Per_Batch"]) || 10;
+            let kgPerCuci = Number(settings["Kilo_Per_Koin_Cuci"]) || 5;
+            let kgPerKering = Number(settings["Kilo_Per_Koin_Kering"]) || 5;
+
             shiftOrders.forEach(o => {
                 tOrders++; if (o.customerPhone && o.customerPhone !== "-") tCust++;
                 tOmset += o.grandTotal; tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tTransfer += (o.transferAmount || 0);
                 hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0);
                 
-                tCoinsUsed += (o.expectedCoins || 0); 
                 tDiscountNom += (o.discounts || 0);
                 if (o.redeemedPromos && o.redeemedPromos.length > 0) o.redeemedPromos.forEach(rp => { tFreeItems += (rp.qty || 0); });
 
-                if (o.items) o.items.forEach(i => { 
-                    foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
-                    
-                    let cat = i.category || "Lainnya";
-                    let divisor = (i.hasMoq && i.moqQty > 0) ? i.moqQty : 1;
-                    let multiplier = Math.ceil(i.qty / divisor);
-                    let itemExpected = (i.expectedCoins || 0) * multiplier;
-                    
-                    // Skalakan / Prorata koin kategori berdasarkan koin aktual vs estimasi
-                    let assignedCoins = itemExpected;
-                    if (o.expectedCoins > 0 && orderTotalCoins !== o.expectedCoins) {
-                        assignedCoins = itemExpected * (orderTotalCoins / o.expectedCoins);
-                    }
-                    
-                    if (assignedCoins > 0) {
-                        coinCategorySummary[cat] = (coinCategorySummary[cat] || 0) + assignedCoins;
-                    }
-                });
+                let orderExpectedCoins = 0;
+                let orderCoinBreakdown = {};
+
+                if (o.items) {
+                    o.items.forEach(i => { 
+                        foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
+                        let cat = i.category || "Lainnya";
+                        categorySummary[cat] = (categorySummary[cat] || 0) + (i.qty * i.originalPrice);
+
+                        let name = String(i.name).toUpperCase();
+                        let itemCoins = 0;
+
+                        if (name.includes("KESET")) {
+                            itemCoins = Math.ceil(i.qty / kesetPerBatch) * 3;
+                        } else if (name.includes("BANTAL")) {
+                            itemCoins = Math.ceil(i.qty / bantalPerBatch) * 2;
+                        } else if (i.inputMode === "DECIMAL") {
+                            itemCoins = Math.ceil(i.qty / kgPerCuci) + Math.ceil(i.qty / kgPerKering);
+                        } else {
+                            let divisor = (i.hasMoq && i.moqQty > 0) ? i.moqQty : 1;
+                            let multiplier = Math.ceil(i.qty / divisor);
+                            itemCoins = (i.expectedCoins || 0) * multiplier;
+                        }
+
+                        if (itemCoins > 0) {
+                            orderExpectedCoins += itemCoins;
+                            orderCoinBreakdown[cat] = (orderCoinBreakdown[cat] || 0) + itemCoins;
+                        }
+                    });
+                }
+                
+                let orderTotalCoins = (o.actualCoins !== undefined) ? o.actualCoins : (o.expectedCoins || orderExpectedCoins);
+                tCoinsUsed += orderTotalCoins;
+                
+                // Tambahkan koin ekspektasi ke ringkasan kategori
+                for (let cat in orderCoinBreakdown) {
+                    coinCategorySummary[cat] = (coinCategorySummary[cat] || 0) + orderCoinBreakdown[cat];
+                }
+                
+                // Selisih antara aktual dan ekspektasi langsung dimasukkan ke "Penyesuaian Manual"
+                let diff = orderTotalCoins - orderExpectedCoins;
+                if (diff !== 0) {
+                    coinCategorySummary["Penyesuaian Manual"] = (coinCategorySummary["Penyesuaian Manual"] || 0) + diff;
+                }
             });
             
             shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
             
-            // Kalkulasi koin macet dan daur ulang
             shiftCoinRets.forEach(cr => {
                 if (cr.notes && cr.notes.includes("Macet")) tCoinsJammed += cr.qty;
                 else tCoinsRecycled += cr.qty;
@@ -1715,7 +1755,8 @@ window.openShiftReport = function(historyData = null) {
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary,
                 totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom,
                 totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
-                coinCategorySummary: coinCategorySummary // <--- Simpan Data Koin Kategori
+                categorySummary: categorySummary,
+                coinCategorySummary: coinCategorySummary
             };
             
             populateShiftModal(window.currentShiftData, true);
