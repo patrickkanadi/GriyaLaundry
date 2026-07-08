@@ -562,7 +562,10 @@ window.unlockMenu = function(isGuest) {
         } else {
             db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
                 activeCustomerProfile = e.target.result;
-                if(!activeCustomerProfile) activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
+                if(!activeCustomerProfile) {
+                    activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
+                    alert(`✅ Member baru berhasil ditambahkan!\nNama: ${name}\nWA: ${phone}`);
+                }
                 proceedToUnlock(phone, name);
             };
         }
