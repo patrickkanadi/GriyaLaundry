@@ -1168,18 +1168,12 @@ window.submitTicketDone = function() {
     const ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
     if (ticket) {
         ticket.orderStatus = "Ready for Pickup"; 
+        ticket.actualCoins = actual; // Simpan koin aktual
+        if (actual !== expected) ticket.coinDiscrepancy = true;
+        
         ticket.syncStatus = "Pending";
         
-        ticket.actualCoins = actual;
-        if (actual !== expected) { ticket.coinDiscrepancy = true; } // Flag perbedaan
-        
         db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
-        
-        if (actual > 0) {
-            let overuse = Math.max(0, actual - expected); let baseUsage = Math.min(expected, actual);
-            const payload = { logId: "TKC-" + Date.now(), orderId: window.activeDoneOrderId, timestamp: new Date().toISOString(), cashier: currentCashier, expected: baseUsage, overuse: overuse, syncStatus: "Pending" };
-            db.transaction(["ticket_coins"], "readwrite").objectStore("ticket_coins").add(payload);
-        }
         window.renderActiveTickets(); window.runBackgroundSync();
     }
     document.getElementById("ticket-done-modal").classList.add("hidden");
@@ -1472,8 +1466,16 @@ window.syncMasterData = async function(forceAwait = false) {
         const response = await fetch(API_URL, { method: 'GET', mode: 'cors' }); const result = await response.json();
         if (result.status === "Success") {
             window.masterDrawerBalance = result.masterDrawerBalance || 0;
-            window.loyaltyTarget = result.data.loyaltyTarget || 10; window.globalPromos = result.data.promos || [];
+            window.loyaltyTarget = result.data.loyaltyTarget || 10; 
+            window.globalPromos = result.data.promos || [];
             window.globalRecentShifts = result.recentShifts || [];
+            
+            // --- TAMPILKAN KOIN LACI VS MESIN DI TOMBOL ATAS ---
+            window.coinsInMachine = result.coinsInMachine || 0;
+            let koinMenu = result.data.menu.find(m => m.name === "Koin_Fisik");
+            let laciStock = koinMenu ? koinMenu.currentStock : 0;
+            let btnKoin = document.getElementById("btn-koin-top");
+            if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${laciStock} | Mesin: ${window.coinsInMachine}`;
             
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
             document.querySelectorAll("button[onclick*='openCashDrop'], #btn-drawer, #btn-cashdrop").forEach(btn => {
