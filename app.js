@@ -292,7 +292,14 @@ window.buildShiftReportReceipt = async function(data) {
             r += formatEscPosLine(qtyStr + "x " + name.substring(0,25), "", false) + "\n";
         }
     }
+    if (data.categorySummary && Object.keys(data.categorySummary).length > 0) {
+            r += "--------------------------------\n" + CMD_CENTER + "PENDAPATAN KATEGORI\n" + CMD_LEFT;
+            for (const [cat, val] of Object.entries(data.categorySummary)) {
+                if (val > 0) r += formatEscPosLine(cat.substring(0,20), val.toLocaleString('id-ID'), false) + "\n";
+        }
+    }
     r += "\n\n\n\n" + CMD_CUT;
+    
     const encoder = new TextEncoder(); await sendToPrinter(encoder.encode(r));
 };
 
@@ -1208,11 +1215,8 @@ window.renderHistoryList = function(type) {
                 let detailBtn = `<button onclick="window.viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">👁️ Detail</button>`;
                 let printBtn = `<button onclick="window.printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">🖨️ Cetak</button>`;
                 
-                // [BARU] Menarik data item terjual dan merangkainya menjadi teks
                 let itemsStr = "Tidak ada item";
-                if (s.foodSummary && Object.keys(s.foodSummary).length > 0) {
-                    itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
-                }
+                if (s.foodSummary && Object.keys(s.foodSummary).length > 0) itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
 
                 container.innerHTML += `
                 <div class="history-row" style="align-items:flex-start; display:flex; gap:10px;">
@@ -1607,13 +1611,13 @@ window.openShiftReport = function(historyData = null) {
 
 function populateShiftModal(data, isActive) {
     let foodHtml = "";
-    if (data.foodSummary) {
-        for (const [name, qty] of Object.entries(data.foodSummary)) {
-            let qtyStr = (qty % 1 !== 0) ? Number(qty).toFixed(2) : qty;
-            foodHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:4px 0;"><span>${name}</span> <strong>${qtyStr}x</strong></div>`;
+    let catHtml = "";
+    if (data.categorySummary) {
+        for (const [cat, val] of Object.entries(data.categorySummary)) {
+            if (val > 0) catHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:2px 0;"><span>${cat}</span> <strong>Rp ${val.toLocaleString('id-ID')}</strong></div>`;
         }
     }
-
+    if (document.getElementById("sd-categories")) document.getElementById("sd-categories").innerHTML = catHtml || "-";
     if (document.getElementById("sd-id")) document.getElementById("sd-id").innerText = data.shiftId;
     if (document.getElementById("sd-login")) document.getElementById("sd-login").innerText = formatWIB(data.loginTime);
     if (document.getElementById("sd-logout")) document.getElementById("sd-logout").innerText = isActive ? "Saat Ini" : formatWIB(data.logoutTime);
