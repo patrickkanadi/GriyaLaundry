@@ -111,9 +111,13 @@
             .btn-top { flex: 1 1 calc(20% - 4px); margin: 2px; font-size: 11px; padding: 6px 8px; text-align: center; }
             #workspace-tabs { padding: 8px 8px 0 8px; }
             .ws-tab { padding: 8px 12px; font-size: 13px; }
+            
             #main-workspace { flex-direction: column; }
-            #menu-section { flex: 1.2; border-right: none; border-bottom: 3px solid #bdc3c7; }
-            #cart-section { flex: 1; }
+            
+            /* -- PERUBAHAN KERANJANG AGAR KECIL DI HP -- */
+            #menu-section { flex: 1; border-right: none; border-bottom: 3px solid #bdc3c7; min-height: 0; }
+            #cart-section { flex: none; height: 35vh; } 
+            
             #command-bar { padding: 8px; }
             #customer-input-section { flex-direction: column; align-items: stretch; }
             .input-group { flex-direction: column; width: 100%; gap: 8px; }
@@ -127,13 +131,18 @@
             .product-card { padding: 8px; border-radius: 6px; }
             .product-card h4 { font-size: 12px; margin-bottom: 2px; }
             .price-badge { font-size: 11px; padding: 4px 6px; margin-top: 4px; }
+            
+            /* Merampingkan Padding Cart Area */
             #cart-header { padding: 8px; font-size: 13px; }
-            #cart-items { padding: 8px; }
+            #cart-items { padding: 5px 8px; }
             .cart-item { padding: 6px 0; font-size: 12px; }
             .cart-qty { padding: 2px 6px; }
-            #checkout-panel { padding: 10px; }
-            .grand-total { font-size: 16px; }
-            .btn-pay { padding: 10px; font-size: 14px; margin-top: 8px; }
+            
+            #checkout-panel { padding: 8px; }
+            .grand-total { font-size: 15px; }
+            .btn-pay { padding: 8px; font-size: 13px; margin-top: 6px; }
+            /* ------------------------------------------- */
+
             .modal-content { width: 100%; padding: 15px; }
             .numpad-grid { gap: 4px; margin-bottom: 10px; }
             .num-btn { padding: 10px; font-size: 16px; }
