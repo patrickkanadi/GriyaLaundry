@@ -1406,7 +1406,7 @@ window.syncMasterData = async function(forceAwait = false) {
             let koinMenu = result.data.menu.find(m => m.name === "Koin_Fisik");
             let laciStock = koinMenu ? koinMenu.currentStock : 0;
             let btnKoin = document.getElementById("btn-koin-top");
-            if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${laciStock} | Mesin: ${window.coinsInMachine}`;
+            if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${result.laciStock} | Mesin: ${result.coinsInMachine}`;
             
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
             document.querySelectorAll("button[onclick*='openCashDrop'], #btn-drawer, #btn-cashdrop").forEach(btn => { btn.style.display = window.enableDrawerTracking ? "" : "none"; });
@@ -1438,8 +1438,17 @@ window.syncMasterData = async function(forceAwait = false) {
                 
                 txOthers.oncomplete = () => {
                     activeLaundryTickets = result.data.activeLaundryOrders || [];
-                    let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = activeLaundryTickets.length;
-                    if (!document.getElementById("pos-screen").classList.contains("hidden")) window.renderActiveTickets();
+                    
+                    let tCount = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
+                    let pCount = activeLaundryTickets.filter(t => t.orderStatus === "Pending Debt").length;
+                    
+                    let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
+                    let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
+                    
+                    if (!document.getElementById("pos-screen").classList.contains("hidden")) { 
+                        window.renderActiveTickets();
+                        window.renderPiutangTickets();
+                    }
                     if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
                 };
             };
