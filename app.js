@@ -1575,9 +1575,10 @@ window.openShiftReport = function(historyData = null) {
                 }
 
                 if (o.items) o.items.forEach(i => { 
-                    foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
-                    let cat = i.category || "Lainnya";
-                    categorySummary[cat] = (categorySummary[cat] || 0) + (i.qty * i.originalPrice); // Hitung pendapatan per kategori
+                        foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
+                        let cat = i.category || "Lainnya";
+                        categorySummary[cat] = (categorySummary[cat] || 0) + (i.qty * i.originalPrice); // Hitung pendapatan per kategori
+                    });
                 });
             
             shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
