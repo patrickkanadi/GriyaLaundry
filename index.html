@@ -68,7 +68,6 @@
         .grand-total { font-size: 24px; font-weight: bold; color: #e74c3c; display: flex; justify-content: space-between;}
         .btn-pay { background: #27ae60; color: white; padding: 15px; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 15px; }
  
-        #active-tickets-workspace { flex: 1; padding: 20px; background: #f4f7f6; overflow-y: auto; }
         .ticket-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
         .ticket-card { background: white; padding: 15px; border-radius: 8px; border-left: 5px solid #f39c12; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .ticket-card.ready { border-left-color: #2ecc71; }
@@ -96,13 +95,6 @@
         .status-pending { background: #fff3cd; color: #856404; }
         .status-voided { background: #f8d7da; color: #721c24; }
  
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        .stat-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 15px; text-align: center; }
-        .stat-box .stat-label { font-size: 12px; color: #7f8c8d; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
-        .stat-box .stat-value { font-size: 24px; font-weight: bold; color: #2c3e50; }
-        .revenue-breakdown { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
-        .revenue-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #eee; font-size: 15px; }
- 
         button:disabled, .btn-disabled { background-color: #dcdde1 !important; color: #7f8c8d !important; border-color: #dcdde1 !important; cursor: not-allowed !important; opacity: 0.6; }
  
         @media screen and (max-width: 1100px) {
@@ -111,9 +103,11 @@
             .btn-top { flex: 1 1 calc(20% - 4px); margin: 2px; font-size: 11px; padding: 6px 8px; text-align: center; }
             #workspace-tabs { padding: 8px 8px 0 8px; }
             .ws-tab { padding: 8px 12px; font-size: 13px; }
+            
             #main-workspace { flex-direction: column; }
-            #menu-section { flex: 1.2; border-right: none; border-bottom: 3px solid #bdc3c7; }
-            #cart-section { flex: 1; }
+            #menu-section { flex: 1; border-right: none; border-bottom: 3px solid #bdc3c7; min-height: 0; }
+            #cart-section { flex: none; height: 35vh; } 
+            
             #command-bar { padding: 8px; }
             #customer-input-section { flex-direction: column; align-items: stretch; }
             .input-group { flex-direction: column; width: 100%; gap: 8px; }
@@ -127,13 +121,16 @@
             .product-card { padding: 8px; border-radius: 6px; }
             .product-card h4 { font-size: 12px; margin-bottom: 2px; }
             .price-badge { font-size: 11px; padding: 4px 6px; margin-top: 4px; }
+            
             #cart-header { padding: 8px; font-size: 13px; }
-            #cart-items { padding: 8px; }
+            #cart-items { padding: 5px 8px; }
             .cart-item { padding: 6px 0; font-size: 12px; }
             .cart-qty { padding: 2px 6px; }
-            #checkout-panel { padding: 10px; }
-            .grand-total { font-size: 16px; }
-            .btn-pay { padding: 10px; font-size: 14px; margin-top: 8px; }
+            
+            #checkout-panel { padding: 8px; }
+            .grand-total { font-size: 15px; }
+            .btn-pay { padding: 8px; font-size: 13px; margin-top: 6px; }
+
             .modal-content { width: 100%; padding: 15px; }
             .numpad-grid { gap: 4px; margin-bottom: 10px; }
             .num-btn { padding: 10px; font-size: 16px; }
@@ -141,7 +138,6 @@
             .form-box { margin-bottom: 10px; }
             .form-box label { font-size: 11px; margin-bottom: 3px; }
             .form-box input, .form-box select { padding: 8px; font-size: 13px; }
-            .stats-grid { grid-template-columns: 1fr; }
             .ticket-grid { grid-template-columns: 1fr; }
             .ticket-card { padding: 10px; font-size: 12px; }
             .ticket-btn { padding: 6px; font-size: 12px; margin-top: 6px; }
@@ -158,13 +154,11 @@
     <div id="login-screen">
         <div class="login-box">
             <h2 style="margin-top:0;">Griya Laundry POS</h2>
-<div style="margin-bottom: 20px; font-size: 14px; color: #7f8c8d; display: flex; flex-direction: column; align-items: center; gap: 10px; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee;">
-    <div style="display: flex; align-items: center; gap: 8px;"><span class="dot-online" id="login-network-dot" style="background-color: #f39c12;"></span> <strong id="login-network-text">Mengecek koneksi...</strong></div>
-    <button onclick="syncMasterData()" style="background: #3498db; color: white; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; width: 100%; font-weight: bold;">🔄 Sinkronisasi Paksa</button>
-    
-    <button id="btn-install-login" class="hidden" onclick="installPWA()" style="background: #8e44ad; color: white; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; width: 100%; font-weight: bold;">📲 Install App ke HP/Tablet</button>
-</div>
-            
+            <div style="margin-bottom: 20px; font-size: 14px; color: #7f8c8d; display: flex; flex-direction: column; align-items: center; gap: 10px; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee;">
+                <div style="display: flex; align-items: center; gap: 8px;"><span class="dot-online" id="login-network-dot" style="background-color: #f39c12;"></span> <strong id="login-network-text">Mengecek koneksi...</strong></div>
+                <button onclick="syncMasterData()" style="background: #3498db; color: white; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; width: 100%; font-weight: bold;">🔄 Sinkronisasi Paksa</button>
+                <button id="btn-install-login" class="hidden" onclick="installPWA()" style="background: #8e44ad; color: white; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; width: 100%; font-weight: bold;">📲 Install App ke HP/Tablet</button>
+            </div>
             <p>Masukkan PIN Kasir</p>
             <input type="password" id="cashier-pin" placeholder="****" inputmode="numeric">
             <button id="btn-login" onclick="attemptLogin()">Masuk / Buka Shift</button>
@@ -180,7 +174,7 @@
                 <button class="btn-top" id="btn-printer" style="background:#bdc3c7; border-color:#bdc3c7;" onclick="connectBluetoothPrinter()">🖨️ Printer: Offline</button>
                 <button class="btn-top" style="background:#2980b9; border-color:#2980b9;" onclick="openEditMember()">✏️ Edit Member</button>
                 <button class="btn-top" style="background:#34495e; border-color:#34495e;" onclick="manualPushSync()">🔄 Sinkron</button>
-                <button class="btn-top" style="background:#f1c40f; border-color:#f1c40f; color:#856404;" onclick="openCoinManagement()">🪙 Koin</button>
+                <button class="btn-top" id="btn-koin-top" style="background:#f1c40f; border-color:#f1c40f; color:#856404; min-width: 140px;" onclick="openCoinManagement()">🪙 Koin</button>
                 <button class="btn-top" id="btn-drawer" style="background:#16a085; border-color:#16a085;" onclick="openCashDrop(false)">🏦 Laci Uang</button>
                 <button class="btn-top" style="background:#8e44ad; border-color:#8e44ad;" onclick="openHistoryModal()">📋 Riwayat</button>
                 <button class="btn-top" id="btn-expense" style="background:#e67e22; border-color:#e67e22;" onclick="openExpenseModal()">💸 Pengeluaran</button>
@@ -191,7 +185,8 @@
  
         <div id="workspace-tabs">
             <button class="ws-tab active" id="tab-new-order" onclick="switchWorkspace('new')">🛒 Order Baru</button>
-            <button class="ws-tab" id="tab-active-tickets" onclick="switchWorkspace('tickets')">📋 Cucian Aktif (<span id="ticket-count">0</span>)</button>
+            <button class="ws-tab" id="tab-active-tickets" onclick="switchWorkspace('tickets')">📋 Cucian Aktif</button>
+            <button class="ws-tab" id="tab-piutang" onclick="switchWorkspace('piutang')">💳 Piutang</button>
         </div>
  
         <div id="main-workspace-wrapper" class="hidden">
@@ -252,9 +247,14 @@
             </div>
         </div>
  
-        <div id="active-tickets-workspace" class="hidden">
+        <div id="active-tickets-workspace" class="hidden" style="flex: 1; padding: 20px; background: #f4f7f6; overflow-y: auto;">
             <h2 style="margin-top:0;">Cucian Dalam Proses (SPK)</h2>
             <div class="ticket-grid" id="ticket-grid-container"></div>
+        </div>
+
+        <div id="piutang-workspace" class="hidden" style="flex: 1; padding: 20px; background: #f4f7f6; overflow-y: auto;">
+            <h2 style="margin-top:0; color:#e74c3c;">Piutang Belum Lunas</h2>
+            <div class="ticket-grid" id="piutang-grid-container"></div>
         </div>
     </div>
  
@@ -355,14 +355,10 @@
             
             <div id="review-promo-section" style="background:#fff3cd; border:1px solid #ffeeba; padding:8px; border-radius:6px; margin-bottom:10px; display:flex; flex-direction:column; gap:6px;"></div>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+            <div style="display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px;">
                 <div style="background:#f9f9f9; padding:8px 12px; border-radius:6px; border:1px solid #eee; display:flex; flex-direction:column; justify-content:center;">
                     <div style="display:flex; justify-content:space-between; font-size:12px; color:#7f8c8d; margin-bottom:4px;"><span>Subtotal:</span> <span id="review-subtotal">Rp 0</span></div>
                     <div style="display:flex; justify-content:space-between; font-size:16px; color:#2c3e50; font-weight:bold;"><span>Total Akhir:</span> <span id="review-grandtotal">Rp 0</span></div>
-                </div>
-                <div style="background:#e8f4f8; padding:8px 12px; border-radius:6px; border:1px solid #bce8f1;">
-                    <label style="font-weight:bold; color:#2980b9; font-size:11px; display:block; margin-bottom:4px;">⚙️ Koin Mesin (Dipakai Manual)</label>
-                    <input type="number" id="internal-coins" value="0" min="0" style="width:100%; padding:6px; font-weight:bold; font-size:14px; border:1px solid #bdc3c7; border-radius:4px;">
                 </div>
             </div>
             
@@ -377,11 +373,12 @@
             </div>
             
             <div id="review-remaining-container" style="display:flex; justify-content:space-between; font-size:14px; color:#c0392b; font-weight:bold; margin-bottom: 12px; padding:8px 12px; background:#f8d7da; border-radius:6px; border: 1px solid #f5c6cb;">
-                <span id="review-remaining-label">⚠️ Sisa Kurang Bayar:</span> <span id="review-remaining" style="font-size:16px;">Rp 0</span>
+                <span id="review-remaining-label">⚠️ Sisa Kurang Bayar:</span> 
+                <span id="review-remaining" style="font-size:16px;">Rp 0</span>
             </div>
             
             <div style="display: flex; gap: 8px;">
-                <button onclick="clearCart()" style="flex:0.8; padding:10px; background:#e74c3c; color:white; border:none; border-radius:6px; font-weight:bold; font-size:13px;">🗑️ Batal</button>
+                <button onclick="closeReview()" style="flex:0.8; padding:10px; background:#e74c3c; color:white; border:none; border-radius:6px; font-weight:bold; font-size:13px;">❌ Batal</button>
                 <button onclick="finalizeOrder(false)" style="flex:1; padding:10px; background:#f39c12; color:white; border:none; border-radius:6px; font-weight:bold; font-size:13px;">Simpan</button>
                 <button onclick="finalizeOrder(true)" style="flex:1.5; padding:10px; background:#27ae60; color:white; border:none; border-radius:6px; font-weight:bold; font-size:13px;">🖨️ Simpan & Cetak</button>
             </div>
@@ -390,7 +387,7 @@
  
     <div id="settlement-modal" class="modal-overlay hidden">
         <div class="modal-content">
-            <h2 style="margin-top:0;">💳 Pelunasan Pengambilan</h2>
+            <h2 style="margin-top:0;">💳 Pelunasan Cucian Aktif</h2>
             <div style="font-size:24px; font-weight:bold; color:#e74c3c; margin-bottom:15px; text-align:center;">Sisa Tagihan: <span id="settle-amount">Rp 0</span></div>
             <div class="split-pay-grid">
                 <div class="form-box" style="margin-bottom:0;"><label>Tunai</label><input type="number" id="settle-cash" value="0" onclick="this.select()"></div>
@@ -400,6 +397,22 @@
             <div style="display:flex; gap:10px;">
                 <button onclick="document.getElementById('settlement-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; font-weight:bold; border:none;">Batal</button>
                 <button onclick="confirmSettlement()" style="flex:2; padding:15px; border-radius:8px; font-weight:bold; border:none; background:#27ae60; color:white;">Bayar & Selesai</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="piutang-payment-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 style="margin-top:0; color:#2980b9;">💳 Pelunasan Piutang</h2>
+            <div style="font-size:24px; font-weight:bold; color:#e74c3c; margin-bottom:15px; text-align:center;">Tagihan: <span id="piutang-settle-amount">Rp 0</span></div>
+            <div class="split-pay-grid">
+                <div class="form-box" style="margin-bottom:0;"><label>Tunai / Cash</label><input type="number" id="piutang-settle-cash" value="0" onclick="this.select()"></div>
+                <div class="form-box" style="margin-bottom:0;"><label>QRIS</label><input type="number" id="piutang-settle-qris" value="0" onclick="this.select()"></div>
+                <div class="form-box" style="margin-bottom:0; grid-column: span 2;"><label>Transfer Bank</label><input type="number" id="piutang-settle-transfer" value="0" onclick="this.select()"></div>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button onclick="document.getElementById('piutang-payment-modal').classList.add('hidden')" style="flex:1; padding:12px; border-radius:6px; font-weight:bold; border:none;">Batal</button>
+                <button onclick="confirmPiutangPayment()" style="flex:2; padding:12px; border-radius:6px; font-weight:bold; border:none; background:#27ae60; color:white;">Lunasi Tagihan</button>
             </div>
         </div>
     </div>
@@ -455,7 +468,6 @@
             </div>
         </div>
     </div>
-     
  
     <div id="order-detail-modal" class="modal-overlay hidden">
         <div class="modal-content">
@@ -532,7 +544,7 @@
                     <div id="sd-food" style="overflow-y:auto; color:#d35400; font-weight:bold; font-size:11px; flex:1;">-</div>
                   </div>
                   <div style="background:#f4f6f7; border-radius:6px; padding:8px; display:flex; flex-direction:column; flex:1; min-height:80px;">
-                    <h3 style="margin:0 0 6px 0; font-size:11px; color:#2c3e50; text-transform:uppercase;">📑 Kategori (Rp)</h3>
+                    <h3 style="margin:0 0 6px 0; font-size:11px; color:#17a589; text-transform:uppercase;">🪙 Koin Kategori</h3>
                     <div id="sd-categories" style="overflow-y:auto; color:#2980b9; font-weight:bold; font-size:11px; flex:1;">-</div>
                   </div>
               </div>
@@ -547,7 +559,7 @@
         </div>
       </div>
     </div>
-    
+ 
     <script src="app.js"></script>
 </body>
 </html>
