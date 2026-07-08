@@ -1102,18 +1102,16 @@ window.renderActiveTickets = function() {
     const grid = document.getElementById("ticket-grid-container"); if(!grid) return;
     grid.innerHTML = "";
     
-    // Pastikan item ada sebelum difilter
-    let tickets = activeLaundryTickets.filter(t => 
-        (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && 
-        t.items && t.items.some(i => i.workflow === "TICKET")
-    );
-    
+    // HANYA MUNCUL JIKA STATUS Processing atau Ready for Pickup
+    let tickets = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup");
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada cucian aktif.</p>";
     
     tickets.forEach((ticket) => {
         const isReady = ticket.orderStatus === "Ready for Pickup";
-        let receiptText = ticket.items ? ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n') : "";
-        let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${ticket.expectedCoins || 0})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil & Selesai</button>`;
+        let receiptText = ticket.readableReceipt || (ticket.items ? ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n') : "");
+        let expected = ticket.expectedCoins || 0;
+        
+        let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${expected})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil Cucian & Selesai</button>`;
         grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:13px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>${buttonsHtml}</div>`;
     });
 };
@@ -1122,6 +1120,7 @@ window.renderPiutangTickets = function() {
     const grid = document.getElementById("piutang-grid-container"); if(!grid) return;
     grid.innerHTML = "";
     
+    // HANYA MUNCUL JIKA STATUS Pending Debt
     let tickets = activeLaundryTickets.filter(t => t.orderStatus === "Pending Debt");
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada tagihan piutang aktif.</p>";
     
@@ -1179,11 +1178,12 @@ window.submitTicketDone = function() {
     const ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
     if (ticket) {
         ticket.orderStatus = "Ready for Pickup"; 
-        ticket.actualCoins = actual; // Simpan koin aktual
-        if (actual !== expected) ticket.coinDiscrepancy = true;
+        ticket.expectedCoins = expected; // Pastikan data estimasi aman
+        ticket.actualCoins = actual;     // Simpan data aktual
+        
+        if (actual !== expected) { ticket.coinDiscrepancy = true; } 
         
         ticket.syncStatus = "Pending";
-        
         db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
         window.renderActiveTickets(); window.runBackgroundSync();
     }
