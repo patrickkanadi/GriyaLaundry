@@ -624,23 +624,30 @@ window.handleAutocomplete = function(e) {
 
 window.openEditMember = function() {
     let prefill = (activeCustomerProfile && activeCustomerProfile.phone !== "-" && !activeCustomerProfile.isNoWA) ? activeCustomerProfile.phone : "";
+    let preName = (activeCustomerProfile && activeCustomerProfile.name !== "Walk-in") ? activeCustomerProfile.name : "";
     let eop = document.getElementById("edit-old-phone"); if(eop) eop.value = prefill; 
     let enp = document.getElementById("edit-new-phone"); if(enp) enp.value = "";
+    let enn = document.getElementById("edit-new-name"); if(enn) enn.value = preName;
     let mod = document.getElementById("edit-member-modal"); if(mod) mod.classList.remove("hidden");
 };
 
 window.submitEditMember = function() {
     let eop = document.getElementById("edit-old-phone"); let oldPhone = eop ? eop.value.trim() : ""; 
     let enp = document.getElementById("edit-new-phone"); let newPhone = enp ? enp.value.trim() : "";
+    let enn = document.getElementById("edit-new-name"); let newName = enn ? enn.value.trim() : "";
+    
     if(!oldPhone || !newPhone) return alert("Nomor tidak boleh kosong.");
 
     db.transaction(["members"], "readonly").objectStore("members").get(oldPhone).onsuccess = (e) => {
         let member = e.target.result; if (!member) return alert("Nomor lama tidak ditemukan.");
-        db.transaction(["phone_updates"], "readwrite").objectStore("phone_updates").add({ id: "UPD-" + Date.now(), oldPhone: oldPhone, newPhone: newPhone, syncStatus: "Pending" });
+        db.transaction(["phone_updates"], "readwrite").objectStore("phone_updates").add({ id: "UPD-" + Date.now(), oldPhone: oldPhone, newPhone: newPhone, newName: newName, syncStatus: "Pending" });
+        
         member.phone = newPhone;
+        if (newName) member.name = newName;
+        
         let tx = db.transaction(["members"], "readwrite");
         tx.objectStore("members").delete(oldPhone); tx.objectStore("members").put(member);
-        alert("Nomor WhatsApp berhasil diubah!"); window.lockMenu(); 
+        alert("Data Member berhasil diubah!"); window.lockMenu(); 
         let mod = document.getElementById("edit-member-modal"); if(mod) mod.classList.add("hidden");
         window.runBackgroundSync();
     };
