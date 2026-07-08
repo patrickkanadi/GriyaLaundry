@@ -267,9 +267,17 @@ window.buildShiftReportReceipt = async function(data) {
 
     // 3. STATISTIK KOIN FISIK
     r += CMD_BOLD_ON + "STATISTIK KOIN FISIK:" + CMD_BOLD_OFF + "\n";
-    r += formatEscPosLine("Koin Terpakai (Nota)", (data.totalCoinsUsed || 0) + " Koin", false) + "\n";
-    r += formatEscPosLine("Koin Daur Ulang", (data.totalCoinsRecycled || 0) + " Koin", false) + "\n";
-    r += formatEscPosLine("Koin Macet/Rusak", (data.totalCoinsJammed || 0) + " Koin", false) + "\n";
+    r += formatEscPosLine("Total Terpakai", (data.totalCoinsUsed || 0) + " Koin", false) + "\n";
+    
+    // Rincian per Kategori
+    if (data.coinCategorySummary) {
+        for (const [cat, val] of Object.entries(data.coinCategorySummary)) {
+            if (val > 0) r += formatEscPosLine(" - " + cat.substring(0, 15), val + " Koin", false) + "\n";
+        }
+    }
+    
+    r += formatEscPosLine("Daur Ulang (Ambil)", (data.totalCoinsRecycled || 0) + " Koin", false) + "\n";
+    r += formatEscPosLine("Macet/Rusak", (data.totalCoinsJammed || 0) + " Koin", false) + "\n";
     r += "--------------------------------\n";
 
     // 4. STATISTIK PROMO
@@ -1564,26 +1572,31 @@ window.openShiftReport = function(historyData = null) {
             
             let tFreeItems = 0; let tDiscountNom = 0;
             let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
-            let categorySummary = {}; // <--- Variabel Baru
+            let coinCategorySummary = {}; // <--- Variabel Baru untuk Koin per Kategori
             
             shiftOrders.forEach(o => {
                 tOrders++; if (o.customerPhone && o.customerPhone !== "-") tCust++;
                 tOmset += o.grandTotal; tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tTransfer += (o.transferAmount || 0);
                 hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0);
                 
-                tCoinsUsed += (o.expectedCoins || 0); // Koin terpakai dari order
-                
+                tCoinsUsed += (o.expectedCoins || 0); 
                 tDiscountNom += (o.discounts || 0);
-                if (o.redeemedPromos && o.redeemedPromos.length > 0) {
-                    o.redeemedPromos.forEach(rp => { tFreeItems += (rp.qty || 0); });
-                }
+                if (o.redeemedPromos && o.redeemedPromos.length > 0) o.redeemedPromos.forEach(rp => { tFreeItems += (rp.qty || 0); });
 
                 if (o.items) o.items.forEach(i => { 
-                        foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
-                        let cat = i.category || "Lainnya";
-                        categorySummary[cat] = (categorySummary[cat] || 0) + (i.qty * i.originalPrice); // Hitung pendapatan per kategori
-                    });
+                    foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
+                    
+                    // --- MENGHITUNG KOIN PER KATEGORI LAAANAN ---
+                    let cat = i.category || "Lainnya";
+                    let divisor = (i.hasMoq && i.moqQty > 0) ? i.moqQty : 1;
+                    let multiplier = Math.ceil(i.qty / divisor);
+                    let itemCoins = (i.expectedCoins || 0) * multiplier;
+                    
+                    if (itemCoins > 0) {
+                        coinCategorySummary[cat] = (coinCategorySummary[cat] || 0) + itemCoins;
+                    }
                 });
+            });
             
             shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
             
@@ -1601,7 +1614,7 @@ window.openShiftReport = function(historyData = null) {
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary,
                 totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom,
                 totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
-                categorySummary: categorySummary // <--- Tambahkan
+                coinCategorySummary: coinCategorySummary // <--- Simpan Data Koin Kategori
             };
             
             populateShiftModal(window.currentShiftData, true);
@@ -1612,9 +1625,9 @@ window.openShiftReport = function(historyData = null) {
 function populateShiftModal(data, isActive) {
     let foodHtml = "";
     let catHtml = "";
-    if (data.categorySummary) {
-        for (const [cat, val] of Object.entries(data.categorySummary)) {
-            if (val > 0) catHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:2px 0;"><span>${cat}</span> <strong>Rp ${val.toLocaleString('id-ID')}</strong></div>`;
+    if (data.coinCategorySummary) {
+        for (const [cat, val] of Object.entries(data.coinCategorySummary)) {
+            if (val > 0) catHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:2px 0;"><span>${cat}</span> <strong style="color:#17a589;">${val} Koin</strong></div>`;
         }
     }
     if (document.getElementById("sd-categories")) document.getElementById("sd-categories").innerHTML = catHtml || "-";
@@ -1714,6 +1727,7 @@ window.triggerEndShift = async function() {
         totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree,
         totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary,
         totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0,
+        coinCategorySummary: data.coinCategorySummary || {},
         meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", syncStatus: "Pending"
     };
     
