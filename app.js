@@ -290,10 +290,6 @@ window.buildShiftReportReceipt = async function(data) {
         for (const [name, qty] of Object.entries(data.foodSummary)) {
             let qtyStr = (qty % 1 !== 0) ? Number(qty).toFixed(2) : String(qty);
             r += formatEscPosLine(qtyStr + "x " + name.substring(0,25), "", false) + "\n";
-    if (data.categorySummary && Object.keys(data.categorySummary).length > 0) {
-        r += "--------------------------------\n" + CMD_CENTER + "PENDAPATAN KATEGORI\n" + CMD_LEFT;
-        for (const [cat, val] of Object.entries(data.categorySummary)) {
-            if (val > 0) r += formatEscPosLine(cat.substring(0,20), val.toLocaleString('id-ID'), false) + "\n";
         }
     }
     r += "\n\n\n\n" + CMD_CUT;
@@ -566,10 +562,7 @@ window.unlockMenu = function(isGuest) {
         } else {
             db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
                 activeCustomerProfile = e.target.result;
-                if(!activeCustomerProfile) {
-                    activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
-                    alert(`✅ Member baru berhasil ditambahkan!\nNama: ${name}\nWA: ${phone}`);
-                }
+                if(!activeCustomerProfile) activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
                 proceedToUnlock(phone, name);
             };
         }
@@ -628,30 +621,23 @@ window.handleAutocomplete = function(e) {
 
 window.openEditMember = function() {
     let prefill = (activeCustomerProfile && activeCustomerProfile.phone !== "-" && !activeCustomerProfile.isNoWA) ? activeCustomerProfile.phone : "";
-    let preName = (activeCustomerProfile && activeCustomerProfile.name !== "Walk-in") ? activeCustomerProfile.name : "";
     let eop = document.getElementById("edit-old-phone"); if(eop) eop.value = prefill; 
     let enp = document.getElementById("edit-new-phone"); if(enp) enp.value = "";
-    let enn = document.getElementById("edit-new-name"); if(enn) enn.value = preName;
     let mod = document.getElementById("edit-member-modal"); if(mod) mod.classList.remove("hidden");
 };
 
 window.submitEditMember = function() {
     let eop = document.getElementById("edit-old-phone"); let oldPhone = eop ? eop.value.trim() : ""; 
     let enp = document.getElementById("edit-new-phone"); let newPhone = enp ? enp.value.trim() : "";
-    let enn = document.getElementById("edit-new-name"); let newName = enn ? enn.value.trim() : "";
-    
     if(!oldPhone || !newPhone) return alert("Nomor tidak boleh kosong.");
 
     db.transaction(["members"], "readonly").objectStore("members").get(oldPhone).onsuccess = (e) => {
         let member = e.target.result; if (!member) return alert("Nomor lama tidak ditemukan.");
-        db.transaction(["phone_updates"], "readwrite").objectStore("phone_updates").add({ id: "UPD-" + Date.now(), oldPhone: oldPhone, newPhone: newPhone, newName: newName, syncStatus: "Pending" });
-        
+        db.transaction(["phone_updates"], "readwrite").objectStore("phone_updates").add({ id: "UPD-" + Date.now(), oldPhone: oldPhone, newPhone: newPhone, syncStatus: "Pending" });
         member.phone = newPhone;
-        if (newName) member.name = newName;
-        
         let tx = db.transaction(["members"], "readwrite");
         tx.objectStore("members").delete(oldPhone); tx.objectStore("members").put(member);
-        alert("Data Member berhasil diubah!"); window.lockMenu(); 
+        alert("Nomor WhatsApp berhasil diubah!"); window.lockMenu(); 
         let mod = document.getElementById("edit-member-modal"); if(mod) mod.classList.add("hidden");
         window.runBackgroundSync();
     };
@@ -982,7 +968,7 @@ window.finalizeOrder = async function(shouldPrint) {
         if (pendingPromoCode) {
             let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
             if (promo) {
-                newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty, code: promo.code }); // Ditambah "code"
+                newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty }); // Simpan di payload
                 
                 if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
@@ -1212,8 +1198,11 @@ window.renderHistoryList = function(type) {
                 let detailBtn = `<button onclick="window.viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">👁️ Detail</button>`;
                 let printBtn = `<button onclick="window.printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">🖨️ Cetak</button>`;
                 
+                // [BARU] Menarik data item terjual dan merangkainya menjadi teks
                 let itemsStr = "Tidak ada item";
-                if (s.foodSummary && Object.keys(s.foodSummary).length > 0) itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
+                if (s.foodSummary && Object.keys(s.foodSummary).length > 0) {
+                    itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
+                }
 
                 container.innerHTML += `
                 <div class="history-row" style="align-items:flex-start; display:flex; gap:10px;">
@@ -1561,8 +1550,7 @@ window.openShiftReport = function(historyData = null) {
             
             let tFreeItems = 0; let tDiscountNom = 0;
             let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
-            let categorySummary = {}; // <--- Variabel Baru
-            
+
             shiftOrders.forEach(o => {
                 tOrders++; if (o.customerPhone && o.customerPhone !== "-") tCust++;
                 tOmset += o.grandTotal; tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tTransfer += (o.transferAmount || 0);
@@ -1575,11 +1563,8 @@ window.openShiftReport = function(historyData = null) {
                     o.redeemedPromos.forEach(rp => { tFreeItems += (rp.qty || 0); });
                 }
 
-                if (o.items) o.items.forEach(i => { 
-                    foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
-                    let cat = i.category || "Lainnya";
-                    categorySummary[cat] = (categorySummary[cat] || 0) + (i.qty * i.originalPrice); // Hitung pendapatan per kategori
-                });
+                if (o.items) o.items.forEach(i => { foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; });
+            });
             
             shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
             
@@ -1596,8 +1581,7 @@ window.openShiftReport = function(historyData = null) {
                 totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer, 
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary,
                 totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom,
-                totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
-                categorySummary: categorySummary // <--- Tambahkan
+                totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed
             };
             
             populateShiftModal(window.currentShiftData, true);
@@ -1607,14 +1591,13 @@ window.openShiftReport = function(historyData = null) {
 
 function populateShiftModal(data, isActive) {
     let foodHtml = "";
-    // (Di bawah baris foodHtml)
-    let catHtml = "";
-    if (data.categorySummary) {
-        for (const [cat, val] of Object.entries(data.categorySummary)) {
-            if (val > 0) catHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:2px 0;"><span>${cat}</span> <strong>Rp ${val.toLocaleString('id-ID')}</strong></div>`;
+    if (data.foodSummary) {
+        for (const [name, qty] of Object.entries(data.foodSummary)) {
+            let qtyStr = (qty % 1 !== 0) ? Number(qty).toFixed(2) : qty;
+            foodHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:4px 0;"><span>${name}</span> <strong>${qtyStr}x</strong></div>`;
         }
     }
-    if (document.getElementById("sd-categories")) document.getElementById("sd-categories").innerHTML = catHtml || "-";
+
     if (document.getElementById("sd-id")) document.getElementById("sd-id").innerText = data.shiftId;
     if (document.getElementById("sd-login")) document.getElementById("sd-login").innerText = formatWIB(data.loginTime);
     if (document.getElementById("sd-logout")) document.getElementById("sd-logout").innerText = isActive ? "Saat Ini" : formatWIB(data.logoutTime);
