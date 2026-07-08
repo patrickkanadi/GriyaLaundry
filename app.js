@@ -978,7 +978,7 @@ window.finalizeOrder = async function(shouldPrint) {
         if (pendingPromoCode) {
             let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
             if (promo) {
-                newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty }); // Simpan di payload
+                newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty, code: promo.code }); // Ditambah "code"
                 
                 if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
@@ -1560,7 +1560,8 @@ window.openShiftReport = function(historyData = null) {
             
             let tFreeItems = 0; let tDiscountNom = 0;
             let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
-
+            let categorySummary = {}; // <--- Variabel Baru
+            
             shiftOrders.forEach(o => {
                 tOrders++; if (o.customerPhone && o.customerPhone !== "-") tCust++;
                 tOmset += o.grandTotal; tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tTransfer += (o.transferAmount || 0);
@@ -1573,8 +1574,11 @@ window.openShiftReport = function(historyData = null) {
                     o.redeemedPromos.forEach(rp => { tFreeItems += (rp.qty || 0); });
                 }
 
-                if (o.items) o.items.forEach(i => { foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; });
-            });
+                if (o.items) o.items.forEach(i => { 
+                    foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
+                    let cat = i.category || "Lainnya";
+                    categorySummary[cat] = (categorySummary[cat] || 0) + (i.qty * i.originalPrice); // Hitung pendapatan per kategori
+                });
             
             shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
             
@@ -1591,7 +1595,8 @@ window.openShiftReport = function(historyData = null) {
                 totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer, 
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary,
                 totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom,
-                totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed
+                totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
+                categorySummary: categorySummary // <--- Tambahkan
             };
             
             populateShiftModal(window.currentShiftData, true);
