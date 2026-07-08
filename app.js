@@ -1516,13 +1516,6 @@ window.runBackgroundSync = async function() {
                 if ((await r.json()).status === "Success") db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone);
             } catch(e) {}
         }
-        let ticketCoins = await new Promise(res => db.transaction(["ticket_coins"], "readonly").objectStore("ticket_coins").getAll().onsuccess = e => res(e.target.result));
-        for (const tc of ticketCoins) {
-            try {
-                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncTicketCoins", data: tc }) });
-                if ((await r.json()).status === "Success") db.transaction(["ticket_coins"], "readwrite").objectStore("ticket_coins").delete(tc.logId);
-            } catch(e) {}
-        }
         let coinRets = await new Promise(res => db.transaction(["coin_retrievals"], "readonly").objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
         for (const cr of coinRets) {
             if (cr.syncStatus === "Pending") {
@@ -1551,7 +1544,6 @@ window.openShiftReport = function(historyData = null) {
         populateShiftModal(historyData, false);
     } else {
         if (!db || !currentShiftId) return alert("Anda belum membuka shift kasir.");
-        // Tambahkan 'coin_retrievals' di dalam transaction agar bisa dibaca
         let tx = db.transaction(["orders", "expenses", "coin_retrievals"], "readonly");
         let activeOrders = []; let activeExpenses = []; let activeCoinRets = [];
         
@@ -1559,11 +1551,10 @@ window.openShiftReport = function(historyData = null) {
         tx.objectStore("expenses").getAll().onsuccess = (ev) => { activeExpenses = ev.target.result; };
         tx.objectStore("coin_retrievals").getAll().onsuccess = (ev) => { activeCoinRets = ev.target.result; };
 
-        tx.oncomplete = () => {
+        tx.oncomplete = async () => {
             let shiftOrders = activeOrders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
             let shiftExpenses = activeExpenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
             
-            // Filter koin yang diatur oleh kasir saat ini sejak waktu login
             let loginTimeMs = new Date(currentLoginTime).getTime();
             let shiftCoinRets = activeCoinRets.filter(cr => cr.cashier === currentCashier && new Date(cr.timestamp).getTime() >= loginTimeMs);
 
@@ -1572,30 +1563,69 @@ window.openShiftReport = function(historyData = null) {
             
             let tFreeItems = 0; let tDiscountNom = 0;
             let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
-            let categorySummary = {}; // <--- Variabel Baru
-            
+            let coinCategorySummary = {}; 
+            let categorySummary = {}; 
+
+            const settings = await window.getDynamicSettings();
+            let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
+            let bantalPerBatch = Number(settings["Sarung_Bantal_Per_Batch"]) || 10;
+            let kgPerCuci = Number(settings["Kilo_Per_Koin_Cuci"]) || 5;
+            let kgPerKering = Number(settings["Kilo_Per_Koin_Kering"]) || 5;
+
             shiftOrders.forEach(o => {
                 tOrders++; if (o.customerPhone && o.customerPhone !== "-") tCust++;
                 tOmset += o.grandTotal; tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tTransfer += (o.transferAmount || 0);
                 hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0);
                 
-                tCoinsUsed += (o.expectedCoins || 0); // Koin terpakai dari order
-                
                 tDiscountNom += (o.discounts || 0);
-                if (o.redeemedPromos && o.redeemedPromos.length > 0) {
-                    o.redeemedPromos.forEach(rp => { tFreeItems += (rp.qty || 0); });
-                }
+                if (o.redeemedPromos && o.redeemedPromos.length > 0) o.redeemedPromos.forEach(rp => { tFreeItems += (rp.qty || 0); });
 
-                if (o.items) o.items.forEach(i => { 
+                let orderExpectedCoins = 0;
+                let orderCoinBreakdown = {};
+
+                if (o.items) {
+                    o.items.forEach(i => { 
                         foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
                         let cat = i.category || "Lainnya";
-                        categorySummary[cat] = (categorySummary[cat] || 0) + (i.qty * i.originalPrice); // Hitung pendapatan per kategori
+                        categorySummary[cat] = (categorySummary[cat] || 0) + (i.qty * i.originalPrice);
+
+                        let name = String(i.name).toUpperCase();
+                        let itemCoins = 0;
+
+                        if (name.includes("KESET")) {
+                            itemCoins = Math.ceil(i.qty / kesetPerBatch) * 3;
+                        } else if (name.includes("BANTAL")) {
+                            itemCoins = Math.ceil(i.qty / bantalPerBatch) * 2;
+                        } else if (i.inputMode === "DECIMAL") {
+                            itemCoins = Math.ceil(i.qty / kgPerCuci) + Math.ceil(i.qty / kgPerKering);
+                        } else {
+                            let divisor = (i.hasMoq && i.moqQty > 0) ? i.moqQty : 1;
+                            let multiplier = Math.ceil(i.qty / divisor);
+                            itemCoins = (i.expectedCoins || 0) * multiplier;
+                        }
+
+                        if (itemCoins > 0) {
+                            orderExpectedCoins += itemCoins;
+                            orderCoinBreakdown[cat] = (orderCoinBreakdown[cat] || 0) + itemCoins;
+                        }
                     });
-                });
+                }
+                
+                let orderTotalCoins = (o.actualCoins !== undefined) ? o.actualCoins : (o.expectedCoins || orderExpectedCoins);
+                tCoinsUsed += orderTotalCoins;
+                
+                for (let cat in orderCoinBreakdown) {
+                    coinCategorySummary[cat] = (coinCategorySummary[cat] || 0) + orderCoinBreakdown[cat];
+                }
+                
+                let diff = orderTotalCoins - orderExpectedCoins;
+                if (diff !== 0) {
+                    coinCategorySummary["Penyesuaian Manual"] = (coinCategorySummary["Penyesuaian Manual"] || 0) + diff;
+                }
+            });
             
             shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
             
-            // Kalkulasi koin macet dan daur ulang
             shiftCoinRets.forEach(cr => {
                 if (cr.notes && cr.notes.includes("Macet")) tCoinsJammed += cr.qty;
                 else tCoinsRecycled += cr.qty;
@@ -1609,7 +1639,8 @@ window.openShiftReport = function(historyData = null) {
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary,
                 totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom,
                 totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
-                categorySummary: categorySummary // <--- Tambahkan
+                categorySummary: categorySummary,
+                coinCategorySummary: coinCategorySummary
             };
             
             populateShiftModal(window.currentShiftData, true);
@@ -1625,6 +1656,14 @@ function populateShiftModal(data, isActive) {
             foodHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:4px 0;"><span>${name}</span> <strong>${qtyStr}x</strong></div>`;
         }
     }
+    
+    let catHtml = "";
+    if (data.coinCategorySummary) {
+        for (const [cat, val] of Object.entries(data.coinCategorySummary)) {
+            if (val !== 0) catHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:2px 0;"><span>${cat}</span> <strong style="color:#17a589;">${val} Koin</strong></div>`;
+        }
+    }
+    if (document.getElementById("sd-categories")) document.getElementById("sd-categories").innerHTML = catHtml || "-";
 
     if (document.getElementById("sd-id")) document.getElementById("sd-id").innerText = data.shiftId;
     if (document.getElementById("sd-login")) document.getElementById("sd-login").innerText = formatWIB(data.loginTime);
@@ -1641,14 +1680,17 @@ function populateShiftModal(data, isActive) {
     if (document.getElementById("sd-free-items")) document.getElementById("sd-free-items").innerText = (data.totalFreeItems || 0) + " Item";
     if (document.getElementById("sd-discount-nom")) document.getElementById("sd-discount-nom").innerText = "Rp " + (data.totalDiscountNominal || 0).toLocaleString('id-ID');
     
+    if (document.getElementById("sd-coins-used")) document.getElementById("sd-coins-used").innerText = (data.totalCoinsUsed || 0) + " Koin";
+    if (document.getElementById("sd-coins-recycled")) document.getElementById("sd-coins-recycled").innerText = (data.totalCoinsRecycled || 0) + " Koin";
+    if (document.getElementById("sd-coins-jammed")) document.getElementById("sd-coins-jammed").innerText = (data.totalCoinsJammed || 0) + " Koin";
+
     if (document.getElementById("sd-food")) document.getElementById("sd-food").innerHTML = foodHtml || "Belum ada item terjual";
 
-    // --- MENGISI & MENGUNCI METERAN JIKA MELIHAT RIWAYAT ---
     let mt = document.getElementById("meter-token");
     if (mt) {
         mt.value = data.meterToken || 0;
-        mt.readOnly = !isActive; // Kunci jika riwayat
-        mt.style.backgroundColor = isActive ? "#fff" : "#e9ecef"; // Ubah warna jadi abu-abu jika terkunci
+        mt.readOnly = !isActive; 
+        mt.style.backgroundColor = isActive ? "#fff" : "#e9ecef"; 
     }
     
     let mp = document.getElementById("meter-pasca");
@@ -1658,14 +1700,9 @@ function populateShiftModal(data, isActive) {
         mp.style.backgroundColor = isActive ? "#fff" : "#e9ecef";
     }
 
-    // --- MENYEMBUNYIKAN TOMBOL "AKHIRI SHIFT" SAAT MELIHAT RIWAYAT ---
     let endBtn = document.getElementById("btn-end-shift-modal");
-    if (endBtn) {
-        endBtn.style.display = isActive ? "block" : "none";
-    }
-    if (document.getElementById("sd-coins-used")) document.getElementById("sd-coins-used").innerText = (data.totalCoinsUsed || 0) + " Koin";
-    if (document.getElementById("sd-coins-recycled")) document.getElementById("sd-coins-recycled").innerText = (data.totalCoinsRecycled || 0) + " Koin";
-    if (document.getElementById("sd-coins-jammed")) document.getElementById("sd-coins-jammed").innerText = (data.totalCoinsJammed || 0) + " Koin";
+    if (endBtn) { endBtn.style.display = isActive ? "block" : "none"; }
+
     let modal = document.getElementById("shift-detail-modal"); if (modal) modal.classList.remove("hidden");
 }
 
@@ -1673,14 +1710,12 @@ window.printCurrentShiftReport = async function() {
     const data = window.currentShiftData;
     if (!data) return alert("Data ringkasan shift tidak tersedia untuk dicetak.");
     
-let mt = document.getElementById("meter-token"); data.meterToken = mt ? (parseFloat(mt.value) || 0) : (data.meterToken || 0);
-let mp = document.getElementById("meter-pasca"); data.meterPasca = mp ? (parseFloat(mp.value) || 0) : (data.meterPasca || 0);
+    let mt = document.getElementById("meter-token"); data.meterToken = mt ? (parseFloat(mt.value) || 0) : (data.meterToken || 0);
+    let mp = document.getElementById("meter-pasca"); data.meterPasca = mp ? (parseFloat(mp.value) || 0) : (data.meterPasca || 0);
     
-    // --- VALIDASI METERAN LISTRIK ---
     if (data.meterToken <= 0 && data.meterPasca <= 0) {
         return alert("⚠️ Harap isi Meteran Listrik (Sisa Token atau Total Pasca) terlebih dahulu sebelum mencetak!");
     }
-    // --------------------------------
     
     try {
         if (typeof window.buildShiftReportReceipt === "function") {
@@ -1697,23 +1732,18 @@ window.triggerEndShift = async function() {
     let mt = document.getElementById("meter-token"); let meterT = mt ? (parseFloat(mt.value) || 0) : 0;
     let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(mp.value) || 0) : 0;
     
-    // --- VALIDASI METERAN LISTRIK ---
     if (meterT <= 0 && meterP <= 0) {
         return alert("⚠️ Harap isi Meteran Listrik (Sisa Token atau Total Pasca) terlebih dahulu sebelum mengakhiri shift!");
     }
-    // --------------------------------
 
     if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?\nLaporan penutupan akan langsung dikirim ke Cloud Google Sheet.")) return;
     
-    // --- OTOMATIS CETAK LAPORAN SEBELUM LOGOUT ---
     if (btCharacteristic && typeof window.buildShiftReportReceipt === "function") {
         try {
-            data.meterToken = meterT;
-            data.meterPasca = meterP;
+            data.meterToken = meterT; data.meterPasca = meterP;
             await window.buildShiftReportReceipt(data);
         } catch (e) { console.error("Gagal print otomatis:", e); }
     }
-    // ---------------------------------------------
 
     const shiftPayload = {
         shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
@@ -1722,6 +1752,7 @@ window.triggerEndShift = async function() {
         totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree,
         totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary,
         totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0,
+        coinCategorySummary: data.coinCategorySummary || {},
         meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", syncStatus: "Pending"
     };
     
@@ -1765,7 +1796,7 @@ function performAutoClose(shift) {
 // ==========================================
 window.onload = async () => { 
     await initDB(); 
-    window.syncMasterData(); // NO AWAIT: Proses tarik data besar berjalan diam-diam di background agar login tidak macet
+    window.syncMasterData(); 
     
     document.addEventListener("mousedown", function(e) {
         let resBox = document.getElementById('autocomplete-results');
