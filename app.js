@@ -282,53 +282,77 @@ window.buildShiftReportReceipt = async function(data) {
 // 3. CORE LOGIN FAST SYNC
 // ==========================================
 window.attemptLogin = async function() {
-    const pinInput = document.getElementById("cashier-pin"); const rawPin = pinInput.value.trim();
-    if (!rawPin) return;
-    
-    let loginBtn = document.getElementById("btn-login");
+    const pinInput = document.getElementById("cashier-pin");
+    const rawPin = pinInput.value.trim(); 
+    if (!rawPin) return; 
+    let loginBtn = document.getElementById("btn-login"); 
     if(loginBtn) loginBtn.innerText = "Memverifikasi...";
 
     try {
         const hashedPin = await hashString(rawPin);
         let staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(hashedPin).onsuccess = e => res(e.target.result));
         
-        if (!staff) {
-            if (navigator.onLine) {
+        if (!staff) { 
+            if (navigator.onLine) { 
                 if(loginBtn) loginBtn.innerText = "Menarik Data Baru...";
-                await window.syncMasterData(true); 
-                staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(hashedPin).onsuccess = e => res(e.target.result));
-            }
+                await window.syncMasterData(true);
+                let staffList = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = e => res(e.target.result));
+                staff = staffList.find(s => s.pin === hashedPin);
+            } 
         }
 
         if (staff) {
+            // OUTLET VALIDATION CERDAS
+            let allowedOutlets = staff.outlets ? staff.outlets.split(',').map(s=>s.trim()).filter(s=>s) : window.availableOutlets;
+            let selectedOutlet = document.getElementById("outlet-select") ? document.getElementById("outlet-select").value : null;
+            
+            // Jika tidak memilih (atau tidak punya izin ke outlet yang dipilih), paksakan ke outlet default mereka
+            if (!selectedOutlet || !allowedOutlets.includes(selectedOutlet)) {
+                selectedOutlet = allowedOutlets.length > 0 ? allowedOutlets[0] : (window.availableOutlets.length > 0 ? window.availableOutlets[0] : "Pusat");
+            }
+            localStorage.setItem("selectedOutlet", selectedOutlet);
+            window.currentOutlet = selectedOutlet;
+            
+            // FILTER MENU BERDASARKAN OUTLET
+            window.globalMenuData = (window.globalMenuDataRaw || []).map(m => {
+                let sJson = {}; try { sJson = JSON.parse(m.stockJson); } catch(e){}
+                m.currentStock = Number(sJson[selectedOutlet]) || 0;
+                return m;
+            }).filter(m => {
+                if (!m.outlets) return true;
+                let outs = m.outlets.split(',').map(s=>s.trim().toLowerCase());
+                if (outs.length === 0 || outs.includes("")) return true;
+                return outs.includes(selectedOutlet.toLowerCase());
+            });
+
             db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(hashedPin).onsuccess = (shiftReq) => {
-                const activeShift = shiftReq.target.result; currentCashier = staff.name; currentPin = hashedPin;
-                if (activeShift) { currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime; } 
-                else {
-                    currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString(); 
-                    db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: hashedPin, shiftId: currentShiftId, loginTime: currentLoginTime, lastActiveTime: Date.now(), cashierName: currentCashier}); 
+                const activeShift = shiftReq.target.result;
+                currentCashier = staff.name; currentPin = hashedPin;
+                if (activeShift) { 
+                    currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime;
+                } else { 
+                    currentShiftId = "SHF-" + Date.now();
+                    currentLoginTime = new Date().toISOString();
+                    db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: hashedPin, shiftId: currentShiftId, loginTime: currentLoginTime, lastActiveTime: Date.now(), cashierName: currentCashier});
                 }
                 
+                let btnKoin = document.getElementById("btn-koin-top");
+                if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks ? (window.laciStocks[selectedOutlet] || 0) : 0} | Mesin: ${window.coinsInMachines ? (window.coinsInMachines[selectedOutlet] || 0) : 0}`;
+
                 document.getElementById("login-screen").classList.add("hidden");
                 document.getElementById("pos-screen").classList.remove("hidden");
-                document.getElementById("display-cashier").innerText = currentCashier;
+                document.getElementById("display-cashier").innerText = currentCashier + ` (${selectedOutlet})`;
                 
-                window.switchWorkspace('new');
-                
-                db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = (e) => {
-                    globalMenuData = e.target.result || [];
-                    if (globalMenuData.length > 0) loadMenuUI();
-                };
-
-                window.lockMenu(); 
+                window.switchWorkspace('new'); window.lockMenu();
+                loadMenuUI();
             };
-        } else { 
-            alert("PIN Kasir Salah atau Belum Terdaftar!"); 
+        } else {
+            alert("PIN Kasir Salah atau Belum Terdaftar!");
         }
-    } catch (err) { 
-        alert("Terjadi kesalahan sistem login."); 
-    } finally { 
-        pinInput.value = ""; 
+    } catch (err) {
+        alert("Terjadi kesalahan sistem login.");
+    } finally {
+        pinInput.value = "";
         if(loginBtn) loginBtn.innerText = "Masuk / Buka Shift";
     }
 };
@@ -440,14 +464,21 @@ window.showStoredRewards = function() {
 
 window.openLotteryModal = function() {
     if (!activeCustomerProfile) return alert("Harap pilih profil pelanggan terlebih dahulu.");
-    if (activeCustomerProfile.isNoWA) { return alert("⚠️ Pelanggan tanpa WhatsApp valid tidak dapat didaftarkan dalam program undian."); }
-    const select = document.getElementById("lottery-select"); 
-    if(select) {
-        select.innerHTML = '<option value="">-- Pilih Promo Undian --</option>';
-        window.globalPromos.forEach(p => { if(p.weeklyQuota === 0 || p.usedQuota < p.weeklyQuota) { select.innerHTML += `<option value="${p.code}">${p.code} (${p.rewardItem})</option>`; } });
-    }
-    let desc = document.getElementById("lottery-desc"); if(desc) desc.innerHTML = "";
-    let mod = document.getElementById("lottery-modal"); if(mod) mod.classList.remove("hidden");
+    if (activeCustomerProfile.isNoWA) { return alert("⚠️ Pelanggan tanpa WhatsApp valid tidak dapat didaftarkan dalam program undian."); } 
+    const select = document.getElementById("lottery-select");
+    if(select) { 
+        select.innerHTML = '-- Pilih Promo Undian --';
+        let currentOutlet = window.currentOutlet || "Pusat";
+        window.globalPromos.forEach(p => { 
+            let usedInOutlet = p.usedQuotaJson ? (p.usedQuotaJson[currentOutlet] || 0) : 0;
+            // Cek kuota KHUSUS per Outlet
+            if(p.weeklyQuota === 0 || usedInOutlet < p.weeklyQuota) { 
+                select.innerHTML += `<option value="${p.code}">${p.code} (${p.rewardItem})</option>`; 
+            } 
+        });
+    } 
+    let desc = document.getElementById("lottery-desc"); if(desc) desc.innerHTML = ""; 
+    let mod = document.getElementById("lottery-modal"); if(mod) mod.classList.remove("hidden"); 
 };
 
 window.updateLotteryDesc = function() {
@@ -1024,11 +1055,10 @@ window.finalizeOrder = async function(shouldPrint) {
             alert("✅ Order has been recorded!"); 
         }
 
-        window.clearCart(); 
         let mod = document.getElementById("review-modal"); if(mod) mod.classList.add("hidden");
         window.renderActiveTickets(); 
         window.renderPiutangTickets(); 
-        window.runBackgroundSync();
+        window.lockMenu(); renderProductGrid(); window.runBackgroundSync();
     };
 };
 
@@ -1407,19 +1437,29 @@ window.saveCoinJammed = function() {
 // ==========================================
 // 10. SINKRONISASI INTI (FAST PIN SYNC)
 // ==========================================
-window.syncMasterData = async function(forceAwait = false) {
-    let nTxt = document.getElementById("network-text"); let nDot = document.getElementById("network-dot");
-    if (!navigator.onLine) { if(nTxt) nTxt.innerText = "Mode Offline"; if(nDot) nDot.style.backgroundColor = "#e74c3c"; return; }
+window.syncMasterData = async function(isSilent = false) {
+    let nTxt = document.getElementById("network-text");
+    let nDot = document.getElementById("network-dot");
+    if (!navigator.onLine) { 
+        if(nTxt) nTxt.innerText = "Mode Offline"; 
+        if(nDot) nDot.style.backgroundColor = "#e74c3c"; 
+        return;
+    }
     try {
-        const response = await fetch(API_URL, { method: 'GET', mode: 'cors' }); const result = await response.json();
+        const response = await fetch(API_URL, { method: 'GET', mode: 'cors' });
+        const result = await response.json();
+        
         if (result.status === "Success") {
             window.masterDrawerBalance = result.masterDrawerBalance || 0;
             window.loyaltyTarget = result.data.loyaltyTarget || 10; 
             window.globalPromos = result.data.promos || [];
             window.globalRecentShifts = result.recentShifts || [];
             
-            // --- LOGIKA DROPDOWN OUTLET ---
+            // --- LOGIKA MULTI-OUTLET ---
             window.availableOutlets = (result.data.settings["Available_Outlets"] || "Pusat").split(",").map(s => s.trim());
+            window.laciStocks = result.laciStock || {};
+            window.coinsInMachines = result.coinsInMachine || {};
+            
             let outletSel = document.getElementById("outlet-select");
             if (outletSel) {
                 let savedOutlet = localStorage.getItem("selectedOutlet");
@@ -1431,63 +1471,43 @@ window.syncMasterData = async function(forceAwait = false) {
                     outletSel.appendChild(opt);
                 });
                 outletSel.onchange = (e) => localStorage.setItem("selectedOutlet", e.target.value);
-                if (!savedOutlet && window.availableOutlets.length > 0) {
-                    localStorage.setItem("selectedOutlet", window.availableOutlets[0]);
-                }
             }
-            
-            window.coinsInMachine = result.coinsInMachine || 0;
-            let koinMenu = result.data.menu.find(m => m.name === "Koin_Fisik");
-            let laciStock = koinMenu ? koinMenu.currentStock : 0;
-            let btnKoin = document.getElementById("btn-koin-top");
-            if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${result.laciStock} | Mesin: ${result.coinsInMachine}`;
-            
-            window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
-            document.querySelectorAll("button[onclick*='openCashDrop'], #btn-drawer, #btn-cashdrop").forEach(btn => { btn.style.display = window.enableDrawerTracking ? "" : "none"; });
 
-            let p1 = new Promise((resolve) => {
-                let txFast = db.transaction(["staff", "menu"], "readwrite");
-                txFast.objectStore("staff").clear(); result.data.staff.forEach(s => txFast.objectStore("staff").add(s));
-                txFast.objectStore("menu").clear(); result.data.menu.forEach(m => txFast.objectStore("menu").add(m));
-                txFast.oncomplete = () => {
-                    globalMenuData = result.data.menu; 
-                    if (!document.getElementById("pos-screen").classList.contains("hidden")) { loadMenuUI(); }
-                    if(nTxt) nTxt.innerText = "Online & Sinkron"; if(nDot) nDot.style.backgroundColor = "#2ecc71";
-                    resolve();
-                };
-            });
-            if(forceAwait) await p1; 
+            if (result.data.staff) {
+                let txStaff = db.transaction(["staff"], "readwrite");
+                result.data.staff.forEach(s => txStaff.objectStore("staff").put(s));
+            }
+            if (result.data.menu) {
+                window.globalMenuDataRaw = result.data.menu; // Simpan data mentah
+                let txMenu = db.transaction(["menu"], "readwrite");
+                result.data.menu.forEach(m => txMenu.objectStore("menu").put(m));
+            }
+            if (result.data.members) {
+                let txMem = db.transaction(["members"], "readwrite");
+                result.data.members.forEach(m => txMem.objectStore("members").put(m));
+            }
 
-            db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = (ue) => {
-                let unMems = ue.target.result.map(u => u.phone);
-                let txOthers = db.transaction(["settings", "members", "expense_categories"], "readwrite");
+            let txOthers = db.transaction(["unsynced_members"], "readonly");
+            txOthers.objectStore("unsynced_members").getAll().onsuccess = (e) => {
+                let unsynced = e.target.result;
+                if (unsynced.length > 0) {
+                    let txPut = db.transaction(["members"], "readwrite");
+                    unsynced.forEach(m => txPut.objectStore("members").put(m));
+                }
                 
-                result.data.members.forEach(m => { if (!unMems.includes(m.phone)) txOthers.objectStore("members").put(m); });
+                activeLaundryTickets = result.data.activeLaundryOrders || [];
+                let tCount = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
+                let pCount = activeLaundryTickets.filter(t => t.orderStatus === "Pending Debt").length;
+                let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
+                let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
                 
-                let expCatStore = txOthers.objectStore("expense_categories"); expCatStore.clear(); 
-                if(result.data.expenseCategories) result.data.expenseCategories.forEach(c => expCatStore.add({name: c}));
-                
-                let settingsStore = txOthers.objectStore("settings"); settingsStore.clear();
-                for (const [key, value] of Object.entries(result.data.settings)) { settingsStore.add({ key: key, value: value }); }
-                
-                txOthers.oncomplete = () => {
-                    activeLaundryTickets = result.data.activeLaundryOrders || [];
-                    
-                    let tCount = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
-                    let pCount = activeLaundryTickets.filter(t => t.orderStatus === "Pending Debt").length;
-                    
-                    let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
-                    let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
-                    
-                    if (!document.getElementById("pos-screen").classList.contains("hidden")) { 
-                        window.renderActiveTickets();
-                        window.renderPiutangTickets();
-                    }
-                    if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
-                };
+                if (!document.getElementById("pos-screen").classList.contains("hidden")) { 
+                    window.renderActiveTickets(); window.renderPiutangTickets(); 
+                }
+                if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
             };
         }
-    } catch (e) { if(nTxt) nTxt.innerText = "Gagal Sinkron"; if(nDot) nDot.style.backgroundColor = "#e74c3c"; }
+    } catch (error) {}
 };
 
 window.manualPushSync = async function() {
