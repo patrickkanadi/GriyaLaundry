@@ -1035,7 +1035,7 @@ window.finalizeOrder = async function(shouldPrint) {
     
     tx.oncomplete = async () => {
         if (finalStatus === "Processing" || finalStatus === "Pending Debt") {
-            window.activeLaundryTickets.unshift(orderPayload);
+            activeLaundryTickets.push(orderPayload);
         }
         
         if (shouldPrint) {
