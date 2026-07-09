@@ -218,7 +218,7 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
 
     receipt += "--------------------------------\n" + CMD_CENTER;
     receipt += CMD_BOLD_ON + f1 + "\n" + CMD_BOLD_OFF;
-    receipt += "\x1B!\x01" + CMD_LEFT; 
+    receipt += "\x1B!\x01" + CMD_CENTER; 
     if(f2) receipt += f2 + "\n";
     if(f3) receipt += f3 + "\n";
     if(f4) receipt += f4 + "\n";
