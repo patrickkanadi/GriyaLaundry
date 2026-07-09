@@ -203,7 +203,6 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
     // --- BREAKDOWN PEMBAYARAN ---
     if (order.cashAmount > 0) receipt += formatEscPosLine(" - Tunai/Cash", order.cashAmount.toLocaleString('id-ID'), false) + "\n";
     if (order.qrisAmount > 0) receipt += formatEscPosLine(" - QRIS", order.qrisAmount.toLocaleString('id-ID'), false) + "\n";
-    if (order.transferAmount > 0) receipt += formatEscPosLine(" - Transfer", order.transferAmount.toLocaleString('id-ID'), false) + "\n";
     if (order.freeAmount > 0) receipt += formatEscPosLine(" - Diskon/Promo", order.freeAmount.toLocaleString('id-ID'), false) + "\n";
 
     let piutangCount = (order.hotelPiutangAmount || 0) + (order.tamuPiutangAmount || 0);
@@ -240,7 +239,6 @@ window.buildShiftReportReceipt = async function(data) {
     r += CMD_BOLD_ON + "PENERIMAAN KASIR & PIUTANG:" + CMD_BOLD_OFF + "\n";
     r += formatEscPosLine("Tunai / Cash", data.totalCash.toLocaleString('id-ID'), false) + "\n";
     r += formatEscPosLine("QRIS", data.totalQris.toLocaleString('id-ID'), false) + "\n";
-    r += formatEscPosLine("Transfer Bank", data.totalTransfer.toLocaleString('id-ID'), false) + "\n";
     r += formatEscPosLine("Piutang Hotel", data.totalHotelPiutang.toLocaleString('id-ID'), false) + "\n";
     r += formatEscPosLine("Piutang Tamu", data.totalTamuPiutang.toLocaleString('id-ID'), false) + "\n";
     r += "--------------------------------\n";
@@ -797,7 +795,7 @@ window.renderCart = function() {
 window.openReview = function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
-    let inputs = ["pay-cash", "pay-qris", "pay-transfer", "pay-hotel-piutang", "pay-tamu-piutang"];
+    let inputs = ["pay-cash", "pay-qris", "pay-hotel-piutang", "pay-tamu-piutang"];
     inputs.forEach(id => { let el = document.getElementById(id); if(el && el.tagName === 'INPUT') el.value = 0; });
     let pf = document.getElementById("pay-free"); if(pf) { if(pf.tagName === 'INPUT') pf.value = 0; else pf.innerText = 0; }
     
@@ -1026,7 +1024,7 @@ window.finalizeOrder = async function(shouldPrint) {
     const orderPayload = {
         orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier || "Unknown", shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
-        paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: 0, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
+        paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, 
         actualCoins: isLaundry ? 0 : expectedCoinsTotal, // FIX Instant: Langsung set aktual
         outlet: currentOutlet, syncStatus: "Pending" 
@@ -1149,14 +1147,13 @@ window.openSettlement = function(orderId, remainingDue) {
     let elAmt = document.getElementById("settle-amount"); if(elAmt) elAmt.innerText = `Rp ${remainingDue.toLocaleString('id-ID')}`;
     let elCash = document.getElementById("settle-cash"); if(elCash) elCash.value = remainingDue;
     let elQris = document.getElementById("settle-qris"); if(elQris) elQris.value = 0;
-    let elTrf = document.getElementById("settle-transfer"); if(elTrf) elTrf.value = 0;
     document.getElementById("settlement-modal").classList.remove("hidden");
 };
 
 window.confirmSettlement = function() {
     if (!activeSettlementTicket) return;
-    const c = Number(document.getElementById("settle-cash").value) || 0; const q = Number(document.getElementById("settle-qris").value) || 0; const t = Number(document.getElementById("settle-transfer").value) || 0;
-    activeSettlementTicket.cashAmount += c; activeSettlementTicket.qrisAmount += q; activeSettlementTicket.transferAmount += t;
+    const c = Number(document.getElementById("settle-cash").value) || 0; const q = Number(document.getElementById("settle-qris").value) || 0; 
+    activeSettlementTicket.cashAmount += c; activeSettlementTicket.qrisAmount += q; 
     activeSettlementTicket.orderStatus = "Completed"; activeSettlementTicket.syncStatus = "Pending";
     db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
     activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
@@ -1175,11 +1172,9 @@ window.confirmPiutangPayment = function() {
     if (!activeSettlementTicket) return;
     const c = Number(document.getElementById("piutang-settle-cash").value) || 0; 
     const q = Number(document.getElementById("piutang-settle-qris").value) || 0; 
-    const t = Number(document.getElementById("piutang-settle-transfer").value) || 0;
     
     activeSettlementTicket.cashAmount = (activeSettlementTicket.cashAmount || 0) + c; 
     activeSettlementTicket.qrisAmount = (activeSettlementTicket.qrisAmount || 0) + q; 
-    activeSettlementTicket.transferAmount = (activeSettlementTicket.transferAmount || 0) + t;
     
     activeSettlementTicket.hotelPiutangAmount = 0;
     activeSettlementTicket.tamuPiutangAmount = 0;
@@ -1264,7 +1259,7 @@ window.renderHistoryList = function(type) {
             let shiftExpenses = expenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
             let combined = [];
             shiftOrders.forEach(o => {
-                let totalIn = (o.cashAmount || 0) + (o.qrisAmount || 0) + (o.transferAmount || 0);
+                let totalIn = (o.cashAmount || 0) + (o.qrisAmount || 0);
                 if (totalIn > 0) { combined.push({ type: 'in', time: new Date(o.timestamp), desc: `Nota: ${o.orderId}`, amount: totalIn }); }
             });
             shiftExpenses.forEach(e => {
@@ -1329,7 +1324,7 @@ window.reprintOrder = async function(orderId) {
     db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = async (e) => {
         const order = e.target.result;
         if (!order) return alert("Data order tidak ditemukan di memori lokal.");
-        const deposit = (order.cashAmount || 0) + (order.qrisAmount || 0) + (order.transferAmount || 0) + (order.freeAmount || 0) + (order.hotelPiutangAmount || 0) + (order.tamuPiutangAmount || 0);
+        const deposit = (order.cashAmount || 0) + (order.qrisAmount || 0) + (order.freeAmount || 0) + (order.hotelPiutangAmount || 0) + (order.tamuPiutangAmount || 0);
         if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in" && !order.customerPhone.startsWith("999")) {
             db.transaction(["members"], "readonly").objectStore("members").get(order.customerPhone).onsuccess = async (me) => {
                 let mem = me.target.result; let pts = mem ? mem.points : 0; let fre = mem ? mem.freeCoins : 0;
@@ -1627,7 +1622,7 @@ window.openShiftReport = function(historyData = null) {
             let loginTimeMs = new Date(currentLoginTime).getTime();
             let shiftCoinRets = activeCoinRets.filter(cr => cr.cashier === currentCashier && new Date(cr.timestamp).getTime() >= loginTimeMs);
 
-            let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0; let tTransfer = 0;
+            let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0;
             let hPiu = 0; let tPiu = 0; let tFree = 0; let tExpense = 0; let foodSummary = {};
             
             let tFreeItems = 0; let tDiscountNom = 0;
@@ -1643,7 +1638,7 @@ window.openShiftReport = function(historyData = null) {
 
             shiftOrders.forEach(o => {
                 tOrders++; if (o.customerPhone && o.customerPhone !== "-") tCust++;
-                tOmset += o.grandTotal; tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0); tTransfer += (o.transferAmount || 0);
+                tOmset += o.grandTotal; tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0);
                 hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0);
                 
                 tDiscountNom += (o.discounts || 0);
@@ -1704,7 +1699,7 @@ window.openShiftReport = function(historyData = null) {
 
             window.currentShiftData = { 
                 shiftId: currentShiftId, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), cashier: currentCashier, 
-                totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer, 
+                totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, 
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary,
                 totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom,
                 totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
@@ -1740,7 +1735,6 @@ function populateShiftModal(data, isActive) {
     if (document.getElementById("sd-logout")) document.getElementById("sd-logout").innerText = isActive ? "Saat Ini" : formatWIB(data.logoutTime);
     if (document.getElementById("sd-cash")) document.getElementById("sd-cash").innerText = "Rp " + (data.totalCash || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-qris")) document.getElementById("sd-qris").innerText = "Rp " + (data.totalQris || 0).toLocaleString('id-ID');
-    if (document.getElementById("sd-transfer")) document.getElementById("sd-transfer").innerText = "Rp " + (data.totalTransfer || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-hotel-piutang")) document.getElementById("sd-hotel-piutang").innerText = "Rp " + (data.totalHotelPiutang || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-tamu-piutang")) document.getElementById("sd-tamu-piutang").innerText = "Rp " + (data.totalTamuPiutang || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-expenses")) document.getElementById("sd-expenses").innerText = "Rp " + (data.totalExpenses || 0).toLocaleString('id-ID');
@@ -1813,7 +1807,7 @@ window.triggerEndShift = async function() {
     let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
     const shiftPayload = {
         shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
-        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalTransfer: data.totalTransfer, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree, totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary, totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0, coinCategorySummary: data.coinCategorySummary || {}, meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", outlet: currentOutlet, syncStatus: "Pending"
+        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree, totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary, totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0, coinCategorySummary: data.coinCategorySummary || {}, meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", outlet: currentOutlet, syncStatus: "Pending"
     };
     let tx = db.transaction(["local_shift_history", "shift_reports", "active_shifts"], "readwrite");
     tx.objectStore("local_shift_history").add(shiftPayload); tx.objectStore("shift_reports").add(shiftPayload);
@@ -1842,7 +1836,7 @@ function performAutoClose(shift) {
         let vOrders = e.target.result.filter(o => o.shiftId === shift.shiftId && o.orderStatus !== "Voided");
         let tOmset = vOrders.reduce((s, o) => s + o.grandTotal, 0);
         let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
-        const report = { shiftId: shift.shiftId, cashier: shift.cashierName, loginTime: shift.loginTime, logoutTime: new Date().toISOString(), totalCustomers: vOrders.length, totalOrders: vOrders.length, totalOmset: tOmset, totalCash: tOmset, totalQris: 0, totalTransfer: 0, totalHotelPiutang: 0, totalTamuPiutang: 0, totalFree: 0, totalExpenses: 0, netCash: tOmset, foodSummary: {}, closeNote: "System Auto-Closed (>4h Idle Expired)", outlet: currentOutlet, syncStatus: "Pending" };
+        const report = { shiftId: shift.shiftId, cashier: shift.cashierName, loginTime: shift.loginTime, logoutTime: new Date().toISOString(), totalCustomers: vOrders.length, totalOrders: vOrders.length, totalOmset: tOmset, totalCash: tOmset, totalQris: 0, totalHotelPiutang: 0, totalTamuPiutang: 0, totalFree: 0, totalExpenses: 0, netCash: tOmset, foodSummary: {}, closeNote: "System Auto-Closed (>4h Idle Expired)", outlet: currentOutlet, syncStatus: "Pending" };
         let txW = db.transaction(["local_shift_history", "shift_reports", "active_shifts"], "readwrite");
         txW.objectStore("local_shift_history").add(report); txW.objectStore("shift_reports").add(report);
         txW.objectStore("active_shifts").delete(shift.pin);
