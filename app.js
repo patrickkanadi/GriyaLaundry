@@ -1007,12 +1007,34 @@ window.finalizeOrder = async function(shouldPrint) {
         coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, syncStatus: "Pending" 
     };
 
-    let tx = db.transaction(["orders"], "readwrite"); tx.objectStore("orders").add(orderPayload);
+    let tx = db.transaction(["orders"], "readwrite"); 
+    tx.objectStore("orders").add(orderPayload);
+    
     tx.oncomplete = async () => {
         window.activeLaundryTickets.unshift(orderPayload);
-        if (shouldPrint && typeof window.buildEscPosReceipt === "function") { await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, payMethod, newPoints, newFree); }
-        window.clearCart(); document.getElementById('review-modal').classList.add('hidden');
-        window.renderActiveTickets(); window.renderPiutangTickets(); window.runBackgroundSync();
+        
+        // --- LOGIKA FEEDBACK & PRINTER AMAN ---
+        if (shouldPrint) {
+            // Cek apakah printer tersedia dan bluetooth terhubung (btCharacteristic)
+            if (typeof window.buildEscPosReceipt === "function" && typeof btCharacteristic !== "undefined" && btCharacteristic) {
+                try {
+                    await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, payMethod, newPoints, newFree);
+                } catch (e) {
+                    alert("⚠️ Gagal mencetak: Printer error atau terputus. Order tetap disimpan.");
+                }
+            } else {
+                alert("⚠️ Printer Bluetooth belum terhubung! Order tetap disimpan.");
+            }
+        } else {
+            alert("✅ Order berhasil disimpan!"); // Feedback visual jika hanya klik "Simpan"
+        }
+        // --------------------------------------
+
+        window.clearCart(); 
+        document.getElementById('review-modal').classList.add('hidden');
+        window.renderActiveTickets(); 
+        window.renderPiutangTickets(); 
+        window.runBackgroundSync();
     };
 };
 
