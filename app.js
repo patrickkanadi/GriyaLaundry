@@ -1027,15 +1027,19 @@ window.finalizeOrder = async function(shouldPrint) {
         orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier || "Unknown", shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: 0, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, outlet: currentOutlet, syncStatus: "Pending" 
+        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, 
+        actualCoins: isLaundry ? 0 : expectedCoinsTotal, // FIX Instant: Langsung set aktual
+        outlet: currentOutlet, syncStatus: "Pending" 
     };
 
     let tx = db.transaction(["orders"], "readwrite");
     tx.objectStore("orders").add(orderPayload);
     
     tx.oncomplete = async () => {
-        if (finalStatus === "Processing" || finalStatus === "Pending Debt") {
-            activeLaundryTickets.push(orderPayload);
+        if (finalStatus === "Processing" || hotelPiutang > 0 || tamuPiutang > 0) {
+            window.activeLaundryTickets.push(orderPayload);
+            let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
+            let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = activeLaundryTickets.filter(t => t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0).length;
         }
         
         if (shouldPrint) {
@@ -1049,7 +1053,6 @@ window.finalizeOrder = async function(shouldPrint) {
             alert("✅ Order has been recorded!"); 
         }
 
-        // Wipe Cart tanpa konfirmasi & Langsung kembali ke Home (New Order)
         window.clearCart(true); 
         let mod = document.getElementById("review-modal"); if(mod) mod.classList.add("hidden");
         window.renderActiveTickets(); 
@@ -1089,7 +1092,7 @@ window.renderPiutangTickets = function() {
     const grid = document.getElementById("piutang-grid-container"); if(!grid) return;
     grid.innerHTML = "";
     
-    let tickets = activeLaundryTickets.filter(t => t.orderStatus === "Pending Debt");
+    let tickets = activeLaundryTickets.filter(t => (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0));
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada tagihan piutang aktif.</p>";
     
     tickets.forEach((ticket) => {
@@ -1195,15 +1198,15 @@ window.confirmPiutangPayment = function() {
 // ==========================================
 // 7. OPERASIONAL PENGELUARAN LACI
 // ==========================================
-window.openExpenseModal = function() {
-    document.getElementById("expense-modal").classList.remove("hidden");
+window.openExpenseModal = function() { 
+    document.getElementById("expense-modal").classList.remove("hidden"); 
     const list = document.getElementById("expense-category-list");
-    if(list) {
-        list.innerHTML = "";
-        db.transaction(["expense_categories"], "readonly").objectStore("expense_categories").getAll().onsuccess = (e) => {
-            e.target.result.forEach(cat => { const opt = document.createElement("option"); opt.value = cat.name; list.appendChild(opt); });
-        };
-    }
+    if(list && window.expenseCategories) { 
+        list.innerHTML = ""; 
+        window.expenseCategories.forEach(cat => { 
+            const opt = document.createElement("option"); opt.value = cat; list.appendChild(opt); 
+        }); 
+    } 
 };
 
 window.saveExpense = function() { 
@@ -1452,8 +1455,13 @@ window.syncMasterData = async function(isSilent = false) {
             window.loyaltyTarget = result.data.loyaltyTarget || 10; 
             window.globalPromos = result.data.promos || [];
             window.globalRecentShifts = result.recentShifts || [];
+            window.expenseCategories = result.data.expenseCategories || [];
             
-            // --- LOGIKA MULTI-OUTLET ---
+            window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
+            document.querySelectorAll("button[onclick*='openCashDrop'], #btn-drawer, #btn-cashdrop").forEach(btn => {
+                if(btn) btn.style.display = window.enableDrawerTracking ? "" : "none";
+            });
+
             window.availableOutlets = (result.data.settings["Available_Outlets"] || "Pusat").split(",").map(s => s.trim());
             window.laciStocks = result.laciStock || {};
             window.coinsInMachines = result.coinsInMachine || {};
@@ -1476,7 +1484,7 @@ window.syncMasterData = async function(isSilent = false) {
                 result.data.staff.forEach(s => txStaff.objectStore("staff").put(s));
             }
             if (result.data.menu) {
-                window.globalMenuDataRaw = result.data.menu; // Simpan data mentah
+                window.globalMenuDataRaw = result.data.menu;
                 let txMenu = db.transaction(["menu"], "readwrite");
                 result.data.menu.forEach(m => txMenu.objectStore("menu").put(m));
             }
@@ -1495,7 +1503,8 @@ window.syncMasterData = async function(isSilent = false) {
                 
                 activeLaundryTickets = result.data.activeLaundryOrders || [];
                 let tCount = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
-                let pCount = activeLaundryTickets.filter(t => t.orderStatus === "Pending Debt").length;
+                let pCount = activeLaundryTickets.filter(t => t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0).length;
+                
                 let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
                 let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
                 
@@ -1726,7 +1735,8 @@ function populateShiftModal(data, isActive) {
     }
     if (document.getElementById("sd-categories")) document.getElementById("sd-categories").innerHTML = catHtml || "-";
 
-    if (document.getElementById("sd-id")) document.getElementById("sd-id").innerText = data.shiftId;
+    let outletDisplay = data.outlet ? ` (${data.outlet})` : "";
+    if (document.getElementById("sd-id")) document.getElementById("sd-id").innerText = data.shiftId + outletDisplay;
     if (document.getElementById("sd-login")) document.getElementById("sd-login").innerText = formatWIB(data.loginTime);
     if (document.getElementById("sd-logout")) document.getElementById("sd-logout").innerText = isActive ? "Saat Ini" : formatWIB(data.logoutTime);
     if (document.getElementById("sd-cash")) document.getElementById("sd-cash").innerText = "Rp " + (data.totalCash || 0).toLocaleString('id-ID');
@@ -1736,7 +1746,11 @@ function populateShiftModal(data, isActive) {
     if (document.getElementById("sd-tamu-piutang")) document.getElementById("sd-tamu-piutang").innerText = "Rp " + (data.totalTamuPiutang || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-expenses")) document.getElementById("sd-expenses").innerText = "Rp " + (data.totalExpenses || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-omset")) document.getElementById("sd-omset").innerText = "Rp " + (data.totalOmset || 0).toLocaleString('id-ID');
-    if (document.getElementById("sd-net")) document.getElementById("sd-net").innerText = "Rp " + (data.netCash || 0).toLocaleString('id-ID');
+    
+    if (document.getElementById("sd-net")) {
+        document.getElementById("sd-net").innerText = "Rp " + (data.netCash || 0).toLocaleString('id-ID');
+        document.getElementById("sd-net").parentElement.style.display = window.enableDrawerTracking ? "flex" : "none";
+    }
     
     if (document.getElementById("sd-free-items")) document.getElementById("sd-free-items").innerText = (data.totalFreeItems || 0) + " Item";
     if (document.getElementById("sd-discount-nom")) document.getElementById("sd-discount-nom").innerText = "Rp " + (data.totalDiscountNominal || 0).toLocaleString('id-ID');
@@ -1748,18 +1762,9 @@ function populateShiftModal(data, isActive) {
     if (document.getElementById("sd-food")) document.getElementById("sd-food").innerHTML = foodHtml || "Belum ada item terjual";
 
     let mt = document.getElementById("meter-token");
-    if (mt) {
-        mt.value = data.meterToken || 0;
-        mt.readOnly = !isActive; 
-        mt.style.backgroundColor = isActive ? "#fff" : "#e9ecef"; 
-    }
-    
+    if (mt) { mt.value = data.meterToken || 0; mt.readOnly = !isActive; mt.style.backgroundColor = isActive ? "#fff" : "#e9ecef"; }
     let mp = document.getElementById("meter-pasca");
-    if (mp) {
-        mp.value = data.meterPasca || 0;
-        mp.readOnly = !isActive;
-        mp.style.backgroundColor = isActive ? "#fff" : "#e9ecef";
-    }
+    if (mp) { mp.value = data.meterPasca || 0; mp.readOnly = !isActive; mp.style.backgroundColor = isActive ? "#fff" : "#e9ecef"; }
 
     let endBtn = document.getElementById("btn-end-shift-modal");
     if (endBtn) { endBtn.style.display = isActive ? "block" : "none"; }
