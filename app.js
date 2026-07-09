@@ -233,6 +233,8 @@ window.buildShiftReportReceipt = async function(data) {
 
     let r = CMD_INIT + CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
     r += "LAPORAN TUTUP SHIFT\n--------------------------------\n" + CMD_LEFT;
+    let outletDisplay = data.outlet ? data.outlet : "Pusat";
+    r += "ID Shift: " + data.shiftId + "\nOutlet  : " + outletDisplay + "\nKasir   : " + data.cashier + "\nLogin   : " + formatTimeOnlyWIB(data.loginTime) + "\nLogout  : " + formatTimeOnlyWIB(data.logoutTime) + "\n--------------------------------\n";
     r += "ID Shift: " + data.shiftId + "\nKasir   : " + data.cashier + "\nLogin   : " + formatTimeOnlyWIB(data.loginTime) + "\nLogout  : " + formatTimeOnlyWIB(data.logoutTime) + "\n--------------------------------\n";
     r += formatEscPosLine("Total Nota", data.totalOrders, false) + "\n" + formatEscPosLine("Total Pelanggan", data.totalCustomers, false) + "\n--------------------------------\n";
     
@@ -293,26 +295,28 @@ window.attemptLogin = async function() {
         if (!staff) { 
             if (navigator.onLine) { 
                 if(loginBtn) loginBtn.innerText = "Menarik Data Baru...";
-                await window.syncMasterData(true);
+                await window.syncInitData(); // Fast Sync
                 let staffList = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = e => res(e.target.result));
                 staff = staffList.find(s => s.pin === hashedPin);
             } 
         }
 
         if (staff) {
-            // OUTLET VALIDATION CERDAS
+            if (!window.availableOutlets) window.availableOutlets = ["Pusat"];
             let allowedOutlets = staff.outlets ? staff.outlets.split(',').map(s=>s.trim()).filter(s=>s) : window.availableOutlets;
             let selectedOutlet = document.getElementById("outlet-select") ? document.getElementById("outlet-select").value : null;
             
-            // Jika tidak memilih (atau tidak punya izin ke outlet yang dipilih), paksakan ke outlet default mereka
             if (!selectedOutlet || !allowedOutlets.includes(selectedOutlet)) {
                 selectedOutlet = allowedOutlets.length > 0 ? allowedOutlets[0] : (window.availableOutlets.length > 0 ? window.availableOutlets[0] : "Pusat");
             }
             localStorage.setItem("selectedOutlet", selectedOutlet);
             window.currentOutlet = selectedOutlet;
             
-            // FILTER MENU BERDASARKAN OUTLET
-            window.globalMenuData = (window.globalMenuDataRaw || []).map(m => {
+            // BACA MENU DARI DATABASE LOKAL
+            let localMenu = await new Promise(res => db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = e => res(e.target.result));
+            window.globalMenuDataRaw = localMenu || [];
+            
+            window.globalMenuData = window.globalMenuDataRaw.map(m => {
                 let sJson = {}; try { sJson = JSON.parse(m.stockJson); } catch(e){}
                 m.currentStock = Number(sJson[selectedOutlet]) || 0;
                 return m;
@@ -321,7 +325,7 @@ window.attemptLogin = async function() {
                 let outs = m.outlets.split(',').map(s=>s.trim().toLowerCase());
                 if (outs.length === 0 || outs.includes("")) return true;
                 return outs.includes(selectedOutlet.toLowerCase());
-            });
+            }).sort((a, b) => String(a.itemId).localeCompare(String(b.itemId)));
 
             db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(hashedPin).onsuccess = (shiftReq) => {
                 const activeShift = shiftReq.target.result;
@@ -1735,14 +1739,16 @@ function populateShiftModal(data, isActive) {
     if (document.getElementById("sd-logout")) document.getElementById("sd-logout").innerText = isActive ? "Saat Ini" : formatWIB(data.logoutTime);
     if (document.getElementById("sd-cash")) document.getElementById("sd-cash").innerText = "Rp " + (data.totalCash || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-qris")) document.getElementById("sd-qris").innerText = "Rp " + (data.totalQris || 0).toLocaleString('id-ID');
+    if (document.getElementById("sd-transfer")) document.getElementById("sd-transfer").innerText = "Rp " + (data.totalTransfer || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-hotel-piutang")) document.getElementById("sd-hotel-piutang").innerText = "Rp " + (data.totalHotelPiutang || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-tamu-piutang")) document.getElementById("sd-tamu-piutang").innerText = "Rp " + (data.totalTamuPiutang || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-expenses")) document.getElementById("sd-expenses").innerText = "Rp " + (data.totalExpenses || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-omset")) document.getElementById("sd-omset").innerText = "Rp " + (data.totalOmset || 0).toLocaleString('id-ID');
     
+    // Uang Laci di Laporan Shift Tidak Lagi Disembunyikan (Tetap Muncul Sesuai Permintaan Anda)
     if (document.getElementById("sd-net")) {
         document.getElementById("sd-net").innerText = "Rp " + (data.netCash || 0).toLocaleString('id-ID');
-        document.getElementById("sd-net").parentElement.style.display = window.enableDrawerTracking ? "flex" : "none";
+        document.getElementById("sd-net").parentElement.style.display = "flex"; 
     }
     
     if (document.getElementById("sd-free-items")) document.getElementById("sd-free-items").innerText = (data.totalFreeItems || 0) + " Item";
