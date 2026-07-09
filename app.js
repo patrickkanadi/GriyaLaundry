@@ -1168,7 +1168,6 @@ window.openPiutangPayment = function(orderId, remainingDue) {
     document.getElementById("piutang-settle-amount").innerText = `Rp ${remainingDue.toLocaleString('id-ID')}`;
     document.getElementById("piutang-settle-cash").value = remainingDue;
     document.getElementById("piutang-settle-qris").value = 0;
-    document.getElementById("piutang-settle-transfer").value = 0;
     document.getElementById("piutang-payment-modal").classList.remove("hidden");
 };
 
