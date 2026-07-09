@@ -911,7 +911,9 @@ window.finalizeOrder = async function(shouldPrint) {
 
     const targetOrderId = "ORD-" + Date.now();
 
-    let payMethod = ""; let activeMethods = [];
+    // --- LOGIC DINAMIS METODE PEMBAYARAN ---
+    let payMethod = "";
+    let activeMethods = [];
     if (cash > 0) activeMethods.push("Cash");
     if (qris > 0) activeMethods.push("QRIS");
     if (transfer > 0) activeMethods.push("Transfer");
@@ -922,6 +924,7 @@ window.finalizeOrder = async function(shouldPrint) {
     if (activeMethods.length === 1) payMethod = activeMethods[0];
     else if (activeMethods.length === 0) payMethod = "Unpaid";
     else payMethod = activeMethods.join(" + ");
+    // ---------------------------------------
 
     let redeemedList = []; let redeemedLoyaltyCoins = 0;
     document.querySelectorAll('.promo-input').forEach(input => {
@@ -970,9 +973,13 @@ window.finalizeOrder = async function(shouldPrint) {
     if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
         activeCustomerProfile.spent += window.cartGrandTotal;
-        let initialPoints = activeCustomerProfile.points || 0; let initialFree = activeCustomerProfile.freeCoins || 0;
-        let totalPoints = initialPoints + paidCoins; let newlyEarnedFree = Math.floor(totalPoints / window.loyaltyTarget);
-        let remainingPoints = totalPoints % window.loyaltyTarget; let finalFreeCoins = Math.max(0, (initialFree + newlyEarnedFree) - redeemedLoyaltyCoins);
+        
+        let initialPoints = activeCustomerProfile.points || 0;
+        let initialFree = activeCustomerProfile.freeCoins || 0;
+        let totalPoints = initialPoints + paidCoins;
+        let newlyEarnedFree = Math.floor(totalPoints / window.loyaltyTarget);
+        let remainingPoints = totalPoints % window.loyaltyTarget;
+        let finalFreeCoins = Math.max(0, (initialFree + newlyEarnedFree) - redeemedLoyaltyCoins);
 
         redeemedList.forEach(rp => {
             if (rp.source === 'stored' && activeCustomerProfile.storedRewards && activeCustomerProfile.storedRewards[rp.item] !== undefined) {
@@ -988,54 +995,46 @@ window.finalizeOrder = async function(shouldPrint) {
                 newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty, code: promo.code });
                 if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
+                
                 let d = new Date(); let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
-                db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({ claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier || "Unknown", shiftId: currentShiftId, orderId: targetOrderId, syncStatus: "Pending" });
+                
+                db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({
+                    claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier, shiftId: currentShiftId, orderId: targetOrderId, syncStatus: "Pending"
+                });
             }
         }
         antreans[currentAntreanIndex].pendingPromoCode = null;
-        activeCustomerProfile.points = remainingPoints; activeCustomerProfile.freeCoins = finalFreeCoins; newPoints = remainingPoints; newFree = finalFreeCoins; window.saveMemberToDB(activeCustomerProfile);
+        
+        activeCustomerProfile.points = remainingPoints; activeCustomerProfile.freeCoins = finalFreeCoins;
+        newPoints = remainingPoints; newFree = finalFreeCoins;
+        window.saveMemberToDB(activeCustomerProfile);
     }
 
     let isLaundry = currentCart.some(i => i.workflow === "TICKET");
     let finalStatus = isLaundry ? "Processing" : (totalPiutang > 0 ? "Pending Debt" : "Completed");
 
     const orderPayload = {
-        orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier || "Unknown", shiftId: currentShiftId,
+        orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, syncStatus: "Pending" 
+        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, koinSold: koinSoldQty, syncStatus: "Pending" 
     };
 
-    let tx = db.transaction(["orders"], "readwrite"); 
-    tx.objectStore("orders").add(orderPayload);
+    db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
     
-    tx.oncomplete = async () => {
-        window.activeLaundryTickets.unshift(orderPayload);
-        
-        // --- LOGIKA FEEDBACK & PRINTER AMAN KEMBALI DITERAPKAN ---
-        if (shouldPrint) {
-            if (typeof window.buildEscPosReceipt === "function" && typeof btCharacteristic !== "undefined" && btCharacteristic) {
-                try {
-                    await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, payMethod, newPoints, newFree);
-                } catch (e) {
-                    alert("⚠️ Gagal mencetak: Printer error atau terputus. Order tetap disimpan.");
-                }
-            } else {
-                alert("⚠️ Printer Bluetooth belum terhubung! Order tetap disimpan.");
-            }
-        } else {
-            alert("✅ Order berhasil disimpan!"); // Feedback visual jika klik "Simpan" saja
-        }
-        // ---------------------------------------------------------
-
-        window.clearCart(); 
-        let reviewModal = document.getElementById('review-modal');
-        if (reviewModal) reviewModal.classList.add('hidden');
-        window.renderActiveTickets(); 
-        window.renderPiutangTickets(); 
-        window.runBackgroundSync();
-    };
+    if (finalStatus === "Processing") {
+        activeLaundryTickets.push(orderPayload);
+        let tc = document.getElementById("ticket-count"); 
+        if(tc) tc.innerText = activeLaundryTickets.length;
+    }
+    
+    if (shouldPrint && typeof window.buildEscPosReceipt === "function") {
+        await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, payMethod, newPoints, newFree);
+    }
+    
+    let mod = document.getElementById("review-modal"); if(mod) mod.classList.add("hidden");
+    window.lockMenu(); renderProductGrid(); window.runBackgroundSync();
 };
 
 window.saveMemberToDB = function(profile) {
