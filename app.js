@@ -909,16 +909,22 @@ window.finalizeOrder = async function(shouldPrint) {
     const totalPiutang = hotelPiutang + tamuPiutang; 
     if ((window.cartGrandTotal - (cash + qris + transfer + totalPiutang)) > 0) return alert("⚠️ Pembayaran Belum Cukup!");
 
-    let payMethod = "Split";
+    const targetOrderId = "ORD-" + Date.now();
+
+    // --- LOGIC DINAMIS METODE PEMBAYARAN ---
+    let payMethod = "";
     let activeMethods = [];
     if (cash > 0) activeMethods.push("Cash");
     if (qris > 0) activeMethods.push("QRIS");
     if (transfer > 0) activeMethods.push("Transfer");
     if (hotelPiutang > 0) activeMethods.push("Piutang Hotel");
     if (tamuPiutang > 0) activeMethods.push("Piutang Tamu");
-    
+    if (free > 0) activeMethods.push("Gratis");
+
     if (activeMethods.length === 1) payMethod = activeMethods[0];
-    else if (activeMethods.length === 0) payMethod = (free > 0 && window.cartGrandTotal === 0) ? "Gratis" : "Unpaid";
+    else if (activeMethods.length === 0) payMethod = "Unpaid";
+    else payMethod = activeMethods.join(" + ");
+    // ---------------------------------------
 
     let redeemedList = []; let redeemedLoyaltyCoins = 0;
     document.querySelectorAll('.promo-input').forEach(input => {
@@ -944,34 +950,25 @@ window.finalizeOrder = async function(shouldPrint) {
     let kgPerKering = Number(settings["Kilo_Per_Koin_Kering"]) || 5;
 
     let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0; 
-    let koinSoldQty = 0; // Koin yang dijual murni
+    let koinSoldQty = 0;
 
     currentCart.forEach(item => {
         let name = String(item.name).toUpperCase();
-        if (name.includes("KOIN")) {
-            koinSoldQty += item.qty; // Pisahkan koin jual dari asumsi cuci
-        } else if (name.includes("KESET")) {
-            kesetQty += item.qty;
-        } else if (name.includes("BANTAL")) {
-            bantalQty += item.qty;
-        } else if (item.inputMode === "DECIMAL") {
-            regularWeight += item.qty;
-        } else {
+        if (name.includes("KOIN")) { koinSoldQty += item.qty; } 
+        else if (name.includes("KESET")) { kesetQty += item.qty; } 
+        else if (name.includes("BANTAL")) { bantalQty += item.qty; } 
+        else if (item.inputMode === "DECIMAL") { regularWeight += item.qty; } 
+        else {
             let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; 
             let multiplier = Math.ceil(item.qty / divisor); 
             otherCoins += ((item.expectedCoins || 0) * multiplier);
         }
     });
 
-    let assumedWashingCoins = 
-        (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + 
-        (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + 
-        (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + 
-        otherCoins;
-        
+    let assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
     let expectedCoinsTotal = assumedWashingCoins + koinSoldQty;
 
-    let newEarnedRewards = []; 
+    let newEarnedRewards = [];
 
     if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
@@ -995,8 +992,7 @@ window.finalizeOrder = async function(shouldPrint) {
         if (pendingPromoCode) {
             let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
             if (promo) {
-                newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty, code: promo.code }); 
-                
+                newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty, code: promo.code });
                 if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
                 
@@ -1004,14 +1000,13 @@ window.finalizeOrder = async function(shouldPrint) {
                 activeCustomerProfile.lastClaimDate = todayStr; 
                 
                 db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({
-                    claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier, shiftId: currentShiftId, syncStatus: "Pending"
+                    claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier, shiftId: currentShiftId, orderId: targetOrderId, syncStatus: "Pending"
                 });
             }
         }
         antreans[currentAntreanIndex].pendingPromoCode = null;
         
-        activeCustomerProfile.points = remainingPoints;
-        activeCustomerProfile.freeCoins = finalFreeCoins;
+        activeCustomerProfile.points = remainingPoints; activeCustomerProfile.freeCoins = finalFreeCoins;
         newPoints = remainingPoints; newFree = finalFreeCoins;
         window.saveMemberToDB(activeCustomerProfile);
     }
@@ -1020,7 +1015,7 @@ window.finalizeOrder = async function(shouldPrint) {
     let finalStatus = isLaundry ? "Processing" : (totalPiutang > 0 ? "Pending Debt" : "Completed");
 
     const orderPayload = {
-        orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
+        orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, koinSold: koinSoldQty, syncStatus: "Pending" 
@@ -1084,11 +1079,14 @@ window.renderPiutangTickets = function() {
     });
 };
 
-window.markTicketReady = function(orderId, expectedCoins) {
-    window.activeDoneOrderId = orderId; 
-    let elE = document.getElementById("done-expected-coins"); if(elE) elE.innerText = expectedCoins;
-    let elA = document.getElementById("done-actual-coins"); if(elA) elA.value = expectedCoins;
-    document.getElementById("ticket-done-modal").classList.remove("hidden");
+window.markTicketReady = function(orderId, expectedWashing) {
+    window.activeDoneOrderId = orderId;
+    let elExpected = document.getElementById("done-expected-coins");
+    if (elExpected) elExpected.innerText = expectedWashing;
+    let elActual = document.getElementById("done-actual-coins");
+    if (elActual) elActual.value = expectedWashing; // Pre-fill dengan angka ekspektasi cuci saja
+    let modal = document.getElementById("ticket-done-modal");
+    if (modal) modal.classList.remove("hidden");
 };
 
 window.submitTicketDone = function() {
@@ -1100,8 +1098,8 @@ window.submitTicketDone = function() {
     if (ticket) {
         ticket.orderStatus = "Ready for Pickup"; 
         
-        // Total Aktual = Koin Cuci (Aktual) + Koin yang Dijual (Konstan)
         let koinSold = ticket.koinSold || 0;
+        // Total Aktual = Koin Cuci (Aktual) + Koin Jual/Instant
         ticket.actualCoins = actualInput + koinSold;     
         
         if (actualInput !== expectedWashing) { ticket.coinDiscrepancy = true; } 
@@ -1748,6 +1746,17 @@ window.printCurrentShiftReport = async function() {
 
 window.triggerEndShift = async function() {
     const data = window.currentShiftData; if (!data) return alert("Gagal mengambil data shift kasir.");
+    
+    // Batal Otomatis jika < 5 Menit & Tidak Ada Transaksi
+    let diffMins = (new Date().getTime() - new Date(currentLoginTime).getTime()) / 60000;
+    if (diffMins < 5 && data.totalOrders === 0 && data.totalOmset === 0) {
+        if (!confirm("Shift berlangsung kurang dari 5 menit tanpa transaksi.\nShift ini akan dibatalkan dan tidak dilaporkan ke pusat. Lanjutkan keluar?")) return;
+        let tx = db.transaction(["active_shifts"], "readwrite");
+        tx.objectStore("active_shifts").delete(currentPin);
+        tx.oncomplete = () => { window.location.reload(); };
+        return;
+    }
+    
     let mt = document.getElementById("meter-token"); let meterT = mt ? (parseFloat(mt.value) || 0) : 0;
     let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(mp.value) || 0) : 0;
     
