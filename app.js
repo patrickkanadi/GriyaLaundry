@@ -1037,7 +1037,7 @@ window.finalizeOrder = async function(shouldPrint) {
     
     tx.oncomplete = async () => {
         if (finalStatus === "Processing" || hotelPiutang > 0 || tamuPiutang > 0) {
-            window.activeLaundryTickets.push(orderPayload);
+            activeLaundryTickets.push(orderPayload);
             let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
             let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = activeLaundryTickets.filter(t => t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0).length;
         }
