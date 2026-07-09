@@ -911,9 +911,7 @@ window.finalizeOrder = async function(shouldPrint) {
 
     const targetOrderId = "ORD-" + Date.now();
 
-    // --- LOGIC DINAMIS METODE PEMBAYARAN ---
-    let payMethod = "";
-    let activeMethods = [];
+    let payMethod = ""; let activeMethods = [];
     if (cash > 0) activeMethods.push("Cash");
     if (qris > 0) activeMethods.push("QRIS");
     if (transfer > 0) activeMethods.push("Transfer");
@@ -924,7 +922,6 @@ window.finalizeOrder = async function(shouldPrint) {
     if (activeMethods.length === 1) payMethod = activeMethods[0];
     else if (activeMethods.length === 0) payMethod = "Unpaid";
     else payMethod = activeMethods.join(" + ");
-    // ---------------------------------------
 
     let redeemedList = []; let redeemedLoyaltyCoins = 0;
     document.querySelectorAll('.promo-input').forEach(input => {
@@ -950,7 +947,7 @@ window.finalizeOrder = async function(shouldPrint) {
     let kgPerKering = Number(settings["Kilo_Per_Koin_Kering"]) || 5;
 
     let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0; 
-    let koinSoldQty = 0;
+    let koinSoldQty = 0; // Koin Instant
 
     currentCart.forEach(item => {
         let name = String(item.name).toUpperCase();
@@ -966,20 +963,16 @@ window.finalizeOrder = async function(shouldPrint) {
     });
 
     let assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
-    let expectedCoinsTotal = assumedWashingCoins + koinSoldQty;
+    let expectedCoinsTotal = assumedWashingCoins + koinSoldQty; // Total Koin ke Mesin
 
     let newEarnedRewards = [];
 
     if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
         activeCustomerProfile.spent += window.cartGrandTotal;
-        
-        let initialPoints = activeCustomerProfile.points || 0;
-        let initialFree = activeCustomerProfile.freeCoins || 0;
-        let totalPoints = initialPoints + paidCoins;
-        let newlyEarnedFree = Math.floor(totalPoints / window.loyaltyTarget);
-        let remainingPoints = totalPoints % window.loyaltyTarget;
-        let finalFreeCoins = Math.max(0, (initialFree + newlyEarnedFree) - redeemedLoyaltyCoins);
+        let initialPoints = activeCustomerProfile.points || 0; let initialFree = activeCustomerProfile.freeCoins || 0;
+        let totalPoints = initialPoints + paidCoins; let newlyEarnedFree = Math.floor(totalPoints / window.loyaltyTarget);
+        let remainingPoints = totalPoints % window.loyaltyTarget; let finalFreeCoins = Math.max(0, (initialFree + newlyEarnedFree) - redeemedLoyaltyCoins);
 
         redeemedList.forEach(rp => {
             if (rp.source === 'stored' && activeCustomerProfile.storedRewards && activeCustomerProfile.storedRewards[rp.item] !== undefined) {
@@ -995,46 +988,32 @@ window.finalizeOrder = async function(shouldPrint) {
                 newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty, code: promo.code });
                 if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
-                
                 let d = new Date(); let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
-                
-                db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({
-                    claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier, shiftId: currentShiftId, orderId: targetOrderId, syncStatus: "Pending"
-                });
+                db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({ claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier || "Unknown", shiftId: currentShiftId, orderId: targetOrderId, syncStatus: "Pending" });
             }
         }
         antreans[currentAntreanIndex].pendingPromoCode = null;
-        
-        activeCustomerProfile.points = remainingPoints; activeCustomerProfile.freeCoins = finalFreeCoins;
-        newPoints = remainingPoints; newFree = finalFreeCoins;
-        window.saveMemberToDB(activeCustomerProfile);
+        activeCustomerProfile.points = remainingPoints; activeCustomerProfile.freeCoins = finalFreeCoins; newPoints = remainingPoints; newFree = finalFreeCoins; window.saveMemberToDB(activeCustomerProfile);
     }
 
     let isLaundry = currentCart.some(i => i.workflow === "TICKET");
     let finalStatus = isLaundry ? "Processing" : (totalPiutang > 0 ? "Pending Debt" : "Completed");
 
     const orderPayload = {
-        orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
+        orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier || "Unknown", shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, koinSold: koinSoldQty, syncStatus: "Pending" 
+        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, syncStatus: "Pending" 
     };
 
-    db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
-    
-    if (finalStatus === "Processing") {
-        activeLaundryTickets.push(orderPayload);
-        let tc = document.getElementById("ticket-count"); 
-        if(tc) tc.innerText = activeLaundryTickets.length;
-    }
-    
-    if (shouldPrint && typeof window.buildEscPosReceipt === "function") {
-        await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, payMethod, newPoints, newFree);
-    }
-    
-    let mod = document.getElementById("review-modal"); if(mod) mod.classList.add("hidden");
-    window.lockMenu(); renderProductGrid(); window.runBackgroundSync();
+    let tx = db.transaction(["orders"], "readwrite"); tx.objectStore("orders").add(orderPayload);
+    tx.oncomplete = async () => {
+        window.activeLaundryTickets.unshift(orderPayload);
+        if (shouldPrint && typeof window.buildEscPosReceipt === "function") { await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, payMethod, newPoints, newFree); }
+        window.clearCart(); document.getElementById('review-modal').classList.add('hidden');
+        window.renderActiveTickets(); window.renderPiutangTickets(); window.runBackgroundSync();
+    };
 };
 
 window.saveMemberToDB = function(profile) {
@@ -1049,16 +1028,13 @@ window.saveMemberToDB = function(profile) {
 window.renderActiveTickets = function() {
     const grid = document.getElementById("ticket-grid-container"); if(!grid) return;
     grid.innerHTML = "";
-    
     let tickets = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup");
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada cucian aktif.</p>";
     
     tickets.forEach((ticket) => {
         const isReady = ticket.orderStatus === "Ready for Pickup";
         let receiptText = ticket.readableReceipt || (ticket.items ? ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n') : "");
-        
-        // Asumsi Cuci = Total Estimasi - Koin yang murni dijual ke pelanggan
-        let expectedWashing = (ticket.expectedCoins || 0) - (ticket.koinSold || 0);
+        let expectedWashing = ticket.washingCoins || 0; // Hanya ambil asumsi cuci
         
         let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${expectedWashing})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil & Selesai</button>`;
         grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:13px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>${buttonsHtml}</div>`;
@@ -1081,28 +1057,24 @@ window.renderPiutangTickets = function() {
 
 window.markTicketReady = function(orderId, expectedWashing) {
     window.activeDoneOrderId = orderId;
-    let elExpected = document.getElementById("done-expected-coins");
-    if (elExpected) elExpected.innerText = expectedWashing;
-    let elActual = document.getElementById("done-actual-coins");
-    if (elActual) elActual.value = expectedWashing; // Pre-fill dengan angka ekspektasi cuci saja
-    let modal = document.getElementById("ticket-done-modal");
-    if (modal) modal.classList.remove("hidden");
+    let elExpected = document.getElementById("done-expected-coins"); if (elExpected) elExpected.innerText = expectedWashing; // Tampilkan khusus koin cuci
+    let elActual = document.getElementById("done-actual-coins"); if (elActual) elActual.value = expectedWashing; 
+    let modal = document.getElementById("ticket-done-modal"); if (modal) modal.classList.remove("hidden");
 };
 
 window.submitTicketDone = function() {
-    let actualInput = Number(document.getElementById("done-actual-coins").value) || 0;
+    let actualWashingInput = Number(document.getElementById("done-actual-coins").value) || 0;
     let expectedWashing = Number(document.getElementById("done-expected-coins").innerText) || 0;
-    if (actualInput < 0) return alert("Jumlah koin tidak valid.");
+    if (actualWashingInput < 0) return alert("Jumlah koin tidak valid.");
 
     const ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
     if (ticket) {
         ticket.orderStatus = "Ready for Pickup"; 
         
-        let koinSold = ticket.koinSold || 0;
-        // Total Aktual = Koin Cuci (Aktual) + Koin Jual/Instant
-        ticket.actualCoins = actualInput + koinSold;     
+        let instantC = ticket.instantCoins || 0;
+        ticket.actualCoins = actualWashingInput + instantC; // Aktual Total = Aktual Cuci + Jual/Instant
         
-        if (actualInput !== expectedWashing) { ticket.coinDiscrepancy = true; } 
+        if (actualWashingInput !== expectedWashing) { ticket.coinDiscrepancy = true; } 
         
         ticket.syncStatus = "Pending";
         db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
@@ -1747,41 +1719,29 @@ window.printCurrentShiftReport = async function() {
 window.triggerEndShift = async function() {
     const data = window.currentShiftData; if (!data) return alert("Gagal mengambil data shift kasir.");
     
-    // Batal Otomatis jika < 5 Menit & Tidak Ada Transaksi
+    // Auto Abort Jika < 5 Menit & Tidak ada omset
     let diffMins = (new Date().getTime() - new Date(currentLoginTime).getTime()) / 60000;
     if (diffMins < 5 && data.totalOrders === 0 && data.totalOmset === 0) {
-        if (!confirm("Shift berlangsung kurang dari 5 menit tanpa transaksi.\nShift ini akan dibatalkan dan tidak dilaporkan ke pusat. Lanjutkan keluar?")) return;
-        let tx = db.transaction(["active_shifts"], "readwrite");
-        tx.objectStore("active_shifts").delete(currentPin);
-        tx.oncomplete = () => { window.location.reload(); };
-        return;
+        if (confirm("Shift ini berjalan kurang dari 5 menit tanpa transaksi.\nApakah Anda ingin membatalkan dan menghapus shift ini tanpa dikirim ke server?")) {
+            let tx = db.transaction(["active_shifts"], "readwrite");
+            tx.objectStore("active_shifts").delete(currentPin);
+            tx.oncomplete = () => { window.location.reload(); };
+            return;
+        }
     }
     
     let mt = document.getElementById("meter-token"); let meterT = mt ? (parseFloat(mt.value) || 0) : 0;
     let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(mp.value) || 0) : 0;
-    
-    if (meterT <= 0 && meterP <= 0) {
-        return alert("⚠️ Harap isi Meteran Listrik (Sisa Token atau Total Pasca) terlebih dahulu sebelum mengakhiri shift!");
-    }
-
+    if (meterT <= 0 && meterP <= 0) return alert("⚠️ Harap isi Meteran Listrik!");
     if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?\nLaporan penutupan akan langsung dikirim ke Cloud Google Sheet.")) return;
     
     if (btCharacteristic && typeof window.buildShiftReportReceipt === "function") {
-        try {
-            data.meterToken = meterT; data.meterPasca = meterP;
-            await window.buildShiftReportReceipt(data);
-        } catch (e) { console.error("Gagal print otomatis:", e); }
+        try { data.meterToken = meterT; data.meterPasca = meterP; await window.buildShiftReportReceipt(data); } catch (e) { console.error(e); }
     }
 
     const shiftPayload = {
         shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
-        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset,
-        totalCash: data.totalCash, totalQris: data.totalQris, totalTransfer: data.totalTransfer,
-        totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree,
-        totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary,
-        totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0,
-        coinCategorySummary: data.coinCategorySummary || {},
-        meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", syncStatus: "Pending"
+        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalTransfer: data.totalTransfer, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree, totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary, totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0, coinCategorySummary: data.coinCategorySummary || {}, meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", syncStatus: "Pending"
     };
     
     let tx = db.transaction(["local_shift_history", "shift_reports", "active_shifts"], "readwrite");
