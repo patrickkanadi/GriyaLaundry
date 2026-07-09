@@ -943,25 +943,33 @@ window.finalizeOrder = async function(shouldPrint) {
     let kgPerCuci = Number(settings["Kilo_Per_Koin_Cuci"]) || 5;
     let kgPerKering = Number(settings["Kilo_Per_Koin_Kering"]) || 5;
 
-    let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0;
+    let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0; 
+    let koinSoldQty = 0; // Koin yang dijual murni
 
     currentCart.forEach(item => {
         let name = String(item.name).toUpperCase();
-        if (name.includes("KESET")) kesetQty += item.qty;
-        else if (name.includes("BANTAL")) bantalQty += item.qty;
-        else if (item.inputMode === "DECIMAL") regularWeight += item.qty;
-        else {
+        if (name.includes("KOIN")) {
+            koinSoldQty += item.qty; // Pisahkan koin jual dari asumsi cuci
+        } else if (name.includes("KESET")) {
+            kesetQty += item.qty;
+        } else if (name.includes("BANTAL")) {
+            bantalQty += item.qty;
+        } else if (item.inputMode === "DECIMAL") {
+            regularWeight += item.qty;
+        } else {
             let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; 
             let multiplier = Math.ceil(item.qty / divisor); 
             otherCoins += ((item.expectedCoins || 0) * multiplier);
         }
     });
 
-    let expectedCoinsTotal = 
+    let assumedWashingCoins = 
         (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + 
         (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + 
         (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + 
         otherCoins;
+        
+    let expectedCoinsTotal = assumedWashingCoins + koinSoldQty;
 
     let newEarnedRewards = []; 
 
@@ -1015,7 +1023,7 @@ window.finalizeOrder = async function(shouldPrint) {
         orderId: "ORD-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, syncStatus: "Pending" 
+        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, koinSold: koinSoldQty, syncStatus: "Pending" 
     };
 
     db.transaction(["orders"], "readwrite").objectStore("orders").add(orderPayload);
@@ -1047,17 +1055,17 @@ window.renderActiveTickets = function() {
     const grid = document.getElementById("ticket-grid-container"); if(!grid) return;
     grid.innerHTML = "";
     
-    // HAPUS Pengecekan t.items karena Cloud hanya mengirim readableReceipt
     let tickets = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup");
-    
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada cucian aktif.</p>";
     
     tickets.forEach((ticket) => {
         const isReady = ticket.orderStatus === "Ready for Pickup";
         let receiptText = ticket.readableReceipt || (ticket.items ? ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n') : "");
-        let expected = ticket.expectedCoins || 0;
         
-        let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${expected})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil & Selesai</button>`;
+        // Asumsi Cuci = Total Estimasi - Koin yang murni dijual ke pelanggan
+        let expectedWashing = (ticket.expectedCoins || 0) - (ticket.koinSold || 0);
+        
+        let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${expectedWashing})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil & Selesai</button>`;
         grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:13px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>${buttonsHtml}</div>`;
     });
 };
@@ -1084,17 +1092,19 @@ window.markTicketReady = function(orderId, expectedCoins) {
 };
 
 window.submitTicketDone = function() {
-    let actual = Number(document.getElementById("done-actual-coins").value) || 0;
-    let expected = Number(document.getElementById("done-expected-coins").innerText) || 0;
-    if (actual < 0) return alert("Jumlah koin tidak valid.");
+    let actualInput = Number(document.getElementById("done-actual-coins").value) || 0;
+    let expectedWashing = Number(document.getElementById("done-expected-coins").innerText) || 0;
+    if (actualInput < 0) return alert("Jumlah koin tidak valid.");
 
     const ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
     if (ticket) {
         ticket.orderStatus = "Ready for Pickup"; 
-        ticket.expectedCoins = expected;
-        ticket.actualCoins = actual; 
         
-        if (actual !== expected) { ticket.coinDiscrepancy = true; } 
+        // Total Aktual = Koin Cuci (Aktual) + Koin yang Dijual (Konstan)
+        let koinSold = ticket.koinSold || 0;
+        ticket.actualCoins = actualInput + koinSold;     
+        
+        if (actualInput !== expectedWashing) { ticket.coinDiscrepancy = true; } 
         
         ticket.syncStatus = "Pending";
         db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
