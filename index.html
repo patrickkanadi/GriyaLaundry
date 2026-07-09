@@ -366,7 +366,6 @@
             <div class="split-pay-grid" style="margin-bottom: 10px; gap: 8px; padding: 10px;">
                 <div class="form-box" style="margin-bottom:0;"><label>Tunai / Cash (Rp)</label><input type="number" id="pay-cash" value="0" onclick="this.select()" oninput="window.calculateRemaining(true)" style="padding:6px; font-size:14px;"></div>
                 <div class="form-box" style="margin-bottom:0;"><label>QRIS (Rp)</label><input type="number" id="pay-qris" value="0" onclick="this.select()" oninput="window.calculateRemaining(false)" style="padding:6px; font-size:14px;"></div>
-                <div class="form-box" style="margin-bottom:0;"><label>Transfer Bank (Rp)</label><input type="number" id="pay-transfer" value="0" onclick="this.select()" oninput="window.calculateRemaining(false)" style="padding:6px; font-size:14px;"></div>
                 <div class="form-box" style="margin-bottom:0;"><label style="color:#27ae60;">Gratis/Promo (Rp)</label><input type="number" id="pay-free" value="0" onclick="this.select()" oninput="window.applyPromo()" style="background:#e8f4f8; font-weight:bold; padding:6px; font-size:14px;"></div>
                 <div class="form-box" style="margin-bottom:0; background:#f8d7da; padding:6px; border-radius:4px;"><label style="color:#721c24;">Piutang B2B (Rp)</label><input type="number" id="pay-hotel-piutang" value="0" onclick="this.select()" oninput="window.calculateRemaining(false)" style="padding:6px; font-size:14px;"></div>
                 <div class="form-box" style="margin-bottom:0; background:#f8d7da; padding:6px; border-radius:4px;"><label style="color:#721c24;">Piutang Tamu (Rp)</label><input type="number" id="pay-tamu-piutang" value="0" onclick="this.select()" oninput="window.calculateRemaining(false)" style="padding:6px; font-size:14px;"></div>
@@ -392,7 +391,6 @@
             <div class="split-pay-grid">
                 <div class="form-box" style="margin-bottom:0;"><label>Tunai</label><input type="number" id="settle-cash" value="0" onclick="this.select()"></div>
                 <div class="form-box" style="margin-bottom:0;"><label>QRIS</label><input type="number" id="settle-qris" value="0" onclick="this.select()"></div>
-                <div class="form-box" style="margin-bottom:0; grid-column: span 2;"><label>Transfer Bank</label><input type="number" id="settle-transfer" value="0" onclick="this.select()"></div>
             </div>
             <div style="display:flex; gap:10px;">
                 <button onclick="document.getElementById('settlement-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:8px; font-weight:bold; border:none;">Batal</button>
@@ -408,7 +406,6 @@
             <div class="split-pay-grid">
                 <div class="form-box" style="margin-bottom:0;"><label>Tunai / Cash</label><input type="number" id="piutang-settle-cash" value="0" onclick="this.select()"></div>
                 <div class="form-box" style="margin-bottom:0;"><label>QRIS</label><input type="number" id="piutang-settle-qris" value="0" onclick="this.select()"></div>
-                <div class="form-box" style="margin-bottom:0; grid-column: span 2;"><label>Transfer Bank</label><input type="number" id="piutang-settle-transfer" value="0" onclick="this.select()"></div>
             </div>
             <div style="display:flex; gap:10px;">
                 <button onclick="document.getElementById('piutang-payment-modal').classList.add('hidden')" style="flex:1; padding:12px; border-radius:6px; font-weight:bold; border:none;">Batal</button>
