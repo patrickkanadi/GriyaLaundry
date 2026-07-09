@@ -959,6 +959,7 @@ window.finalizeOrder = async function(shouldPrint) {
     let expectedCoinsTotal = assumedWashingCoins + koinSoldQty;
 
     let newEarnedRewards = [];
+    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
 
     if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
@@ -983,7 +984,7 @@ window.finalizeOrder = async function(shouldPrint) {
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
                 let d = new Date(); let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
-                db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({ claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier || "Unknown", shiftId: currentShiftId, orderId: targetOrderId, syncStatus: "Pending" });
+                db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({ claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier || "Unknown", shiftId: currentShiftId, orderId: targetOrderId, outlet: currentOutlet, syncStatus: "Pending" });
             }
         }
         antreans[currentAntreanIndex].pendingPromoCode = null;
@@ -997,10 +998,9 @@ window.finalizeOrder = async function(shouldPrint) {
         orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier || "Unknown", shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: 0, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, syncStatus: "Pending" 
+        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, outlet: currentOutlet, syncStatus: "Pending" 
     };
 
-    // --- MENGGUNAKAN TX AGAR .oncomplete TERPICU DENGAN BENAR ---
     let tx = db.transaction(["orders"], "readwrite");
     tx.objectStore("orders").add(orderPayload);
     
@@ -1013,14 +1013,15 @@ window.finalizeOrder = async function(shouldPrint) {
             if (typeof window.buildEscPosReceipt === "function" && typeof btCharacteristic !== "undefined" && btCharacteristic) {
                 try {
                     await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + totalPiutang), 0, payMethod, newPoints, newFree);
+                    alert("✅ Order has been recorded & printed!");
                 } catch (e) {
-                    alert("⚠️ Gagal mencetak: Printer error/terputus. Order tetap disimpan.");
+                    alert("⚠️ Gagal mencetak: Printer error/terputus. Order has been recorded.");
                 }
             } else {
-                alert("⚠️ Printer Bluetooth belum terhubung! Order tetap disimpan.");
+                alert("⚠️ Printer Bluetooth belum terhubung! Order has been recorded.");
             }
         } else {
-            alert("✅ Order berhasil disimpan!"); 
+            alert("✅ Order has been recorded!"); 
         }
 
         window.clearCart(); 
@@ -1177,16 +1178,18 @@ window.openExpenseModal = function() {
     }
 };
 
-window.saveExpense = function() {
-    const amount = Number(document.getElementById("exp-amount").value); const category = document.getElementById("exp-category").value.trim();
-    if (amount <= 0 || !category) return alert("Harap masukkan jumlah dan kategori yang benar.");
+window.saveExpense = function() { 
+    const amount = Number(document.getElementById("exp-amount").value); 
+    const category = document.getElementById("exp-category").value.trim();
+    if (amount <= 0 || !category) return alert("Harap masukkan jumlah dan kategori yang benar."); 
     db.transaction(["expense_categories"], "readwrite").objectStore("expense_categories").put({ name: category });
-
-    const payload = { expenseId: "EXP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, category: category, description: document.getElementById("exp-desc").value || "-", amount: amount, status: "Active", syncStatus: "Pending" };
-    db.transaction(["expenses"], "readwrite").objectStore("expenses").add(payload);
-    document.getElementById("expense-modal").classList.add("hidden");
-    document.getElementById("exp-amount").value = ""; document.getElementById("exp-category").value = ""; document.getElementById("exp-desc").value = "";
-    alert("Pengeluaran Berhasil Dicatat!"); window.runBackgroundSync();
+    
+    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
+    const payload = { expenseId: "EXP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, category: category, description: document.getElementById("exp-desc").value || "-", amount: amount, status: "Active", outlet: currentOutlet, syncStatus: "Pending" }; 
+    db.transaction(["expenses"], "readwrite").objectStore("expenses").add(payload); 
+    document.getElementById("expense-modal").classList.add("hidden"); 
+    document.getElementById("exp-amount").value = ""; document.getElementById("exp-category").value = ""; document.getElementById("exp-desc").value = ""; 
+    alert("Pengeluaran Berhasil Dicatat!"); window.runBackgroundSync(); 
 };
 
 // ==========================================
@@ -1347,17 +1350,17 @@ window.openCashDrop = function() {
     document.getElementById("cashdrop-modal").classList.remove("hidden");
 };
 
-window.submitCashDrop = function() {
-    const admin = Number(document.getElementById("drop-admin").value) || 0;
-    const bank = Number(document.getElementById("drop-bank").value) || 0;
+window.submitCashDrop = function() { 
+    const admin = Number(document.getElementById("drop-admin").value) || 0; 
+    const bank = Number(document.getElementById("drop-bank").value) || 0; 
     const drawer = Number(document.getElementById("drop-drawer").value) || 0;
-    if (admin === 0 && bank === 0) return alert("Masukkan nominal setor uang.");
-    
-    const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, toAdmin: admin, toBank: bank, leftInDrawer: drawer, notes: document.getElementById("drop-notes").value || "-", syncStatus: "Pending" };
+    if (admin === 0 && bank === 0) return alert("Masukkan nominal setor uang."); 
+    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
+    const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, toAdmin: admin, toBank: bank, leftInDrawer: drawer, notes: document.getElementById("drop-notes").value || "-", outlet: currentOutlet, syncStatus: "Pending" };
     db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").add(payload);
     document.getElementById("cashdrop-modal").classList.add("hidden");
     document.getElementById("drop-admin").value = ""; document.getElementById("drop-bank").value = ""; document.getElementById("drop-drawer").value = ""; document.getElementById("drop-notes").value = "";
-    alert("Setoran berhasil dicatat!"); window.runBackgroundSync();
+    alert("Setoran berhasil dicatat!"); window.runBackgroundSync(); 
 };
 
 window.openCoinManagement = function() {
@@ -1383,6 +1386,24 @@ window.submitCoinManagement = function() {
     alert("Laporan koin berhasil dicatat!"); window.runBackgroundSync();
 };
 
+window.saveCoinRetrieval = function() { 
+    const qty = Number(document.getElementById("coin-retrieval-qty").value); 
+    if (qty <= 0) return alert("Jumlah koin tidak valid.");
+    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
+    const payload = { retrievalId: "RET-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: "Daur Ulang Koin Fisik", outlet: currentOutlet, syncStatus: "Pending" };
+    db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload); 
+    document.getElementById("coin-retrieval-qty").value = ""; alert("Pengambilan koin tercatat (Menunggu Approval)"); window.runBackgroundSync(); 
+};
+
+window.saveCoinJammed = function() { 
+    const qty = Number(document.getElementById("coin-jammed-qty").value); 
+    if (qty <= 0) return alert("Jumlah koin tidak valid.");
+    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
+    const payload = { retrievalId: "JAM-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: "Mesin Macet / Tertelan", outlet: currentOutlet, syncStatus: "Pending" };
+    db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload); 
+    document.getElementById("coin-jammed-qty").value = ""; alert("Koin macet tercatat!"); window.runBackgroundSync(); 
+};
+
 // ==========================================
 // 10. SINKRONISASI INTI (FAST PIN SYNC)
 // ==========================================
@@ -1396,6 +1417,24 @@ window.syncMasterData = async function(forceAwait = false) {
             window.loyaltyTarget = result.data.loyaltyTarget || 10; 
             window.globalPromos = result.data.promos || [];
             window.globalRecentShifts = result.recentShifts || [];
+            
+            // --- LOGIKA DROPDOWN OUTLET ---
+            window.availableOutlets = (result.data.settings["Available_Outlets"] || "Pusat").split(",").map(s => s.trim());
+            let outletSel = document.getElementById("outlet-select");
+            if (outletSel) {
+                let savedOutlet = localStorage.getItem("selectedOutlet");
+                outletSel.innerHTML = "";
+                window.availableOutlets.forEach(out => {
+                    let opt = document.createElement("option");
+                    opt.value = out; opt.innerText = out;
+                    if (out === savedOutlet) opt.selected = true;
+                    outletSel.appendChild(opt);
+                });
+                outletSel.onchange = (e) => localStorage.setItem("selectedOutlet", e.target.value);
+                if (!savedOutlet && window.availableOutlets.length > 0) {
+                    localStorage.setItem("selectedOutlet", window.availableOutlets[0]);
+                }
+            }
             
             window.coinsInMachine = result.coinsInMachine || 0;
             let koinMenu = result.data.menu.find(m => m.name === "Koin_Fisik");
@@ -1733,8 +1772,6 @@ window.printCurrentShiftReport = async function() {
 
 window.triggerEndShift = async function() {
     const data = window.currentShiftData; if (!data) return alert("Gagal mengambil data shift kasir.");
-    
-    // Auto Abort Jika < 5 Menit & Tidak ada omset
     let diffMins = (new Date().getTime() - new Date(currentLoginTime).getTime()) / 60000;
     if (diffMins < 5 && data.totalOrders === 0 && data.totalOmset === 0) {
         if (confirm("Shift ini berjalan kurang dari 5 menit tanpa transaksi.\nApakah Anda ingin membatalkan dan menghapus shift ini tanpa dikirim ke server?")) {
@@ -1744,25 +1781,21 @@ window.triggerEndShift = async function() {
             return;
         }
     }
-    
     let mt = document.getElementById("meter-token"); let meterT = mt ? (parseFloat(mt.value) || 0) : 0;
     let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(mp.value) || 0) : 0;
     if (meterT <= 0 && meterP <= 0) return alert("⚠️ Harap isi Meteran Listrik!");
     if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?\nLaporan penutupan akan langsung dikirim ke Cloud Google Sheet.")) return;
-    
     if (btCharacteristic && typeof window.buildShiftReportReceipt === "function") {
         try { data.meterToken = meterT; data.meterPasca = meterP; await window.buildShiftReportReceipt(data); } catch (e) { console.error(e); }
     }
-
+    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
     const shiftPayload = {
         shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
-        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalTransfer: data.totalTransfer, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree, totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary, totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0, coinCategorySummary: data.coinCategorySummary || {}, meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", syncStatus: "Pending"
+        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalTransfer: data.totalTransfer, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree, totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary, totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0, coinCategorySummary: data.coinCategorySummary || {}, meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", outlet: currentOutlet, syncStatus: "Pending"
     };
-    
     let tx = db.transaction(["local_shift_history", "shift_reports", "active_shifts"], "readwrite");
     tx.objectStore("local_shift_history").add(shiftPayload); tx.objectStore("shift_reports").add(shiftPayload);
     tx.objectStore("active_shifts").delete(currentPin);
-    
     tx.oncomplete = async () => {
         let mod = document.getElementById("shift-detail-modal"); if(mod) mod.classList.add("hidden");
         alert("Shift Berhasil Ditutup! Memproses sinkronisasi cloud akhir...");
@@ -1786,7 +1819,8 @@ function performAutoClose(shift) {
     tx.objectStore("orders").getAll().onsuccess = (e) => {
         let vOrders = e.target.result.filter(o => o.shiftId === shift.shiftId && o.orderStatus !== "Voided");
         let tOmset = vOrders.reduce((s, o) => s + o.grandTotal, 0);
-        const report = { shiftId: shift.shiftId, cashier: shift.cashierName, loginTime: shift.loginTime, logoutTime: new Date().toISOString(), totalCustomers: vOrders.length, totalOrders: vOrders.length, totalOmset: tOmset, totalCash: tOmset, totalQris: 0, totalTransfer: 0, totalHotelPiutang: 0, totalTamuPiutang: 0, totalFree: 0, totalExpenses: 0, netCash: tOmset, foodSummary: {}, closeNote: "System Auto-Closed (>4h Idle Expired)", syncStatus: "Pending" };
+        let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
+        const report = { shiftId: shift.shiftId, cashier: shift.cashierName, loginTime: shift.loginTime, logoutTime: new Date().toISOString(), totalCustomers: vOrders.length, totalOrders: vOrders.length, totalOmset: tOmset, totalCash: tOmset, totalQris: 0, totalTransfer: 0, totalHotelPiutang: 0, totalTamuPiutang: 0, totalFree: 0, totalExpenses: 0, netCash: tOmset, foodSummary: {}, closeNote: "System Auto-Closed (>4h Idle Expired)", outlet: currentOutlet, syncStatus: "Pending" };
         let txW = db.transaction(["local_shift_history", "shift_reports", "active_shifts"], "readwrite");
         txW.objectStore("local_shift_history").add(report); txW.objectStore("shift_reports").add(report);
         txW.objectStore("active_shifts").delete(shift.pin);
