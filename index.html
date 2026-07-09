@@ -422,7 +422,11 @@
         <div class="modal-content">
             <h2 style="margin-top:0;">💸 Catat Pengeluaran Laci</h2>
             <div class="form-box"><label>Jumlah (Rp)</label><input type="number" id="exp-amount"></div>
-            <div class="form-box"><label>Kategori</label><input type="text" id="exp-category" list="expense-category-list" autocomplete="off"><datalist id="expense-category-list"></datalist></div>
+            <div class="form-box">
+                <label>Kategori</label>
+                <input type="text" id="exp-category" list="expense-category-list" placeholder="Contoh: Operasional, Gaji, dll">
+                <datalist id="expense-category-list"></datalist>
+            </div>
             <div class="form-box"><label>Keterangan Lengkap</label><input type="text" id="exp-desc"></div>
             <div style="display: flex; gap: 10px; margin-top: 20px;">
                 <button onclick="document.getElementById('expense-modal').classList.add('hidden')" style="flex:1; padding:15px; background:#ecf0f1; border:none; border-radius:8px; font-weight:bold;">Batal</button>
