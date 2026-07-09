@@ -1669,7 +1669,7 @@ function populateShiftModal(data, isActive) {
     let catHtml = "";
     if (data.coinCategorySummary) {
         for (const [cat, val] of Object.entries(data.coinCategorySummary)) {
-            if (val !== 0) catHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:2px 0;"><span>${cat}</span> <strong style="color:#17a589;">${val} Koin</strong></div>`;
+            if (val !== 0) catHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:2px 0;"><span>${cat}</span> <strong style="color:#17a589;">${val.toFixed(1).replace('.0', '')} Koin</strong></div>`;
         }
     }
     if (document.getElementById("sd-categories")) document.getElementById("sd-categories").innerHTML = catHtml || "-";
@@ -1800,9 +1800,6 @@ function performAutoClose(shift) {
     };
 }
 
-// ==========================================
-// 12. INITIALIZATION BROWSER DELEGATION
-// ==========================================
 window.onload = async () => { 
     await initDB(); 
     window.syncMasterData(); 
