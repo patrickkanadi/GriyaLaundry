@@ -947,7 +947,7 @@ window.finalizeOrder = async function(shouldPrint) {
     let kgPerKering = Number(settings["Kilo_Per_Koin_Kering"]) || 5;
 
     let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0; 
-    let koinSoldQty = 0; // Koin Instant
+    let koinSoldQty = 0;
 
     currentCart.forEach(item => {
         let name = String(item.name).toUpperCase();
@@ -963,7 +963,7 @@ window.finalizeOrder = async function(shouldPrint) {
     });
 
     let assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
-    let expectedCoinsTotal = assumedWashingCoins + koinSoldQty; // Total Koin ke Mesin
+    let expectedCoinsTotal = assumedWashingCoins + koinSoldQty;
 
     let newEarnedRewards = [];
 
@@ -1013,9 +1013,8 @@ window.finalizeOrder = async function(shouldPrint) {
     tx.oncomplete = async () => {
         window.activeLaundryTickets.unshift(orderPayload);
         
-        // --- LOGIKA FEEDBACK & PRINTER AMAN ---
+        // --- LOGIKA FEEDBACK & PRINTER AMAN KEMBALI DITERAPKAN ---
         if (shouldPrint) {
-            // Cek apakah printer tersedia dan bluetooth terhubung (btCharacteristic)
             if (typeof window.buildEscPosReceipt === "function" && typeof btCharacteristic !== "undefined" && btCharacteristic) {
                 try {
                     await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, payMethod, newPoints, newFree);
@@ -1026,12 +1025,13 @@ window.finalizeOrder = async function(shouldPrint) {
                 alert("⚠️ Printer Bluetooth belum terhubung! Order tetap disimpan.");
             }
         } else {
-            alert("✅ Order berhasil disimpan!"); // Feedback visual jika hanya klik "Simpan"
+            alert("✅ Order berhasil disimpan!"); // Feedback visual jika klik "Simpan" saja
         }
-        // --------------------------------------
+        // ---------------------------------------------------------
 
         window.clearCart(); 
-        document.getElementById('review-modal').classList.add('hidden');
+        let reviewModal = document.getElementById('review-modal');
+        if (reviewModal) reviewModal.classList.add('hidden');
         window.renderActiveTickets(); 
         window.renderPiutangTickets(); 
         window.runBackgroundSync();
