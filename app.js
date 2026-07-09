@@ -773,16 +773,6 @@ window.updateCartItemQty = function(itemId, delta) {
     }
 };
 
-window.clearCart = function() {
-    if (currentCart.length === 0) return alert("Keranjang sudah kosong!");
-    if (confirm("Apakah Anda yakin ingin membatalkan order (mengosongkan keranjang)?")) {
-        currentCart = [];
-        window.renderCart();
-        let pf = document.getElementById("pay-free"); 
-        if(pf) { if(pf.tagName === 'INPUT') pf.value = 0; else pf.innerText = 0; }
-    }
-};
-
 window.renderCart = function() {
     const container = document.getElementById("cart-items"); if(!container) return;
     container.innerHTML = ""; let total = 0;
@@ -924,6 +914,14 @@ window.calculateRemaining = function(isCashManual = false) {
     }
 };
 
+window.clearCart = function(force = false) { 
+    if (currentCart.length === 0 && !force) return alert("Keranjang sudah kosong!");
+    if (!force && !confirm("Apakah Anda yakin ingin membatalkan order (mengosongkan keranjang)?")) return;
+    currentCart = []; window.renderCart();
+    let pf = document.getElementById("pay-free"); 
+    if(pf) { if(pf.tagName === 'INPUT') pf.value = 0; else pf.innerText = 0; }
+};
+
 window.finalizeOrder = async function(shouldPrint) {
     let pc = document.getElementById("pay-cash"); let cash = pc ? Number(pc.value) : 0;
     let elQ = document.getElementById("pay-qris"); let qris = elQ ? Number(elQ.value) : 0;
@@ -1045,20 +1043,20 @@ window.finalizeOrder = async function(shouldPrint) {
                 try {
                     await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + totalPiutang), 0, payMethod, newPoints, newFree);
                     alert("✅ Order has been recorded & printed!");
-                } catch (e) {
-                    alert("⚠️ Gagal mencetak: Printer error/terputus. Order has been recorded.");
-                }
-            } else {
-                alert("⚠️ Printer Bluetooth belum terhubung! Order has been recorded.");
-            }
+                } catch (e) { alert("⚠️ Gagal mencetak: Printer error/terputus. Order has been recorded."); }
+            } else { alert("⚠️ Printer Bluetooth belum terhubung! Order has been recorded."); }
         } else {
             alert("✅ Order has been recorded!"); 
         }
 
+        // Wipe Cart tanpa konfirmasi & Langsung kembali ke Home (New Order)
+        window.clearCart(true); 
         let mod = document.getElementById("review-modal"); if(mod) mod.classList.add("hidden");
         window.renderActiveTickets(); 
         window.renderPiutangTickets(); 
-        window.lockMenu(); renderProductGrid(); window.runBackgroundSync();
+        window.switchWorkspace('new'); 
+        window.lockMenu(); 
+        window.runBackgroundSync();
     };
 };
 
