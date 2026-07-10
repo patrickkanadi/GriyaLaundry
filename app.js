@@ -703,7 +703,12 @@ function loadMenuUI() {
 function renderProductGrid() {
     const grid = document.getElementById("product-grid"); if(!grid) return;
     grid.innerHTML = "";
-    globalMenuData.filter(i => i.category === currentCategory).forEach(item => {
+    
+    // Sort items berdasarkan itemId (itm-001 ascending up)
+    let itemsToRender = globalMenuData.filter(i => i.category === currentCategory);
+    itemsToRender.sort((a, b) => String(a.itemId || "").localeCompare(String(b.itemId || "")));
+    
+    itemsToRender.forEach(item => {
         const card = document.createElement("div"); card.className = "product-card";
         
         let stockHtml = "";
@@ -722,7 +727,6 @@ function renderProductGrid() {
         grid.appendChild(card);
     });
 }
-
 window.openNumpad = function(item) { activeNumpadItem = item; numpadValue = "0"; let nd = document.getElementById("numpad-display"); if(nd) nd.innerText = "0"; let mod = document.getElementById("numpad-modal"); if(mod) mod.classList.remove("hidden"); };
 window.closeNumpad = function() { let mod = document.getElementById("numpad-modal"); if(mod) mod.classList.add("hidden"); activeNumpadItem = null; };
 window.numpadPress = function(val) {
