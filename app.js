@@ -1,57 +1,74 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxLfrUoCplYPUKJTbj_EUtXT2NDcU067bS8qHnapbC9g9Wr6CubXGrPJAtFKW2ti9Ts/exec";
-const DB_NAME = "GriyaLaundry_POS";
-const DB_VERSION = 34; 
-let db;
+const DB_NAME = "GriyaLaundry_POS"; 
+const DB_VERSION = 35; 
+let db; 
 
-let antreans = [
-    { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "", pendingPromoCode: null },
-    { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "", pendingPromoCode: null },
-    { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "", pendingPromoCode: null }
-];
+let antreans = [ 
+    { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "", pendingPromoCode: null }, 
+    { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "", pendingPromoCode: null }, 
+    { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "", pendingPromoCode: null } 
+]; 
 let currentAntreanIndex = 0;
 
-let currentCashier = ""; let currentPin = ""; let currentShiftId = ""; let currentLoginTime = "";
-let globalMenuData = []; let currentCategory = ""; let activeLaundryTickets = []; let currentCart = []; 
-let activeNumpadItem = null; let numpadValue = "0"; let activeSettlementTicket = null;
-window.masterDrawerBalance = 0; window.coinsInMachine = 0; let isLoggingOut = false; let currentVoidTarget = { type: null, id: null };
-let isMenuLocked = true; let isSyncing = false; let activeCustomerProfile = null; let activeCoinPrice = 10000;
-window.loyaltyTarget = 10; window.globalPromos = []; window.enableDrawerTracking = true;
+let currentCashier = ""; 
+let currentPin = ""; 
+let currentShiftId = ""; 
+let currentLoginTime = ""; 
+let globalMenuDataRaw = [];
+let globalMenuData = []; 
+let currentCategory = ""; 
+let activeLaundryTickets = []; 
+let currentCart = []; 
+let activeNumpadItem = null;
+let numpadValue = "0"; 
+let activeSettlementTicket = null;
 
-let btDevice = null; let btCharacteristic = null; let printShiftOnLogout = false;
+window.masterDrawerBalance = 0; 
+let isLoggingOut = false; 
+let currentVoidTarget = { type: null, id: null }; 
+let isMenuLocked = true; 
+let isSyncing = false; 
+let activeCustomerProfile = null; 
+let activeCoinPrice = 10000; 
+window.loyaltyTarget = 10; 
+window.globalPromos = []; 
+window.enableDrawerTracking = true;
+window.expenseCategories = [];
+
+let btDevice = null; 
+let btCharacteristic = null;
 window.lastActivityWrite = Date.now();
 
 // ==========================================
-// 1. INISIALISASI DATABASE & PWA INSTALL
+// 1. INITIALIZATION & DATABASE
 // ==========================================
 function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onupgradeneeded = (event) => {
-            db = event.target.result;
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (e) => {
+            db = e.target.result;
             if (!db.objectStoreNames.contains("staff")) db.createObjectStore("staff", { keyPath: "pin" });
             if (!db.objectStoreNames.contains("menu")) db.createObjectStore("menu", { keyPath: "itemId" });
             if (!db.objectStoreNames.contains("settings")) db.createObjectStore("settings", { keyPath: "key" });
-            if (!db.objectStoreNames.contains("orders")) db.createObjectStore("orders", { keyPath: "orderId" });
-            if (!db.objectStoreNames.contains("active_shifts")) db.createObjectStore("active_shifts", { keyPath: "pin" }); 
-            if (!db.objectStoreNames.contains("cash_drops")) db.createObjectStore("cash_drops", { keyPath: "dropId" }); 
-            if (!db.objectStoreNames.contains("shift_reports")) db.createObjectStore("shift_reports", { keyPath: "shiftId" }); 
-            if (!db.objectStoreNames.contains("expenses")) db.createObjectStore("expenses", { keyPath: "expenseId" });
             if (!db.objectStoreNames.contains("members")) db.createObjectStore("members", { keyPath: "phone" });
-            if (!db.objectStoreNames.contains("unsynced_members")) db.createObjectStore("unsynced_members", { keyPath: "phone" });
-            if (!db.objectStoreNames.contains("expense_categories")) db.createObjectStore("expense_categories", { keyPath: "name" });
-            if (!db.objectStoreNames.contains("void_requests")) db.createObjectStore("void_requests", { keyPath: "id" });
-            if (!db.objectStoreNames.contains("local_shift_history")) db.createObjectStore("local_shift_history", { keyPath: "shiftId" });
+            if (!db.objectStoreNames.contains("orders")) db.createObjectStore("orders", { keyPath: "orderId" });
+            if (!db.objectStoreNames.contains("expenses")) db.createObjectStore("expenses", { keyPath: "expenseId" });
             if (!db.objectStoreNames.contains("coin_retrievals")) db.createObjectStore("coin_retrievals", { keyPath: "retrievalId" });
-            if (!db.objectStoreNames.contains("ticket_coins")) db.createObjectStore("ticket_coins", { keyPath: "logId" });
+            if (!db.objectStoreNames.contains("cash_drops")) db.createObjectStore("cash_drops", { keyPath: "dropId" });
+            if (!db.objectStoreNames.contains("shift_reports")) db.createObjectStore("shift_reports", { keyPath: "shiftId" });
+            if (!db.objectStoreNames.contains("active_shifts")) db.createObjectStore("active_shifts", { keyPath: "pin" });
+            if (!db.objectStoreNames.contains("local_shift_history")) db.createObjectStore("local_shift_history", { keyPath: "shiftId" });
             if (!db.objectStoreNames.contains("promo_claims")) db.createObjectStore("promo_claims", { keyPath: "claimId" });
+            if (!db.objectStoreNames.contains("unsynced_members")) db.createObjectStore("unsynced_members", { keyPath: "phone" });
+            if (!db.objectStoreNames.contains("void_requests")) db.createObjectStore("void_requests", { keyPath: "id" });
             if (!db.objectStoreNames.contains("phone_updates")) db.createObjectStore("phone_updates", { keyPath: "id" });
+            if (!db.objectStoreNames.contains("expense_categories")) db.createObjectStore("expense_categories", { keyPath: "name" });
         };
-        request.onsuccess = (e) => { db = e.target.result; resolve(db); };
-        request.onerror = (e) => { reject(e); };
+        req.onsuccess = (e) => { db = e.target.result; resolve(); };
+        req.onerror = (e) => reject(e.target.error);
     });
 }
 
-// LOGIKA PWA INSTALL
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault(); deferredPrompt = e; 
@@ -72,42 +89,50 @@ window.installPWA = function() {
     } 
 };
 
-function processVoidApprovals(authStatuses) {
-    if (!db || !authStatuses) return;
-    if (authStatuses.orders) {
-        for (const [orderId, info] of Object.entries(authStatuses.orders)) {
-            db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = (e) => {
-                let order = e.target.result;
-                if (order && order.orderStatus !== info.status) { order.orderStatus = info.status; order.voidAuth = info.auth; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); }
-            };
-        }
-    }
-    if (authStatuses.expenses) {
-        for (const [expenseId, info] of Object.entries(authStatuses.expenses)) {
-            db.transaction(["expenses"], "readonly").objectStore("expenses").get(expenseId).onsuccess = (e) => {
-                let expense = e.target.result;
-                if (expense && expense.status !== info.status) { expense.status = info.status; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(expense); }
-            };
-        }
-    }
+function processVoidApprovals(authData) {
+    if (!db || !authData) return;
+    let tx = db.transaction(["orders", "expenses"], "readwrite");
+    let oStore = tx.objectStore("orders");
+    let eStore = tx.objectStore("expenses");
+    
+    oStore.getAll().onsuccess = (ev) => {
+        let orders = ev.target.result;
+        orders.forEach(o => {
+            if (authData.orders[o.orderId] && o.orderStatus !== authData.orders[o.orderId].status) {
+                o.orderStatus = authData.orders[o.orderId].status;
+                o.voidAuth = authData.orders[o.orderId].auth;
+                oStore.put(o);
+            }
+        });
+    };
+    
+    eStore.getAll().onsuccess = (ev) => {
+        let expenses = ev.target.result;
+        expenses.forEach(ex => {
+            if (authData.expenses[ex.expenseId] && ex.status !== authData.expenses[ex.expenseId].status) {
+                ex.status = authData.expenses[ex.expenseId].status;
+                ex.approvalAuth = authData.expenses[ex.expenseId].auth;
+                eStore.put(ex);
+            }
+        });
+    };
 }
 
 async function hashString(str) {
-    const msgUint8 = new TextEncoder().encode(str); const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-    const hashArray = Array.from(new Uint8Array(hashBuffer)); return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function formatWIB(dateString) { return new Date(dateString).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') + ' WIB'; }
 function formatTimeOnlyWIB(dateString) { return new Date(dateString).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false, hour: '2-digit', minute: '2-digit' }) + ' WIB'; }
 
-window.getDynamicSettings = function() {
-    return new Promise((resolve) => {
-        let settings = {};
-        db.transaction(["settings"], "readonly").objectStore("settings").getAll().onsuccess = (e) => {
-            if (e.target.result) { e.target.result.forEach(s => { settings[s.key] = s.value; }); }
-            resolve(settings);
-        };
-    });
+window.getDynamicSettings = async function() {
+    try {
+        const response = await fetch(API_URL + "?action=init", { method: 'GET', mode: 'cors' });
+        const result = await response.json();
+        if (result.status === "Success") return result.data.settings || {};
+    } catch(e) {}
+    return {};
 };
 
 function logUserActivity() {
@@ -167,8 +192,10 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
     receipt += "--------------------------------\n" + CMD_LEFT;
     receipt += "Nota: " + orderId + "\n";
     receipt += "Tgl : " + formatWIB(order.timestamp || new Date().toISOString()) + "\n";
-    receipt += "Ksr : " + order.cashier + "\n";
+    let outletDisplay = order.outlet ? ` (${order.outlet})` : "";
+    receipt += "Ksr : " + order.cashier + outletDisplay + "\n";
     receipt += "Plgn: " + order.customerName + "\n";
+    receipt += "WA  : " + (order.customerPhone !== "-" && !order.customerPhone.startsWith("999") ? "0"+order.customerPhone : "-") + "\n";
     receipt += "--------------------------------\n";
 
     let remainingPromos = [...(order.redeemedPromos || []).map(p => ({...p}))];
@@ -200,7 +227,6 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
     receipt += "--------------------------------\n";
     receipt += CMD_BOLD_ON + CMD_BIG + formatEscPosLine("TOTAL", order.grandTotal.toLocaleString('id-ID'), true) + "\n" + CMD_NORMAL + CMD_BOLD_OFF + "\n";
     
-    // --- BREAKDOWN PEMBAYARAN ---
     if (order.cashAmount > 0) receipt += formatEscPosLine(" - Tunai/Cash", order.cashAmount.toLocaleString('id-ID'), false) + "\n";
     if (order.qrisAmount > 0) receipt += formatEscPosLine(" - QRIS", order.qrisAmount.toLocaleString('id-ID'), false) + "\n";
     if (order.freeAmount > 0) receipt += formatEscPosLine(" - Diskon/Promo", order.freeAmount.toLocaleString('id-ID'), false) + "\n";
@@ -213,9 +239,15 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
         receipt += "--------------------------------\n" + CMD_CENTER + "-- INFO LOYALTY --\n" + CMD_LEFT;
         receipt += formatEscPosLine("Sisa Poin", newPoints + " / " + window.loyaltyTarget, false) + "\n";
         receipt += formatEscPosLine("Koin Gratis", newFree, false) + "\n";
+        
+        let pendingPromoCode = (order.newEarnedRewards && order.newEarnedRewards.length > 0) ? order.newEarnedRewards[0].code : null;
+        if (pendingPromoCode) {
+            receipt += "\n" + CMD_CENTER + "🎉 SELAMAT! ANDA MENDAPATKAN:\n" + CMD_BOLD_ON + order.newEarnedRewards[0].qty + "x " + order.newEarnedRewards[0].item + "\n" + CMD_NORMAL + CMD_BOLD_OFF + "Tunjukkan nota untuk klaim\n";
+        }
+        receipt += "--------------------------------\n";
     }
 
-    receipt += "--------------------------------\n" + CMD_CENTER;
+    receipt += CMD_CENTER;
     receipt += CMD_BOLD_ON + f1 + "\n" + CMD_BOLD_OFF;
     receipt += "\x1B!\x01" + CMD_CENTER; 
     if(f2) receipt += f2 + "\n";
@@ -235,7 +267,6 @@ window.buildShiftReportReceipt = async function(data) {
     r += "LAPORAN TUTUP SHIFT\n--------------------------------\n" + CMD_LEFT;
     let outletDisplay = data.outlet ? data.outlet : "Pusat";
     r += "ID Shift: " + data.shiftId + "\nOutlet  : " + outletDisplay + "\nKasir   : " + data.cashier + "\nLogin   : " + formatTimeOnlyWIB(data.loginTime) + "\nLogout  : " + formatTimeOnlyWIB(data.logoutTime) + "\n--------------------------------\n";
-    r += "ID Shift: " + data.shiftId + "\nKasir   : " + data.cashier + "\nLogin   : " + formatTimeOnlyWIB(data.loginTime) + "\nLogout  : " + formatTimeOnlyWIB(data.logoutTime) + "\n--------------------------------\n";
     r += formatEscPosLine("Total Nota", data.totalOrders, false) + "\n" + formatEscPosLine("Total Pelanggan", data.totalCustomers, false) + "\n--------------------------------\n";
     
     r += CMD_BOLD_ON + "PENERIMAAN KASIR & PIUTANG:" + CMD_BOLD_OFF + "\n";
@@ -279,7 +310,181 @@ window.buildShiftReportReceipt = async function(data) {
 };
 
 // ==========================================
-// 3. CORE LOGIN FAST SYNC
+// 3. SYNCHRONIZATION
+// ==========================================
+window.syncInitData = async function() {
+    if (!navigator.onLine) return;
+    try {
+        const response = await fetch(API_URL + "?action=init", { method: 'GET', mode: 'cors' });
+        const result = await response.json();
+        if (result.status === "Success") {
+            window.availableOutlets = (result.data.settings["Available_Outlets"] || "Pusat").split(",").map(s => s.trim());
+            let outletSel = document.getElementById("outlet-select");
+            if (outletSel) {
+                let savedOutlet = localStorage.getItem("selectedOutlet"); outletSel.innerHTML = "";
+                window.availableOutlets.forEach(out => {
+                    let opt = document.createElement("option"); opt.value = out; opt.innerText = out;
+                    if (out === savedOutlet) opt.selected = true; outletSel.appendChild(opt);
+                });
+                outletSel.onchange = (e) => localStorage.setItem("selectedOutlet", e.target.value);
+            }
+            if (result.data.staff) {
+                let txStaff = db.transaction(["staff"], "readwrite");
+                result.data.staff.forEach(s => txStaff.objectStore("staff").put(s));
+            }
+            let loginBtn = document.getElementById("btn-login"); 
+            if(loginBtn && loginBtn.innerText === "Menyiapkan...") loginBtn.innerText = "Masuk / Buka Shift";
+        }
+    } catch(e) {}
+};
+
+window.syncMasterData = async function(isSilent = false) {
+    let nTxt = document.getElementById("network-text"); let nDot = document.getElementById("network-dot");
+    if (!navigator.onLine) { if(nTxt) nTxt.innerText = "Mode Offline"; if(nDot) nDot.style.backgroundColor = "#e74c3c"; return; }
+    try {
+        const response = await fetch(API_URL, { method: 'GET', mode: 'cors' });
+        const result = await response.json();
+        
+        if (result.status === "Success") {
+            window.masterDrawerBalance = result.masterDrawerBalance || 0;
+            window.loyaltyTarget = result.data.loyaltyTarget || 10; 
+            window.globalPromos = result.data.promos || [];
+            window.globalRecentShifts = result.recentShifts || [];
+            window.expenseCategories = result.data.expenseCategories || [];
+            
+            window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
+            document.querySelectorAll("button[onclick*='openCashDrop'], #btn-drawer, #btn-cashdrop").forEach(btn => {
+                if(btn) btn.style.display = window.enableDrawerTracking ? "" : "none";
+            });
+
+            window.availableOutlets = (result.data.settings["Available_Outlets"] || "Pusat").split(",").map(s => s.trim());
+            window.laciStocks = result.laciStock || {};
+            window.coinsInMachines = result.coinsInMachine || {};
+            
+            let outletSel = document.getElementById("outlet-select");
+            if (outletSel) {
+                let savedOutlet = localStorage.getItem("selectedOutlet"); outletSel.innerHTML = "";
+                window.availableOutlets.forEach(out => {
+                    let opt = document.createElement("option"); opt.value = out; opt.innerText = out;
+                    if (out === savedOutlet) opt.selected = true; outletSel.appendChild(opt);
+                });
+                outletSel.onchange = (e) => localStorage.setItem("selectedOutlet", e.target.value);
+            }
+
+            if (result.data.staff) { let txStaff = db.transaction(["staff"], "readwrite"); result.data.staff.forEach(s => txStaff.objectStore("staff").put(s)); }
+            if (result.data.menu) { window.globalMenuDataRaw = result.data.menu; let txMenu = db.transaction(["menu"], "readwrite"); result.data.menu.forEach(m => txMenu.objectStore("menu").put(m)); }
+            if (result.data.members) { let txMem = db.transaction(["members"], "readwrite"); result.data.members.forEach(m => txMem.objectStore("members").put(m)); }
+
+            let txOthers = db.transaction(["unsynced_members"], "readonly");
+            txOthers.objectStore("unsynced_members").getAll().onsuccess = (e) => {
+                let unsynced = e.target.result;
+                if (unsynced.length > 0) { let txPut = db.transaction(["members"], "readwrite"); unsynced.forEach(m => txPut.objectStore("members").put(m)); }
+                
+                activeLaundryTickets = result.data.activeLaundryOrders || [];
+                let tCount = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
+                let pCount = activeLaundryTickets.filter(t => t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0).length;
+                
+                let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
+                let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
+                
+                if (!document.getElementById("pos-screen").classList.contains("hidden")) { window.renderActiveTickets(); window.renderPiutangTickets(); }
+                if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
+            };
+        }
+    } catch (error) {}
+};
+
+window.manualPushSync = async function() {
+    if (!navigator.onLine) return alert("Anda sedang offline!");
+    let nTxt = document.getElementById("network-text"); let nDot = document.getElementById("network-dot");
+    if(nTxt) nTxt.innerText = "Mengirim Data..."; if(nDot) nDot.style.backgroundColor = "#f39c12";
+    let lTxt = document.getElementById("login-network-text"); let lDot = document.getElementById("login-network-dot");
+    if(lTxt) lTxt.innerText = "Mendorong Data Lokal..."; if(lDot) lDot.style.backgroundColor = "#f39c12";
+
+    await window.runBackgroundSync();
+    if(nTxt) nTxt.innerText = "Menarik Data..."; if(lTxt) lTxt.innerText = "Sinkronisasi Server...";
+    await window.syncMasterData(); alert("Sinkronisasi Database Berhasil!");
+};
+
+window.runBackgroundSync = async function() {
+    if (!navigator.onLine || isSyncing) return; isSyncing = true; 
+    try {
+        let orders = await new Promise(res => db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = e => res(e.target.result));
+        for (const order of orders) {
+            if (order.syncStatus === "Pending") {
+                try {
+                    let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncOrder", data: order }) });
+                    if ((await r.json()).status === "Success") { order.syncStatus = "Synced"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); }
+                } catch(e) {}
+            }
+        }
+        let reports = await new Promise(res => db.transaction(["shift_reports"], "readonly").objectStore("shift_reports").getAll().onsuccess = e => res(e.target.result));
+        for (const report of reports) {
+            try {
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncShiftReport", data: report }) });
+                if ((await r.json()).status === "Success") db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId);
+            } catch(e) {}
+        }
+        let promoClaims = await new Promise(res => db.transaction(["promo_claims"], "readonly").objectStore("promo_claims").getAll().onsuccess = e => res(e.target.result));
+        for (const claim of promoClaims) {
+            try {
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncPromoClaim", data: claim }) });
+                if ((await r.json()).status === "Success") db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").delete(claim.claimId);
+            } catch(e) {}
+        }
+        let expenses = await new Promise(res => db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
+        for (const exp of expenses) {
+            if (exp.syncStatus === "Pending") {
+                try {
+                    let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncExpense", data: exp }) });
+                    if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); }
+                } catch(e) {}
+            }
+        }
+        let cashDrops = await new Promise(res => db.transaction(["cash_drops"], "readonly").objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
+        for (const drop of cashDrops) {
+            try {
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncCashDrop", data: drop }) });
+                if ((await r.json()).status === "Success") db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").delete(drop.dropId);
+            } catch(e) {}
+        }
+        let voids = await new Promise(res => db.transaction(["void_requests"], "readonly").objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
+        for (const req of voids) {
+            try {
+                const actionType = req.type === 'orders' ? "requestOrderVoid" : "requestExpenseVoid"; const payload = req.type === 'orders' ? { orderId: req.id, status: req.status, authName: req.authName } : { expenseId: req.id, status: req.status, authName: req.authName };
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: actionType, ...payload }) });
+                if ((await r.json()).status === "Success") db.transaction(["void_requests"], "readwrite").objectStore("void_requests").delete(req.id);
+            } catch(e) {}
+        }
+        let members = await new Promise(res => db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
+        for (const mem of members) {
+            try {
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncMember", data: mem }) });
+                if ((await r.json()).status === "Success") db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone);
+            } catch(e) {}
+        }
+        let coinRets = await new Promise(res => db.transaction(["coin_retrievals"], "readonly").objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
+        for (const cr of coinRets) {
+            if (cr.syncStatus === "Pending") {
+                try {
+                    let actionCode = cr.notes && cr.notes.includes("Macet") ? "syncCoinJammed" : "syncCoinRetrieval";
+                    let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: actionCode, data: cr }) });
+                    if ((await r.json()).status === "Success") { cr.syncStatus = "Synced"; db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").put(cr); }
+                } catch(e) {}
+            }
+        }
+        let phoneUpds = await new Promise(res => db.transaction(["phone_updates"], "readonly").objectStore("phone_updates").getAll().onsuccess = e => res(e.target.result));
+        for (const pu of phoneUpds) {
+            try {
+                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "updateMemberPhone", data: pu }) });
+                if ((await r.json()).status === "Success") db.transaction(["phone_updates"], "readwrite").objectStore("phone_updates").delete(pu.id);
+            } catch(e) {}
+        }
+    } finally { isSyncing = false; }
+};
+
+// ==========================================
+// 4. LOGIN & WORKSPACE
 // ==========================================
 window.attemptLogin = async function() {
     const pinInput = document.getElementById("cashier-pin");
@@ -295,7 +500,7 @@ window.attemptLogin = async function() {
         if (!staff) { 
             if (navigator.onLine) { 
                 if(loginBtn) loginBtn.innerText = "Menarik Data Baru...";
-                await window.syncInitData(); // Fast Sync
+                await window.syncInitData(); 
                 let staffList = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = e => res(e.target.result));
                 staff = staffList.find(s => s.pin === hashedPin);
             } 
@@ -309,10 +514,8 @@ window.attemptLogin = async function() {
             if (!selectedOutlet || !allowedOutlets.includes(selectedOutlet)) {
                 selectedOutlet = allowedOutlets.length > 0 ? allowedOutlets[0] : (window.availableOutlets.length > 0 ? window.availableOutlets[0] : "Pusat");
             }
-            localStorage.setItem("selectedOutlet", selectedOutlet);
-            window.currentOutlet = selectedOutlet;
+            localStorage.setItem("selectedOutlet", selectedOutlet); window.currentOutlet = selectedOutlet;
             
-            // BACA MENU DARI DATABASE LOKAL
             let localMenu = await new Promise(res => db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = e => res(e.target.result));
             window.globalMenuDataRaw = localMenu || [];
             
@@ -328,65 +531,46 @@ window.attemptLogin = async function() {
             }).sort((a, b) => String(a.itemId).localeCompare(String(b.itemId)));
 
             db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(hashedPin).onsuccess = (shiftReq) => {
-                const activeShift = shiftReq.target.result;
-                currentCashier = staff.name; currentPin = hashedPin;
+                const activeShift = shiftReq.target.result; currentCashier = staff.name; currentPin = hashedPin;
                 if (activeShift) { 
                     currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime;
                 } else { 
-                    currentShiftId = "SHF-" + Date.now();
-                    currentLoginTime = new Date().toISOString();
+                    currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString();
                     db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: hashedPin, shiftId: currentShiftId, loginTime: currentLoginTime, lastActiveTime: Date.now(), cashierName: currentCashier});
                 }
                 
                 let btnKoin = document.getElementById("btn-koin-top");
                 if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks ? (window.laciStocks[selectedOutlet] || 0) : 0} | Mesin: ${window.coinsInMachines ? (window.coinsInMachines[selectedOutlet] || 0) : 0}`;
 
-                document.getElementById("login-screen").classList.add("hidden");
-                document.getElementById("pos-screen").classList.remove("hidden");
+                document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden");
                 document.getElementById("display-cashier").innerText = currentCashier + ` (${selectedOutlet})`;
-                
-                window.switchWorkspace('new'); window.lockMenu();
-                loadMenuUI();
+                window.switchWorkspace('new'); window.lockMenu(); loadMenuUI();
             };
-        } else {
-            alert("PIN Kasir Salah atau Belum Terdaftar!");
-        }
-    } catch (err) {
-        alert("Terjadi kesalahan sistem login.");
-    } finally {
-        pinInput.value = "";
-        if(loginBtn) loginBtn.innerText = "Masuk / Buka Shift";
-    }
+        } else { alert("PIN Kasir Salah atau Belum Terdaftar!"); }
+    } catch (err) { alert("Terjadi kesalahan sistem login."); } finally { pinInput.value = ""; if(loginBtn) loginBtn.innerText = "Masuk / Buka Shift"; }
 };
 
 window.switchWorkspace = function(type) {
     document.querySelectorAll('.ws-tab').forEach(b => b.classList.remove('active'));
-    let mainWs = document.getElementById("main-workspace-wrapper");
-    let ticketWs = document.getElementById("active-tickets-workspace");
-    let piutangWs = document.getElementById("piutang-workspace");
-    
-    if(mainWs) mainWs.classList.add("hidden");
-    if(ticketWs) ticketWs.classList.add("hidden");
-    if(piutangWs) piutangWs.classList.add("hidden");
+    let mainWs = document.getElementById("main-workspace-wrapper"); let ticketWs = document.getElementById("active-tickets-workspace"); let piutangWs = document.getElementById("piutang-workspace");
+    if(mainWs) mainWs.classList.add("hidden"); if(ticketWs) ticketWs.classList.add("hidden"); if(piutangWs) piutangWs.classList.add("hidden");
 
     if (type === 'new') {
         let tab = document.getElementById("tab-new-order"); if(tab) tab.classList.add("active");
         if(mainWs) mainWs.classList.remove("hidden");
     } else if (type === 'tickets') {
         let tab = document.getElementById("tab-active-tickets"); if(tab) tab.classList.add("active");
-        if(ticketWs) ticketWs.classList.remove("hidden");
-        window.renderActiveTickets(); 
+        if(ticketWs) ticketWs.classList.remove("hidden"); window.renderActiveTickets(); 
     } else if (type === 'piutang') {
         let tab = document.getElementById("tab-piutang"); if(tab) tab.classList.add("active");
-        if(piutangWs) piutangWs.classList.remove("hidden");
-        window.renderPiutangTickets();
+        if(piutangWs) piutangWs.classList.remove("hidden"); window.renderPiutangTickets();
     }
 };
 
 window.lockScreen = function() { window.location.reload(); };
 
 // ==========================================
-// 4. ANTREAN, PELANGGAN & AUTOCOMPLETE (ANTI-BUG)
+// 5. ANTREAN, PELANGGAN & AUTOCOMPLETE 
 // ==========================================
 window.switchAntrean = function(index) {
     if (currentAntreanIndex === index) return;
@@ -473,7 +657,6 @@ window.openLotteryModal = function() {
         let currentOutlet = window.currentOutlet || "Pusat";
         window.globalPromos.forEach(p => { 
             let usedInOutlet = p.usedQuotaJson ? (p.usedQuotaJson[currentOutlet] || 0) : 0;
-            // Cek kuota KHUSUS per Outlet
             if(p.weeklyQuota === 0 || usedInOutlet < p.weeklyQuota) { 
                 select.innerHTML += `<option value="${p.code}">${p.code} (${p.rewardItem})</option>`; 
             } 
@@ -624,10 +807,7 @@ window.handleAutocomplete = function(e) {
         }
         
         matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
-
-        if (val.length === 0) {
-            matches = matches.slice(0, 15);
-        }
+        if (val.length === 0) { matches = matches.slice(0, 15); }
 
         if (matches.length > 0) {
             resBox.innerHTML = matches.map(m => `
@@ -636,8 +816,7 @@ window.handleAutocomplete = function(e) {
                     <div style="font-size: 13px; color: #555; margin-top:2px;">${m.name}</div>
                 </div>
             `).join("");
-            resBox.classList.remove("hidden");
-            resBox.style.display = "block";
+            resBox.classList.remove("hidden"); resBox.style.display = "block";
         } else { 
             resBox.classList.add("hidden"); resBox.style.display = "none"; 
         }
@@ -654,8 +833,8 @@ window.openEditMember = function() {
 };
 
 window.submitEditMember = function() {
-    let eop = document.getElementById("edit-old-phone"); let oldPhone = eop ? eop.value.trim() : ""; 
-    let enp = document.getElementById("edit-new-phone"); let newPhone = enp ? enp.value.trim() : "";
+    let eop = document.getElementById("edit-old-phone"); let oldPhone = eop ? eop.value.replace(/\D/g, '').replace(/^0+/, '') : ""; 
+    let enp = document.getElementById("edit-new-phone"); let newPhone = enp ? enp.value.replace(/\D/g, '').replace(/^0+/, '') : "";
     let enn = document.getElementById("edit-new-name"); let newName = enn ? enn.value.trim() : "";
     
     if(!oldPhone || !newPhone) return alert("Nomor tidak boleh kosong.");
@@ -675,8 +854,14 @@ window.submitEditMember = function() {
     };
 };
 
+window.saveMemberToDB = function(profile) {
+    if(!profile.phone || profile.phone === "-") return;
+    db.transaction(["members"], "readwrite").objectStore("members").put(profile);
+    db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(profile);
+};
+
 // ==========================================
-// 5. MENU & NUMPAD & TRANSAKSI (CART)
+// 6. MENU & NUMPAD & TRANSAKSI (CART)
 // ==========================================
 function loadMenuUI() {
     if (!globalMenuData || globalMenuData.length === 0) {
@@ -796,6 +981,9 @@ window.renderCart = function() {
     window.cartSubtotal = total; window.cartGrandTotal = total;
 };
 
+// ==========================================
+// 7. CHECKOUT & REVIEW PAYMENT
+// ==========================================
 window.openReview = function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
@@ -932,7 +1120,12 @@ window.finalizeOrder = async function(shouldPrint) {
     let pf = document.getElementById("pay-free"); let free = pf ? Number(pf.value) : 0;
     
     const totalPiutang = hotelPiutang + tamuPiutang; 
-    if ((window.cartGrandTotal - (cash + qris + totalPiutang)) > 0) return alert("⚠️ Pembayaran Belum Cukup!");
+    if ((window.cartGrandTotal - (cash + qris + totalPiutang)) > 0) {
+        return alert("⚠️ Nominal Pembayaran masih kurang! Harap periksa kembali.");
+    }
+    if ((cash + qris + totalPiutang) > window.cartGrandTotal) {
+        return alert("⚠️ Nominal Pembayaran melebih Total Akhir! Harap periksa kembali.");
+    }
 
     const targetOrderId = "ORD-" + Date.now();
 
@@ -1028,9 +1221,9 @@ window.finalizeOrder = async function(shouldPrint) {
     const orderPayload = {
         orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier || "Unknown", shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
-        paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
+        paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: 0, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, 
-        actualCoins: isLaundry ? 0 : expectedCoinsTotal, // FIX Instant: Langsung set aktual
+        actualCoins: isLaundry ? 0 : expectedCoinsTotal,
         outlet: currentOutlet, syncStatus: "Pending" 
     };
 
@@ -1065,14 +1258,8 @@ window.finalizeOrder = async function(shouldPrint) {
     };
 };
 
-window.saveMemberToDB = function(profile) {
-    if(!profile.phone || profile.phone === "-") return;
-    db.transaction(["members"], "readwrite").objectStore("members").put(profile);
-    db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(profile);
-};
-
 // ==========================================
-// 6. TIKET AKTIF & CUCIAN BERJALAN
+// 8. TIKET AKTIF & PIUTANG
 // ==========================================
 window.renderActiveTickets = function() {
     const grid = document.getElementById("ticket-grid-container"); if(!grid) return;
@@ -1083,7 +1270,7 @@ window.renderActiveTickets = function() {
     tickets.forEach((ticket) => {
         const isReady = ticket.orderStatus === "Ready for Pickup";
         let receiptText = ticket.readableReceipt || (ticket.items ? ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n') : "");
-        let expectedWashing = ticket.washingCoins || 0; // Hanya ambil asumsi cuci
+        let expectedWashing = ticket.washingCoins || 0; 
         
         let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${expectedWashing})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil & Selesai</button>`;
         grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:13px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>${buttonsHtml}</div>`;
@@ -1093,7 +1280,6 @@ window.renderActiveTickets = function() {
 window.renderPiutangTickets = function() {
     const grid = document.getElementById("piutang-grid-container"); if(!grid) return;
     grid.innerHTML = "";
-    
     let tickets = activeLaundryTickets.filter(t => (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0));
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada tagihan piutang aktif.</p>";
     
@@ -1106,7 +1292,7 @@ window.renderPiutangTickets = function() {
 
 window.markTicketReady = function(orderId, expectedWashing) {
     window.activeDoneOrderId = orderId;
-    let elExpected = document.getElementById("done-expected-coins"); if (elExpected) elExpected.innerText = expectedWashing; // Tampilkan khusus koin cuci
+    let elExpected = document.getElementById("done-expected-coins"); if (elExpected) elExpected.innerText = expectedWashing; 
     let elActual = document.getElementById("done-actual-coins"); if (elActual) elActual.value = expectedWashing; 
     let modal = document.getElementById("ticket-done-modal"); if (modal) modal.classList.remove("hidden");
 };
@@ -1119,12 +1305,9 @@ window.submitTicketDone = function() {
     const ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
     if (ticket) {
         ticket.orderStatus = "Ready for Pickup"; 
-        
         let instantC = ticket.instantCoins || 0;
-        ticket.actualCoins = actualWashingInput + instantC; // Aktual Total = Aktual Cuci + Jual/Instant
-        
+        ticket.actualCoins = actualWashingInput + instantC; 
         if (actualWashingInput !== expectedWashing) { ticket.coinDiscrepancy = true; } 
-        
         ticket.syncStatus = "Pending";
         db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
         window.renderActiveTickets(); window.runBackgroundSync();
@@ -1134,20 +1317,17 @@ window.submitTicketDone = function() {
 
 window.openSettlement = function(orderId, remainingDue) {
     activeSettlementTicket = activeLaundryTickets.find(t => t.orderId === orderId);
-    
     if (remainingDue <= 0) {
         if(confirm("Cucian ini sudah LUNAS. Tandai sudah diambil pelanggan?")) {
             activeSettlementTicket.orderStatus = "Completed"; 
             activeSettlementTicket.syncStatus = "Pending";
             db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
             activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
-            window.renderActiveTickets(); 
-            window.runBackgroundSync();
-            activeSettlementTicket = null;
+            let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
+            window.renderActiveTickets(); window.runBackgroundSync(); activeSettlementTicket = null;
         }
         return;
     }
-
     let elAmt = document.getElementById("settle-amount"); if(elAmt) elAmt.innerText = `Rp ${remainingDue.toLocaleString('id-ID')}`;
     let elCash = document.getElementById("settle-cash"); if(elCash) elCash.value = remainingDue;
     let elQris = document.getElementById("settle-qris"); if(elQris) elQris.value = 0;
@@ -1157,10 +1337,11 @@ window.openSettlement = function(orderId, remainingDue) {
 window.confirmSettlement = function() {
     if (!activeSettlementTicket) return;
     const c = Number(document.getElementById("settle-cash").value) || 0; const q = Number(document.getElementById("settle-qris").value) || 0; 
-    activeSettlementTicket.cashAmount += c; activeSettlementTicket.qrisAmount += q; 
+    activeSettlementTicket.cashAmount = (activeSettlementTicket.cashAmount || 0) + c; activeSettlementTicket.qrisAmount = (activeSettlementTicket.qrisAmount || 0) + q; 
     activeSettlementTicket.orderStatus = "Completed"; activeSettlementTicket.syncStatus = "Pending";
     db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
     activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
+    let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
     document.getElementById("settlement-modal").classList.add("hidden"); window.renderActiveTickets(); window.runBackgroundSync();
 };
 
@@ -1176,58 +1357,20 @@ window.confirmPiutangPayment = function() {
     if (!activeSettlementTicket) return;
     const c = Number(document.getElementById("piutang-settle-cash").value) || 0; 
     const q = Number(document.getElementById("piutang-settle-qris").value) || 0; 
-    
     activeSettlementTicket.cashAmount = (activeSettlementTicket.cashAmount || 0) + c; 
     activeSettlementTicket.qrisAmount = (activeSettlementTicket.qrisAmount || 0) + q; 
-    
-    activeSettlementTicket.hotelPiutangAmount = 0;
-    activeSettlementTicket.tamuPiutangAmount = 0;
-    activeSettlementTicket.orderStatus = "Completed"; 
-    activeSettlementTicket.piutangPaidDate = new Date().toISOString(); 
-    activeSettlementTicket.syncStatus = "Pending";
-    
+    activeSettlementTicket.hotelPiutangAmount = 0; activeSettlementTicket.tamuPiutangAmount = 0;
+    activeSettlementTicket.orderStatus = "Completed"; activeSettlementTicket.piutangPaidDate = new Date().toISOString(); activeSettlementTicket.syncStatus = "Pending";
     db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
     activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
-    
-    document.getElementById("piutang-payment-modal").classList.add("hidden"); 
-    window.renderPiutangTickets(); window.runBackgroundSync();
+    let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = activeLaundryTickets.filter(t => t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0).length;
+    document.getElementById("piutang-payment-modal").classList.add("hidden"); window.renderPiutangTickets(); window.runBackgroundSync();
 };
 
 // ==========================================
-// 7. OPERASIONAL PENGELUARAN LACI
+// 9. RIWAYAT, PENGELUARAN, VOID, SHIFT
 // ==========================================
-window.openExpenseModal = function() { 
-    document.getElementById("expense-modal").classList.remove("hidden"); 
-    const list = document.getElementById("expense-category-list");
-    if(list && window.expenseCategories) { 
-        list.innerHTML = ""; 
-        window.expenseCategories.forEach(cat => { 
-            const opt = document.createElement("option"); opt.value = cat; list.appendChild(opt); 
-        }); 
-    } 
-};
-
-window.saveExpense = function() { 
-    const amount = Number(document.getElementById("exp-amount").value); 
-    const category = document.getElementById("exp-category").value.trim();
-    if (amount <= 0 || !category) return alert("Harap masukkan jumlah dan kategori yang benar."); 
-    db.transaction(["expense_categories"], "readwrite").objectStore("expense_categories").put({ name: category });
-    
-    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
-    const payload = { expenseId: "EXP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, category: category, description: document.getElementById("exp-desc").value || "-", amount: amount, status: "Active", outlet: currentOutlet, syncStatus: "Pending" }; 
-    db.transaction(["expenses"], "readwrite").objectStore("expenses").add(payload); 
-    document.getElementById("expense-modal").classList.add("hidden"); 
-    document.getElementById("exp-amount").value = ""; document.getElementById("exp-category").value = ""; document.getElementById("exp-desc").value = ""; 
-    alert("Pengeluaran Berhasil Dicatat!"); window.runBackgroundSync(); 
-};
-
-// ==========================================
-// 8. MODUL RINGKASAN HISTORI & VOID TRANSAKSI
-// ==========================================
-window.openHistoryModal = function() {
-    document.getElementById("history-modal").classList.remove("hidden");
-    window.renderHistoryList('orders');
-};
+window.openHistoryModal = function() { document.getElementById("history-modal").classList.remove("hidden"); window.renderHistoryList('orders'); };
 
 window.renderHistoryList = function(type) {
     const container = document.getElementById("history-container"); if(!container) return;
@@ -1236,23 +1379,22 @@ window.renderHistoryList = function(type) {
         db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
             const shiftOrders = e.target.result.filter(o => o.shiftId === currentShiftId).reverse();
             if(shiftOrders.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada order di shift ini.</div>`;
-            shiftOrders.forEach(o => {
+            container.innerHTML = shiftOrders.map(o => {
                 let badge = o.orderStatus === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : o.orderStatus === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">${o.orderStatus}</span>`;
-                let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="window.requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;" title="Batalkan Transaksi">Batal</button>` : '';
-                let printBtn = `<button onclick="window.reprintOrder('${o.orderId}')" style="background:#3498db; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">🖨️</button>`;
-                let detailBtn = `<button onclick="window.viewOrderDetails('${o.orderId}')" style="background:#f39c12; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">👁️ Detail</button>`;
-                container.innerHTML += `<div class="history-row"><div><strong>${o.customerName}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(o.timestamp)} | Rp ${o.grandTotal.toLocaleString('id-ID')}</small></div><div style="display:flex; align-items:center; gap:8px;">${badge} ${detailBtn} ${printBtn} ${btn}</div></div>`;
-            });
+                let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="window.requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:10px;">Batalkan</button>` : '';
+                let detailBtn = `<button onclick="window.viewOrderDetails('${o.orderId}')" style="background:#f39c12; color:white; border:none; padding:4px 8px; border-radius:4px;">👁️</button>`;
+                return `<div class="history-row"><div style="flex:1;"><strong>${o.orderId}</strong><br><small>${o.customerName}</small><br><span style="margin-top:4px; display:inline-block;">${badge}</span></div><div style="text-align:right;"><strong>Rp ${o.grandTotal.toLocaleString('id-ID')}</strong><br><div style="margin-top:4px; display:flex; gap:4px; justify-content:flex-end;">${detailBtn} ${btn}</div></div></div>`;
+            }).join('');
         };
     } else if (type === 'expenses') {
         db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = (e) => {
-            const shiftExpenses = e.target.result.filter(exp => exp.shiftId === currentShiftId).reverse();
-            if(shiftExpenses.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada pengeluaran dicatat.</div>`;
-            shiftExpenses.forEach(exp => {
-                let badge = exp.status === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : exp.status === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">Aktif</span>`;
-                let btn = (exp.status !== "Voided" && exp.status !== "Void Pending") ? `<button onclick="window.requestVoid('expenses', '${exp.expenseId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Batal</button>` : '';
-                container.innerHTML += `<div class="history-row"><div><strong>${exp.category}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(exp.timestamp)} | Rp ${exp.amount.toLocaleString('id-ID')}</small><br><small>${exp.description}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
-            });
+            const shiftExpenses = e.target.result.filter(o => o.shiftId === currentShiftId).reverse();
+            if(shiftExpenses.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada pengeluaran di shift ini.</div>`;
+            container.innerHTML = shiftExpenses.map(o => {
+                let badge = o.status === 'Active' ? `<span class="status-badge status-paid">Aktif</span>` : `<span class="status-badge status-voided">${o.status}</span>`;
+                let btn = (o.status === 'Active') ? `<button onclick="window.requestVoid('expenses', '${o.expenseId}')" style="background:#e74c3c; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:10px;">Batalkan</button>` : '';
+                return `<div class="history-row"><div style="flex:1;"><strong>${o.category}</strong><br><small>${o.description}</small><br><span style="margin-top:4px; display:inline-block;">${badge}</span></div><div style="text-align:right;"><strong>Rp ${o.amount.toLocaleString('id-ID')}</strong><br><div style="margin-top:4px;">${btn}</div></div></div>`;
+            }).join('');
         };
     } else if (type === 'aruskas') {
         Promise.all([
@@ -1262,54 +1404,52 @@ window.renderHistoryList = function(type) {
             let shiftOrders = orders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
             let shiftExpenses = expenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
             let combined = [];
-            shiftOrders.forEach(o => {
-                let totalIn = (o.cashAmount || 0) + (o.qrisAmount || 0);
-                if (totalIn > 0) { combined.push({ type: 'in', time: new Date(o.timestamp), desc: `Nota: ${o.orderId}`, amount: totalIn }); }
-            });
-            shiftExpenses.forEach(e => {
-                combined.push({ type: 'out', time: new Date(e.timestamp), desc: `Pengeluaran: ${e.category}`, amount: e.amount });
-            });
+            shiftOrders.forEach(o => { let totalIn = (o.cashAmount || 0) + (o.qrisAmount || 0); if (totalIn > 0) combined.push({ type: 'in', time: new Date(o.timestamp), desc: `Nota: ${o.orderId}`, amount: totalIn }); });
+            shiftExpenses.forEach(e => { combined.push({ type: 'out', time: new Date(e.timestamp), desc: `Pengeluaran: ${e.category}`, amount: e.amount }); });
             combined.sort((a, b) => b.time - a.time);
             if(combined.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada arus kas tunai di shift ini.</div>`;
             combined.forEach(log => {
-                let color = log.type === 'in' ? '#27ae60' : '#e74c3c';
-                let sign = log.type === 'in' ? '+' : '-';
+                let color = log.type === 'in' ? '#27ae60' : '#e74c3c'; let sign = log.type === 'in' ? '+' : '-';
                 container.innerHTML += `<div class="history-row"><div><strong>${log.desc}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(log.time.toISOString())}</small></div><div style="font-weight:bold; font-size:16px; color:${color};">${sign}Rp ${log.amount.toLocaleString('id-ID')}</div></div>`;
             });
         });
     } else if (type === 'shifts') {
         const renderShiftsHTML = (shiftsData) => {
             const filtered = shiftsData.filter(s => s.cashier === currentCashier).slice(0, 6);
-            if(filtered.length === 0) { container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada histori shift Anda di sistem.</div>`; return; }
+            if(filtered.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada histori shift Anda di sistem.</div>`;
             filtered.forEach(s => {
                 let detailBtn = `<button onclick="window.viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">👁️ Detail</button>`;
-                let printBtn = `<button onclick="window.printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">🖨️ Cetak</button>`;
-                let itemsStr = "Tidak ada item";
-                if (s.foodSummary && Object.keys(s.foodSummary).length > 0) itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
-
-                container.innerHTML += `
-                <div class="history-row" style="align-items:flex-start; display:flex; gap:10px;">
-                    <div style="flex:2;">
-                        <strong>Shift: ${s.shiftId}</strong><br>
-                        <small style="color:#7f8c8d;">Keluar: ${formatWIB(s.logoutTime)}</small><br>
-                        <small style="color:#2980b9; display:block; margin-top:4px; line-height:1.4;">📦 <strong>Item:</strong> ${itemsStr}</small>
-                    </div>
-                    <div style="flex:1; text-align:right;">
-                        <strong style="color:#27ae60; display:block; margin-bottom:6px; font-size:14px;">Rp ${(s.totalOmset || 0).toLocaleString('id-ID')}</strong>
-                        <div style="display:flex; justify-content:flex-end; gap:5px;">${detailBtn} ${printBtn}</div>
-                    </div>
-                </div>`;
+                let itemsStr = "Tidak ada item"; if (s.foodSummary && Object.keys(s.foodSummary).length > 0) itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
+                let outletStr = s.outlet ? ` (${s.outlet})` : "";
+                container.innerHTML += `<div class="history-row" style="align-items:flex-start; display:flex; gap:10px;"><div style="flex:2;"><strong>Shift: ${s.shiftId}${outletStr}</strong><br><small style="color:#7f8c8d;">Keluar: ${formatWIB(s.logoutTime)}</small><br><small style="color:#2980b9; display:block; margin-top:4px; line-height:1.4;">📦 <strong>Item:</strong> ${itemsStr}</small></div><div style="flex:1; text-align:right;"><strong style="color:#27ae60; display:block; margin-bottom:6px; font-size:14px;">Rp ${(s.totalOmset || 0).toLocaleString('id-ID')}</strong><div style="display:flex; justify-content:flex-end; gap:5px;">${detailBtn}</div></div></div>`;
             });
         };
-        if (window.globalRecentShifts && window.globalRecentShifts.length > 0) { renderShiftsHTML(window.globalRecentShifts); } 
-        else { db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").getAll().onsuccess = (e) => { renderShiftsHTML(e.target.result.reverse()); }; }
+        if (window.globalRecentShifts && window.globalRecentShifts.length > 0) renderShiftsHTML(window.globalRecentShifts); else db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").getAll().onsuccess = (e) => renderShiftsHTML(e.target.result.reverse());
     }
+};
+
+window.requestVoid = function(type, id) {
+    if (!confirm("Apakah Anda yakin ingin membatalkan (VOID) data ini?")) return;
+    const authName = prompt("Masukkan Nama Manager / Penanggung Jawab untuk Otorisasi Void:");
+    if (!authName) return alert("Otorisasi dibatalkan.");
+    const payload = { id: id, type: type, status: "Void Pending", authName: authName, syncStatus: "Pending" };
+    db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add(payload);
+    
+    let tx = db.transaction([type], "readwrite");
+    tx.objectStore(type).get(id).onsuccess = (e) => {
+        let rec = e.target.result;
+        if(rec) {
+            if(type === 'orders') rec.orderStatus = "Void Pending"; else rec.status = "Void Pending";
+            tx.objectStore(type).put(rec);
+            alert("Permintaan Void berhasil dikirim dan menunggu persetujuan (Pending)."); window.openHistoryModal(); window.renderHistoryList(type); window.runBackgroundSync();
+        }
+    };
 };
 
 window.viewOrderDetails = function(orderId) {
     db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = (e) => {
         let order = e.target.result; if(!order) return alert("Order tidak ditemukan.");
-        let itemsHtml = ""; let remainingPromos = [...(order.redeemedPromos || []).map(p => ({...p}))];
+        let itemsHtml = ""; 
         order.items.forEach(item => {
             let lineTotal = item.qty * item.originalPrice;
             itemsHtml += `<div style="display:flex; justify-content:space-between; margin-top:8px;"><div style="font-weight:bold;">${item.qty}x ${item.name}</div><div style="font-weight:bold;">Rp ${lineTotal.toLocaleString('id-ID')}</div></div>`;
@@ -1323,290 +1463,17 @@ window.viewOrderDetails = function(orderId) {
     };
 };
 
-window.reprintOrder = async function(orderId) { 
-    if (!btCharacteristic) return alert("Printer belum terhubung! Silakan hubungkan dari menu atas.");
-    db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = async (e) => {
-        const order = e.target.result;
-        if (!order) return alert("Data order tidak ditemukan di memori lokal.");
-        const deposit = (order.cashAmount || 0) + (order.qrisAmount || 0) + (order.freeAmount || 0) + (order.hotelPiutangAmount || 0) + (order.tamuPiutangAmount || 0);
-        if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in" && !order.customerPhone.startsWith("999")) {
-            db.transaction(["members"], "readonly").objectStore("members").get(order.customerPhone).onsuccess = async (me) => {
-                let mem = me.target.result; let pts = mem ? mem.points : 0; let fre = mem ? mem.freeCoins : 0;
-                if (typeof window.buildEscPosReceipt === "function") await window.buildEscPosReceipt(order.orderId + " (COPY)", order, deposit, 0, order.paymentMethod, pts, fre);
-            };
-        } else { if (typeof window.buildEscPosReceipt === "function") await window.buildEscPosReceipt(order.orderId + " (COPY)", order, deposit, 0, order.paymentMethod, 0, 0); }
-    };
-};
-
-window.printShiftReportFromHistory = async function(shiftId) { 
-    if (!btCharacteristic) return alert("Printer belum terhubung! Silakan hubungkan dari menu atas.");
-    const onlineShift = (window.globalRecentShifts || []).find(s => s.shiftId === shiftId);
-    if (onlineShift) {
-        if (typeof window.buildShiftReportReceipt === "function") await window.buildShiftReportReceipt(onlineShift);
-    } else {
-        db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").get(shiftId).onsuccess = async (e) => {
-            let shiftData = e.target.result;
-            if (!shiftData) return alert("Data laporan shift ini tidak ditemukan di memori lokal tablet ini.");
-            if (typeof window.buildShiftReportReceipt === "function") await window.buildShiftReportReceipt(shiftData);
-        };
-    }
-};
-
 window.viewShiftDetails = function(shiftId) { 
     const onlineShift = (window.globalRecentShifts || []).find(s => s.shiftId === shiftId);
-    if (onlineShift) {
-        window.currentShiftData = onlineShift; 
-        window.openShiftReport(onlineShift); 
-    } else {
+    if (onlineShift) { window.currentShiftData = onlineShift; window.openShiftReport(onlineShift); } 
+    else {
         db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").get(shiftId).onsuccess = (e) => {
             let s = e.target.result; if (!s) return alert("Data riwayat shift tidak ditemukan.");
-            window.currentShiftData = s;
-            window.openShiftReport(s);
+            window.currentShiftData = s; window.openShiftReport(s);
         };
     }
 };
 
-window.requestVoid = function(type, id) {
-    currentVoidTarget = { type: type, id: id };
-    document.getElementById("void-auth-name").value = ""; document.getElementById("void-auth-pin").value = "";
-    document.getElementById("void-auth-modal").classList.remove("hidden");
-};
-
-// ==========================================
-// 9. MANAGEMENT KOIN & SETORAN TUNAI
-// ==========================================
-window.openCashDrop = function() {
-    document.getElementById("cashdrop-modal").classList.remove("hidden");
-};
-
-window.submitCashDrop = function() { 
-    const admin = Number(document.getElementById("drop-admin").value) || 0; 
-    const bank = Number(document.getElementById("drop-bank").value) || 0; 
-    const drawer = Number(document.getElementById("drop-drawer").value) || 0;
-    if (admin === 0 && bank === 0) return alert("Masukkan nominal setor uang."); 
-    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
-    const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, toAdmin: admin, toBank: bank, leftInDrawer: drawer, notes: document.getElementById("drop-notes").value || "-", outlet: currentOutlet, syncStatus: "Pending" };
-    db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").add(payload);
-    document.getElementById("cashdrop-modal").classList.add("hidden");
-    document.getElementById("drop-admin").value = ""; document.getElementById("drop-bank").value = ""; document.getElementById("drop-drawer").value = ""; document.getElementById("drop-notes").value = "";
-    alert("Setoran berhasil dicatat!"); window.runBackgroundSync(); 
-};
-
-window.openCoinManagement = function() {
-    document.getElementById("coin-management-modal").classList.remove("hidden");
-};
-
-window.submitCoinManagement = function() {
-    const actionType = document.getElementById("coin-action-type").value;
-    const qty = Number(document.getElementById("manage-coin-qty").value);
-    let note = document.getElementById("manage-coin-note").value.trim();
-
-    if (qty <= 0) return alert("Jumlah koin tidak valid.");
-
-    let prefix = actionType === "jammed" ? "JAM-" : "RET-";
-    if (!note) { note = actionType === "jammed" ? "Mesin Macet / Tertelan" : "Daur Ulang Koin Fisik"; }
-
-    const payload = { retrievalId: prefix + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: note, syncStatus: "Pending" };
-    db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
-    
-    document.getElementById("manage-coin-qty").value = ""; document.getElementById("manage-coin-note").value = "";
-    document.getElementById("coin-management-modal").classList.add("hidden");
-    
-    alert("Laporan koin berhasil dicatat!"); window.runBackgroundSync();
-};
-
-window.saveCoinRetrieval = function() { 
-    const qty = Number(document.getElementById("coin-retrieval-qty").value); 
-    if (qty <= 0) return alert("Jumlah koin tidak valid.");
-    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
-    const payload = { retrievalId: "RET-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: "Daur Ulang Koin Fisik", outlet: currentOutlet, syncStatus: "Pending" };
-    db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload); 
-    document.getElementById("coin-retrieval-qty").value = ""; alert("Pengambilan koin tercatat (Menunggu Approval)"); window.runBackgroundSync(); 
-};
-
-window.saveCoinJammed = function() { 
-    const qty = Number(document.getElementById("coin-jammed-qty").value); 
-    if (qty <= 0) return alert("Jumlah koin tidak valid.");
-    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
-    const payload = { retrievalId: "JAM-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: "Mesin Macet / Tertelan", outlet: currentOutlet, syncStatus: "Pending" };
-    db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload); 
-    document.getElementById("coin-jammed-qty").value = ""; alert("Koin macet tercatat!"); window.runBackgroundSync(); 
-};
-
-// ==========================================
-// 10. SINKRONISASI INTI (FAST PIN SYNC)
-// ==========================================
-window.syncMasterData = async function(isSilent = false) {
-    let nTxt = document.getElementById("network-text");
-    let nDot = document.getElementById("network-dot");
-    if (!navigator.onLine) { 
-        if(nTxt) nTxt.innerText = "Mode Offline"; 
-        if(nDot) nDot.style.backgroundColor = "#e74c3c"; 
-        return;
-    }
-    try {
-        const response = await fetch(API_URL, { method: 'GET', mode: 'cors' });
-        const result = await response.json();
-        
-        if (result.status === "Success") {
-            window.masterDrawerBalance = result.masterDrawerBalance || 0;
-            window.loyaltyTarget = result.data.loyaltyTarget || 10; 
-            window.globalPromos = result.data.promos || [];
-            window.globalRecentShifts = result.recentShifts || [];
-            window.expenseCategories = result.data.expenseCategories || [];
-            
-            window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
-            document.querySelectorAll("button[onclick*='openCashDrop'], #btn-drawer, #btn-cashdrop").forEach(btn => {
-                if(btn) btn.style.display = window.enableDrawerTracking ? "" : "none";
-            });
-
-            window.availableOutlets = (result.data.settings["Available_Outlets"] || "Pusat").split(",").map(s => s.trim());
-            window.laciStocks = result.laciStock || {};
-            window.coinsInMachines = result.coinsInMachine || {};
-            
-            let outletSel = document.getElementById("outlet-select");
-            if (outletSel) {
-                let savedOutlet = localStorage.getItem("selectedOutlet");
-                outletSel.innerHTML = "";
-                window.availableOutlets.forEach(out => {
-                    let opt = document.createElement("option");
-                    opt.value = out; opt.innerText = out;
-                    if (out === savedOutlet) opt.selected = true;
-                    outletSel.appendChild(opt);
-                });
-                outletSel.onchange = (e) => localStorage.setItem("selectedOutlet", e.target.value);
-            }
-
-            if (result.data.staff) {
-                let txStaff = db.transaction(["staff"], "readwrite");
-                result.data.staff.forEach(s => txStaff.objectStore("staff").put(s));
-            }
-            if (result.data.menu) {
-                window.globalMenuDataRaw = result.data.menu;
-                let txMenu = db.transaction(["menu"], "readwrite");
-                result.data.menu.forEach(m => txMenu.objectStore("menu").put(m));
-            }
-            if (result.data.members) {
-                let txMem = db.transaction(["members"], "readwrite");
-                result.data.members.forEach(m => txMem.objectStore("members").put(m));
-            }
-
-            let txOthers = db.transaction(["unsynced_members"], "readonly");
-            txOthers.objectStore("unsynced_members").getAll().onsuccess = (e) => {
-                let unsynced = e.target.result;
-                if (unsynced.length > 0) {
-                    let txPut = db.transaction(["members"], "readwrite");
-                    unsynced.forEach(m => txPut.objectStore("members").put(m));
-                }
-                
-                activeLaundryTickets = result.data.activeLaundryOrders || [];
-                let tCount = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
-                let pCount = activeLaundryTickets.filter(t => t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0).length;
-                
-                let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
-                let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
-                
-                if (!document.getElementById("pos-screen").classList.contains("hidden")) { 
-                    window.renderActiveTickets(); window.renderPiutangTickets(); 
-                }
-                if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
-            };
-        }
-    } catch (error) {}
-};
-
-window.manualPushSync = async function() {
-    if (!navigator.onLine) return alert("Anda sedang offline!");
-    let nTxt = document.getElementById("network-text"); let nDot = document.getElementById("network-dot");
-    if(nTxt) nTxt.innerText = "Mengirim Data..."; if(nDot) nDot.style.backgroundColor = "#f39c12";
-    let lTxt = document.getElementById("login-network-text"); let lDot = document.getElementById("login-network-dot");
-    if(lTxt) lTxt.innerText = "Mendorong Data Lokal..."; if(lDot) lDot.style.backgroundColor = "#f39c12";
-
-    await window.runBackgroundSync();
-    if(nTxt) nTxt.innerText = "Menarik Data..."; if(lTxt) lTxt.innerText = "Sinkronisasi Server...";
-    await window.syncMasterData(); alert("Sinkronisasi Database Berhasil!");
-};
-
-window.runBackgroundSync = async function() {
-    if (!navigator.onLine || isSyncing) return; isSyncing = true; 
-    try {
-        let orders = await new Promise(res => db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = e => res(e.target.result));
-        for (const order of orders) {
-            if (order.syncStatus === "Pending") {
-                try {
-                    let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncOrder", data: order }) });
-                    if ((await r.json()).status === "Success") { order.syncStatus = "Synced"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); }
-                } catch(e) {}
-            }
-        }
-        let reports = await new Promise(res => db.transaction(["shift_reports"], "readonly").objectStore("shift_reports").getAll().onsuccess = e => res(e.target.result));
-        for (const report of reports) {
-            try {
-                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncShiftReport", data: report }) });
-                if ((await r.json()).status === "Success") db.transaction(["shift_reports"], "readwrite").objectStore("shift_reports").delete(report.shiftId);
-            } catch(e) {}
-        }
-        let promoClaims = await new Promise(res => db.transaction(["promo_claims"], "readonly").objectStore("promo_claims").getAll().onsuccess = e => res(e.target.result));
-        for (const claim of promoClaims) {
-            try {
-                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncPromoClaim", data: claim }) });
-                if ((await r.json()).status === "Success") db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").delete(claim.claimId);
-            } catch(e) {}
-        }
-        let expenses = await new Promise(res => db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = e => res(e.target.result));
-        for (const exp of expenses) {
-            if (exp.syncStatus === "Pending") {
-                try {
-                    let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncExpense", data: exp }) });
-                    if ((await r.json()).status === "Success") { exp.syncStatus = "Synced"; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(exp); }
-                } catch(e) {}
-            }
-        }
-        let cashDrops = await new Promise(res => db.transaction(["cash_drops"], "readonly").objectStore("cash_drops").getAll().onsuccess = e => res(e.target.result));
-        for (const drop of cashDrops) {
-            try {
-                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncCashDrop", data: drop }) });
-                if ((await r.json()).status === "Success") db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").delete(drop.dropId);
-            } catch(e) {}
-        }
-        let voids = await new Promise(res => db.transaction(["void_requests"], "readonly").objectStore("void_requests").getAll().onsuccess = e => res(e.target.result));
-        for (const req of voids) {
-            try {
-                const actionType = req.type === 'orders' ? "requestOrderVoid" : "requestExpenseVoid"; const payload = req.type === 'orders' ? { orderId: req.id, status: req.status, authName: req.authName } : { expenseId: req.id, status: req.status, authName: req.authName };
-                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: actionType, ...payload }) });
-                if ((await r.json()).status === "Success") db.transaction(["void_requests"], "readwrite").objectStore("void_requests").delete(req.id);
-            } catch(e) {}
-        }
-        let members = await new Promise(res => db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
-        for (const mem of members) {
-            try {
-                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncMember", data: mem }) });
-                if ((await r.json()).status === "Success") db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone);
-            } catch(e) {}
-        }
-        let coinRets = await new Promise(res => db.transaction(["coin_retrievals"], "readonly").objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
-        for (const cr of coinRets) {
-            if (cr.syncStatus === "Pending") {
-                try {
-                    let actionCode = cr.notes && cr.notes.includes("Macet") ? "syncCoinJammed" : "syncCoinRetrieval";
-                    let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: actionCode, data: cr }) });
-                    if ((await r.json()).status === "Success") { cr.syncStatus = "Synced"; db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").put(cr); }
-                } catch(e) {}
-            }
-        }
-        let phoneUpds = await new Promise(res => db.transaction(["phone_updates"], "readonly").objectStore("phone_updates").getAll().onsuccess = e => res(e.target.result));
-        for (const pu of phoneUpds) {
-            try {
-                let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "updateMemberPhone", data: pu }) });
-                if ((await r.json()).status === "Success") db.transaction(["phone_updates"], "readwrite").objectStore("phone_updates").delete(pu.id);
-            } catch(e) {}
-        }
-    } finally { isSyncing = false; }
-};
-
-// ==========================================
-// 11. SHIFT REPORT & PENUTUPAN (AKHIRI SHIFT)
-// ==========================================
 window.openShiftReport = function(historyData = null) {
     if (historyData) {
         populateShiftModal(historyData, false);
@@ -1622,17 +1489,13 @@ window.openShiftReport = function(historyData = null) {
         tx.oncomplete = async () => {
             let shiftOrders = activeOrders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
             let shiftExpenses = activeExpenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
-            
             let loginTimeMs = new Date(currentLoginTime).getTime();
             let shiftCoinRets = activeCoinRets.filter(cr => cr.cashier === currentCashier && new Date(cr.timestamp).getTime() >= loginTimeMs);
 
             let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0;
             let hPiu = 0; let tPiu = 0; let tFree = 0; let tExpense = 0; let foodSummary = {};
-            
-            let tFreeItems = 0; let tDiscountNom = 0;
-            let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
+            let tFreeItems = 0; let tDiscountNom = 0; let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
             let coinCategorySummary = {}; 
-            let categorySummary = {}; 
 
             const settings = await window.getDynamicSettings();
             let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
@@ -1644,56 +1507,35 @@ window.openShiftReport = function(historyData = null) {
                 tOrders++; if (o.customerPhone && o.customerPhone !== "-") tCust++;
                 tOmset += o.grandTotal; tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0);
                 hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0);
-                
                 tDiscountNom += (o.discounts || 0);
                 if (o.redeemedPromos && o.redeemedPromos.length > 0) o.redeemedPromos.forEach(rp => { tFreeItems += (rp.qty || 0); });
 
-                let orderExpectedCoins = 0;
-                let orderCoinBreakdown = {};
+                let orderExpectedCoins = 0; let orderCoinBreakdown = {};
 
                 if (o.items) {
                     o.items.forEach(i => { 
                         foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
-                        let cat = i.category || "Lainnya";
-                        categorySummary[cat] = (categorySummary[cat] || 0) + (i.qty * i.originalPrice);
+                        let cat = i.category || "Lainnya"; 
+                        let name = String(i.name).toUpperCase(); let itemCoins = 0;
 
-                        let name = String(i.name).toUpperCase();
-                        let itemCoins = 0;
+                        if (name.includes("KESET")) { itemCoins = Math.ceil(i.qty / kesetPerBatch) * 3; } 
+                        else if (name.includes("BANTAL")) { itemCoins = Math.ceil(i.qty / bantalPerBatch) * 2; } 
+                        else if (i.inputMode === "DECIMAL") { itemCoins = Math.ceil(i.qty / kgPerCuci) + Math.ceil(i.qty / kgPerKering); } 
+                        else { let divisor = (i.hasMoq && i.moqQty > 0) ? i.moqQty : 1; let multiplier = Math.ceil(i.qty / divisor); itemCoins = (i.expectedCoins || 0) * multiplier; }
 
-                        if (name.includes("KESET")) {
-                            itemCoins = Math.ceil(i.qty / kesetPerBatch) * 3;
-                        } else if (name.includes("BANTAL")) {
-                            itemCoins = Math.ceil(i.qty / bantalPerBatch) * 2;
-                        } else if (i.inputMode === "DECIMAL") {
-                            itemCoins = Math.ceil(i.qty / kgPerCuci) + Math.ceil(i.qty / kgPerKering);
-                        } else {
-                            let divisor = (i.hasMoq && i.moqQty > 0) ? i.moqQty : 1;
-                            let multiplier = Math.ceil(i.qty / divisor);
-                            itemCoins = (i.expectedCoins || 0) * multiplier;
-                        }
-
-                        if (itemCoins > 0) {
-                            orderExpectedCoins += itemCoins;
-                            orderCoinBreakdown[cat] = (orderCoinBreakdown[cat] || 0) + itemCoins;
-                        }
+                        if (itemCoins > 0) { orderExpectedCoins += itemCoins; orderCoinBreakdown[cat] = (orderCoinBreakdown[cat] || 0) + itemCoins; }
                     });
                 }
                 
                 let orderTotalCoins = (o.actualCoins !== undefined) ? o.actualCoins : (o.expectedCoins || orderExpectedCoins);
                 tCoinsUsed += orderTotalCoins;
-                
-                for (let cat in orderCoinBreakdown) {
-                    coinCategorySummary[cat] = (coinCategorySummary[cat] || 0) + orderCoinBreakdown[cat];
-                }
+                for (let cat in orderCoinBreakdown) { coinCategorySummary[cat] = (coinCategorySummary[cat] || 0) + orderCoinBreakdown[cat]; }
                 
                 let diff = orderTotalCoins - orderExpectedCoins;
-                if (diff !== 0) {
-                    coinCategorySummary["Penyesuaian Manual"] = (coinCategorySummary["Penyesuaian Manual"] || 0) + diff;
-                }
+                if (diff !== 0) { coinCategorySummary["Penyesuaian Manual"] = (coinCategorySummary["Penyesuaian Manual"] || 0) + diff; }
             });
             
             shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
-            
             shiftCoinRets.forEach(cr => {
                 if (cr.notes && cr.notes.includes("Macet")) tCoinsJammed += cr.qty;
                 else tCoinsRecycled += cr.qty;
@@ -1705,10 +1547,8 @@ window.openShiftReport = function(historyData = null) {
                 shiftId: currentShiftId, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), cashier: currentCashier, 
                 totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, 
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary,
-                totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom,
-                totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
-                categorySummary: categorySummary,
-                coinCategorySummary: coinCategorySummary
+                totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom, totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
+                coinCategorySummary: coinCategorySummary, outlet: localStorage.getItem("selectedOutlet") || "Pusat" 
             };
             
             populateShiftModal(window.currentShiftData, true);
@@ -1739,13 +1579,11 @@ function populateShiftModal(data, isActive) {
     if (document.getElementById("sd-logout")) document.getElementById("sd-logout").innerText = isActive ? "Saat Ini" : formatWIB(data.logoutTime);
     if (document.getElementById("sd-cash")) document.getElementById("sd-cash").innerText = "Rp " + (data.totalCash || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-qris")) document.getElementById("sd-qris").innerText = "Rp " + (data.totalQris || 0).toLocaleString('id-ID');
-    if (document.getElementById("sd-transfer")) document.getElementById("sd-transfer").innerText = "Rp " + (data.totalTransfer || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-hotel-piutang")) document.getElementById("sd-hotel-piutang").innerText = "Rp " + (data.totalHotelPiutang || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-tamu-piutang")) document.getElementById("sd-tamu-piutang").innerText = "Rp " + (data.totalTamuPiutang || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-expenses")) document.getElementById("sd-expenses").innerText = "Rp " + (data.totalExpenses || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-omset")) document.getElementById("sd-omset").innerText = "Rp " + (data.totalOmset || 0).toLocaleString('id-ID');
     
-    // Uang Laci di Laporan Shift Tidak Lagi Disembunyikan (Tetap Muncul Sesuai Permintaan Anda)
     if (document.getElementById("sd-net")) {
         document.getElementById("sd-net").innerText = "Rp " + (data.netCash || 0).toLocaleString('id-ID');
         document.getElementById("sd-net").parentElement.style.display = "flex"; 
@@ -1753,11 +1591,9 @@ function populateShiftModal(data, isActive) {
     
     if (document.getElementById("sd-free-items")) document.getElementById("sd-free-items").innerText = (data.totalFreeItems || 0) + " Item";
     if (document.getElementById("sd-discount-nom")) document.getElementById("sd-discount-nom").innerText = "Rp " + (data.totalDiscountNominal || 0).toLocaleString('id-ID');
-    
     if (document.getElementById("sd-coins-used")) document.getElementById("sd-coins-used").innerText = (data.totalCoinsUsed || 0) + " Koin";
     if (document.getElementById("sd-coins-recycled")) document.getElementById("sd-coins-recycled").innerText = (data.totalCoinsRecycled || 0) + " Koin";
     if (document.getElementById("sd-coins-jammed")) document.getElementById("sd-coins-jammed").innerText = (data.totalCoinsJammed || 0) + " Koin";
-
     if (document.getElementById("sd-food")) document.getElementById("sd-food").innerHTML = foodHtml || "Belum ada item terjual";
 
     let mt = document.getElementById("meter-token");
@@ -1778,18 +1614,13 @@ window.printCurrentShiftReport = async function() {
     let mt = document.getElementById("meter-token"); data.meterToken = mt ? (parseFloat(mt.value) || 0) : (data.meterToken || 0);
     let mp = document.getElementById("meter-pasca"); data.meterPasca = mp ? (parseFloat(mp.value) || 0) : (data.meterPasca || 0);
     
-    if (data.meterToken <= 0 && data.meterPasca <= 0) {
-        return alert("⚠️ Harap isi Meteran Listrik (Sisa Token atau Total Pasca) terlebih dahulu sebelum mencetak!");
-    }
+    if (data.meterToken <= 0 && data.meterPasca <= 0) return alert("⚠️ Harap isi Meteran Listrik!");
     
     try {
         if (typeof window.buildShiftReportReceipt === "function") {
-            await window.buildShiftReportReceipt(data);
-            alert("Laporan penutupan shift berhasil dikirim ke printer!");
-        } else {
-            alert("⚠️ Modul printer belum terhubung. Silakan nyalakan bluetooth dan klik Printer di menu atas.");
-        }
-    } catch (e) { alert("Gagal mencetak laporan: " + e.toString()); }
+            await window.buildShiftReportReceipt(data); alert("Laporan penutupan shift dikirim ke printer!");
+        } else { alert("⚠️ Modul printer belum terhubung."); }
+    } catch (e) { alert("Gagal mencetak: " + e.toString()); }
 };
 
 window.triggerEndShift = async function() {
@@ -1806,7 +1637,8 @@ window.triggerEndShift = async function() {
     let mt = document.getElementById("meter-token"); let meterT = mt ? (parseFloat(mt.value) || 0) : 0;
     let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(mp.value) || 0) : 0;
     if (meterT <= 0 && meterP <= 0) return alert("⚠️ Harap isi Meteran Listrik!");
-    if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?\nLaporan penutupan akan langsung dikirim ke Cloud Google Sheet.")) return;
+    if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?")) return;
+    
     if (btCharacteristic && typeof window.buildShiftReportReceipt === "function") {
         try { data.meterToken = meterT; data.meterPasca = meterP; await window.buildShiftReportReceipt(data); } catch (e) { console.error(e); }
     }
@@ -1852,6 +1684,8 @@ function performAutoClose(shift) {
 
 window.onload = async () => { 
     await initDB(); 
+    let loginBtn = document.getElementById("btn-login"); if(loginBtn) loginBtn.innerText = "Menyiapkan...";
+    await window.syncInitData(); 
     window.syncMasterData(); 
     
     document.addEventListener("mousedown", function(e) {
