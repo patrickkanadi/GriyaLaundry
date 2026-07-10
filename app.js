@@ -294,29 +294,51 @@ window.attemptLogin = async function() {
         const hashedPin = await hashString(rawPin);
         let staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(hashedPin).onsuccess = e => res(e.target.result));
         
+        // JIKA TIDAK DITEMUKAN DI LOKAL, CEK KREDENSIAL LANGSUNG KE GOOGLE SHEETS
         if (!staff) { 
             if (navigator.onLine) { 
                 if(loginBtn) loginBtn.innerText = "Menarik Data Baru...";
                 await window.syncInitData(); 
                 let staffList = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = e => res(e.target.result));
                 staff = staffList.find(s => s.pin === hashedPin);
+                
+                // Fallback Mutlak: Ambil data via API langsung jika indexDB tertunda
+                if (!staff) {
+                    try {
+                        const response = await fetch(API_URL + "?action=init", { method: 'GET', mode: 'cors' });
+                        const result = await response.json();
+                        if (result.status === "Success" && result.data.staff) {
+                            let onlineStaff = result.data.staff.find(s => s.pin === hashedPin);
+                            if (onlineStaff) staff = onlineStaff;
+                        }
+                    } catch(e) {}
+                }
             } 
         }
 
         if (staff) {
             if (!window.availableOutlets) window.availableOutlets = ["Pusat"];
             let allowedOutlets = staff.outlets ? staff.outlets.split(',').map(s=>s.trim()).filter(s=>s) : window.availableOutlets;
-            let selectedOutlet = document.getElementById("outlet-select") ? document.getElementById("outlet-select").value : null;
             
+            let selectedOutlet = document.getElementById("outlet-select") ? document.getElementById("outlet-select").value : null;
+            let lastLoggedOutlet = localStorage.getItem("lastLoggedOutlet"); // Mengambil histori outlet login terakhir
+            
+            // JIKA OUTLET TIDAK DIPILIH / TIDAK VALID, MASUKKAN KE OUTLET TERAKHIR
             if (!selectedOutlet || !allowedOutlets.includes(selectedOutlet)) {
-                selectedOutlet = allowedOutlets.length > 0 ? allowedOutlets[0] : (window.availableOutlets.length > 0 ? window.availableOutlets[0] : "Pusat");
+                if (lastLoggedOutlet && allowedOutlets.includes(lastLoggedOutlet)) {
+                    selectedOutlet = lastLoggedOutlet;
+                } else {
+                    selectedOutlet = allowedOutlets.length > 0 ? allowedOutlets[0] : (window.availableOutlets.length > 0 ? window.availableOutlets[0] : "Pusat");
+                }
             }
-            localStorage.setItem("selectedOutlet", selectedOutlet); window.currentOutlet = selectedOutlet;
+            
+            localStorage.setItem("selectedOutlet", selectedOutlet); 
+            localStorage.setItem("lastLoggedOutlet", selectedOutlet); // Simpan memori outlet
+            window.currentOutlet = selectedOutlet;
             
             let localMenu = await new Promise(res => db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = e => res(e.target.result));
             window.globalMenuDataRaw = localMenu || [];
             
-            // MENGHAPUS LOGIKA SORTING
             window.globalMenuData = window.globalMenuDataRaw.map(m => {
                 let sJson = {}; try { sJson = JSON.parse(m.stockJson); } catch(e){}
                 m.currentStock = Number(sJson[selectedOutlet]) || 0;
@@ -326,7 +348,7 @@ window.attemptLogin = async function() {
                 let outs = m.outlets.split(',').map(s=>s.trim().toLowerCase());
                 if (outs.length === 0 || outs.includes("")) return true;
                 return outs.includes(selectedOutlet.toLowerCase());
-            });
+            }).sort((a, b) => String(a.itemId).localeCompare(String(b.itemId)));
 
             db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(hashedPin).onsuccess = (shiftReq) => {
                 const activeShift = shiftReq.target.result; currentCashier = staff.name; currentPin = hashedPin;
@@ -1245,23 +1267,22 @@ window.renderHistoryList = function(type) {
         db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
             const shiftOrders = e.target.result.filter(o => o.shiftId === currentShiftId).reverse();
             if(shiftOrders.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada order di shift ini.</div>`;
-            shiftOrders.forEach(o => {
+            container.innerHTML = shiftOrders.map(o => {
                 let badge = o.orderStatus === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : o.orderStatus === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">${o.orderStatus}</span>`;
-                let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="window.requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;" title="Batalkan Transaksi">Batal</button>` : '';
-                let printBtn = `<button onclick="window.reprintOrder('${o.orderId}')" style="background:#3498db; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">🖨️</button>`;
-                let detailBtn = `<button onclick="window.viewOrderDetails('${o.orderId}')" style="background:#f39c12; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">👁️ Detail</button>`;
-                container.innerHTML += `<div class="history-row"><div><strong>${o.customerName}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(o.timestamp)} | Rp ${o.grandTotal.toLocaleString('id-ID')}</small></div><div style="display:flex; align-items:center; gap:8px;">${badge} ${detailBtn} ${printBtn} ${btn}</div></div>`;
-            });
+                let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="window.requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:10px;">Batalkan</button>` : '';
+                let detailBtn = `<button onclick="window.viewOrderDetails('${o.orderId}')" style="background:#f39c12; color:white; border:none; padding:4px 8px; border-radius:4px;">👁️</button>`;
+                return `<div class="history-row"><div style="flex:1;"><strong>${o.orderId}</strong><br><small>${o.customerName}</small><br><span style="margin-top:4px; display:inline-block;">${badge}</span></div><div style="text-align:right;"><strong>Rp ${o.grandTotal.toLocaleString('id-ID')}</strong><br><div style="margin-top:4px; display:flex; gap:4px; justify-content:flex-end;">${detailBtn} ${btn}</div></div></div>`;
+            }).join('');
         };
     } else if (type === 'expenses') {
         db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = (e) => {
-            const shiftExpenses = e.target.result.filter(exp => exp.shiftId === currentShiftId).reverse();
-            if(shiftExpenses.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada pengeluaran dicatat.</div>`;
-            shiftExpenses.forEach(exp => {
-                let badge = exp.status === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : exp.status === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">Aktif</span>`;
-                let btn = (exp.status !== "Voided" && exp.status !== "Void Pending") ? `<button onclick="window.requestVoid('expenses', '${exp.expenseId}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Batal</button>` : '';
-                container.innerHTML += `<div class="history-row"><div><strong>${exp.category}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(exp.timestamp)} | Rp ${exp.amount.toLocaleString('id-ID')}</small><br><small>${exp.description}</small></div><div style="display:flex; align-items:center; gap:10px;">${badge} ${btn}</div></div>`;
-            });
+            const shiftExpenses = e.target.result.filter(o => o.shiftId === currentShiftId).reverse();
+            if(shiftExpenses.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada pengeluaran di shift ini.</div>`;
+            container.innerHTML = shiftExpenses.map(o => {
+                let badge = o.status === 'Active' ? `<span class="status-badge status-paid">Aktif</span>` : `<span class="status-badge status-voided">${o.status}</span>`;
+                let btn = (o.status === 'Active') ? `<button onclick="window.requestVoid('expenses', '${o.expenseId}')" style="background:#e74c3c; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:10px;">Batalkan</button>` : '';
+                return `<div class="history-row"><div style="flex:1;"><strong>${o.category}</strong><br><small>${o.description}</small><br><span style="margin-top:4px; display:inline-block;">${badge}</span></div><div style="text-align:right;"><strong>Rp ${o.amount.toLocaleString('id-ID')}</strong><br><div style="margin-top:4px;">${btn}</div></div></div>`;
+            }).join('');
         };
     } else if (type === 'aruskas') {
         Promise.all([
@@ -1271,47 +1292,62 @@ window.renderHistoryList = function(type) {
             let shiftOrders = orders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
             let shiftExpenses = expenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
             let combined = [];
-            shiftOrders.forEach(o => {
-                let totalIn = (o.cashAmount || 0) + (o.qrisAmount || 0);
-                if (totalIn > 0) { combined.push({ type: 'in', time: new Date(o.timestamp), desc: `Nota: ${o.orderId}`, amount: totalIn }); }
-            });
-            shiftExpenses.forEach(e => {
-                combined.push({ type: 'out', time: new Date(e.timestamp), desc: `Pengeluaran: ${e.category}`, amount: e.amount });
-            });
-            combined.sort((a, b) => b.time - a.time);
-            if(combined.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada arus kas tunai di shift ini.</div>`;
+            shiftOrders.forEach(o => { let totalIn = (o.cashAmount || 0) + (o.qrisAmount || 0); if (totalIn > 0) combined.push({ type: 'in', time: new Date(o.timestamp), desc: `Nota: ${o.orderId}`, amount: totalIn }); });
+            shiftExpenses.forEach(e => { combined.push({ type: 'out', time: new Date(e.timestamp), desc: `Pengeluaran: ${e.category}`, amount: e.amount }); });
+            
+            // 1. Sort Waktu dari Awal ke Akhir untuk kalkulasi Saldo Berjalan
+            combined.sort((a, b) => a.time - b.time);
+            
+            let totalIn = 0; let totalOut = 0; let currentBalance = 0;
             combined.forEach(log => {
-                let color = log.type === 'in' ? '#27ae60' : '#e74c3c';
-                let sign = log.type === 'in' ? '+' : '-';
-                container.innerHTML += `<div class="history-row"><div><strong>${log.desc}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(log.time.toISOString())}</small></div><div style="font-weight:bold; font-size:16px; color:${color};">${sign}Rp ${log.amount.toLocaleString('id-ID')}</div></div>`;
+                if (log.type === 'in') { currentBalance += log.amount; totalIn += log.amount; }
+                else { currentBalance -= log.amount; totalOut += log.amount; }
+                log.balance = currentBalance;
             });
+            
+            // 2. Putar urutan (Reverse) agar transaksi terbaru tampil di atas
+            combined.reverse();
+            
+            // 3. Render Panel Net Debit & Net Credit
+            let summaryHtml = `
+            <div style="display:flex; justify-content:space-between; margin-bottom:15px; padding:12px; background:#e8f4f8; border-radius:8px; border:1px solid #bce8f1; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <div style="text-align:center; flex:1;"><span style="font-size:11px; color:#7f8c8d; text-transform:uppercase;">Net Debit (Masuk)</span><br><strong style="color:#27ae60; font-size:15px;">Rp ${totalIn.toLocaleString('id-ID')}</strong></div>
+                <div style="text-align:center; flex:1; border-left:1px solid #bdc3c7; border-right:1px solid #bdc3c7;"><span style="font-size:11px; color:#7f8c8d; text-transform:uppercase;">Net Credit (Keluar)</span><br><strong style="color:#e74c3c; font-size:15px;">Rp ${totalOut.toLocaleString('id-ID')}</strong></div>
+                <div style="text-align:center; flex:1;"><span style="font-size:11px; color:#7f8c8d; text-transform:uppercase;">Saldo Saat Ini</span><br><strong style="color:#2980b9; font-size:15px;">Rp ${(totalIn - totalOut).toLocaleString('id-ID')}</strong></div>
+            </div>`;
+
+            if(combined.length === 0) {
+                container.innerHTML = summaryHtml + `<div style="padding:20px; text-align:center;">Belum ada arus kas tunai di shift ini.</div>`;
+                return;
+            }
+
+            let listHtml = "";
+            combined.forEach(log => {
+                let color = log.type === 'in' ? '#27ae60' : '#e74c3c'; let sign = log.type === 'in' ? '+' : '-';
+                listHtml += `<div class="history-row" style="align-items:flex-start;">
+                    <div style="flex:1;"><strong>${log.desc}</strong><br><small style="color:#7f8c8d;">${formatTimeOnlyWIB(log.time.toISOString())}</small></div>
+                    <div style="text-align:right;">
+                        <div style="font-weight:bold; font-size:15px; color:${color}; margin-bottom:4px;">${sign}Rp ${log.amount.toLocaleString('id-ID')}</div>
+                        <div style="font-size:11px; color:#34495e; background:#ecf0f1; padding:3px 6px; border-radius:4px; display:inline-block; font-weight:bold;">Saldo: Rp ${log.balance.toLocaleString('id-ID')}</div>
+                    </div>
+                </div>`;
+            });
+            
+            container.innerHTML = summaryHtml + listHtml;
         });
     } else if (type === 'shifts') {
         const renderShiftsHTML = (shiftsData) => {
             const filtered = shiftsData.filter(s => s.cashier === currentCashier).slice(0, 6);
-            if(filtered.length === 0) { container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada histori shift Anda di sistem.</div>`; return; }
+            if(filtered.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada histori shift Anda di sistem.</div>`;
             filtered.forEach(s => {
                 let detailBtn = `<button onclick="window.viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">👁️ Detail</button>`;
                 let printBtn = `<button onclick="window.printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">🖨️ Cetak</button>`;
-                let itemsStr = "Tidak ada item";
-                if (s.foodSummary && Object.keys(s.foodSummary).length > 0) itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
-
-                container.innerHTML += `
-                <div class="history-row" style="align-items:flex-start; display:flex; gap:10px;">
-                    <div style="flex:2;">
-                        <strong>Shift: ${s.shiftId}</strong><br>
-                        <small style="color:#7f8c8d;">Keluar: ${formatWIB(s.logoutTime)}</small><br>
-                        <small style="color:#2980b9; display:block; margin-top:4px; line-height:1.4;">📦 <strong>Item:</strong> ${itemsStr}</small>
-                    </div>
-                    <div style="flex:1; text-align:right;">
-                        <strong style="color:#27ae60; display:block; margin-bottom:6px; font-size:14px;">Rp ${(s.totalOmset || 0).toLocaleString('id-ID')}</strong>
-                        <div style="display:flex; justify-content:flex-end; gap:5px;">${detailBtn} ${printBtn}</div>
-                    </div>
-                </div>`;
+                let itemsStr = "Tidak ada item"; if (s.foodSummary && Object.keys(s.foodSummary).length > 0) itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
+                let outletStr = s.outlet ? ` (${s.outlet})` : "";
+                container.innerHTML += `<div class="history-row" style="align-items:flex-start; display:flex; gap:10px;"><div style="flex:2;"><strong>Shift: ${s.shiftId}${outletStr}</strong><br><small style="color:#7f8c8d;">Keluar: ${formatWIB(s.logoutTime)}</small><br><small style="color:#2980b9; display:block; margin-top:4px; line-height:1.4;">📦 <strong>Item:</strong> ${itemsStr}</small></div><div style="flex:1; text-align:right;"><strong style="color:#27ae60; display:block; margin-bottom:6px; font-size:14px;">Rp ${(s.totalOmset || 0).toLocaleString('id-ID')}</strong><div style="display:flex; justify-content:flex-end; gap:5px;">${detailBtn} ${printBtn}</div></div></div>`;
             });
         };
-        if (window.globalRecentShifts && window.globalRecentShifts.length > 0) { renderShiftsHTML(window.globalRecentShifts); } 
-        else { db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").getAll().onsuccess = (e) => { renderShiftsHTML(e.target.result.reverse()); }; }
+        if (window.globalRecentShifts && window.globalRecentShifts.length > 0) renderShiftsHTML(window.globalRecentShifts); else db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").getAll().onsuccess = (e) => renderShiftsHTML(e.target.result.reverse());
     }
 };
 
