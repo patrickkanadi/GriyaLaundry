@@ -294,51 +294,29 @@ window.attemptLogin = async function() {
         const hashedPin = await hashString(rawPin);
         let staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(hashedPin).onsuccess = e => res(e.target.result));
         
-        // JIKA TIDAK DITEMUKAN DI LOKAL, CEK KREDENSIAL LANGSUNG KE GOOGLE SHEETS
         if (!staff) { 
             if (navigator.onLine) { 
                 if(loginBtn) loginBtn.innerText = "Menarik Data Baru...";
                 await window.syncInitData(); 
                 let staffList = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = e => res(e.target.result));
                 staff = staffList.find(s => s.pin === hashedPin);
-                
-                // Fallback Mutlak: Ambil data via API langsung jika indexDB tertunda
-                if (!staff) {
-                    try {
-                        const response = await fetch(API_URL + "?action=init", { method: 'GET', mode: 'cors' });
-                        const result = await response.json();
-                        if (result.status === "Success" && result.data.staff) {
-                            let onlineStaff = result.data.staff.find(s => s.pin === hashedPin);
-                            if (onlineStaff) staff = onlineStaff;
-                        }
-                    } catch(e) {}
-                }
             } 
         }
 
         if (staff) {
             if (!window.availableOutlets) window.availableOutlets = ["Pusat"];
             let allowedOutlets = staff.outlets ? staff.outlets.split(',').map(s=>s.trim()).filter(s=>s) : window.availableOutlets;
-            
             let selectedOutlet = document.getElementById("outlet-select") ? document.getElementById("outlet-select").value : null;
-            let lastLoggedOutlet = localStorage.getItem("lastLoggedOutlet"); // Mengambil histori outlet login terakhir
             
-            // JIKA OUTLET TIDAK DIPILIH / TIDAK VALID, MASUKKAN KE OUTLET TERAKHIR
             if (!selectedOutlet || !allowedOutlets.includes(selectedOutlet)) {
-                if (lastLoggedOutlet && allowedOutlets.includes(lastLoggedOutlet)) {
-                    selectedOutlet = lastLoggedOutlet;
-                } else {
-                    selectedOutlet = allowedOutlets.length > 0 ? allowedOutlets[0] : (window.availableOutlets.length > 0 ? window.availableOutlets[0] : "Pusat");
-                }
+                selectedOutlet = allowedOutlets.length > 0 ? allowedOutlets[0] : (window.availableOutlets.length > 0 ? window.availableOutlets[0] : "Pusat");
             }
-            
-            localStorage.setItem("selectedOutlet", selectedOutlet); 
-            localStorage.setItem("lastLoggedOutlet", selectedOutlet); // Simpan memori outlet
-            window.currentOutlet = selectedOutlet;
+            localStorage.setItem("selectedOutlet", selectedOutlet); window.currentOutlet = selectedOutlet;
             
             let localMenu = await new Promise(res => db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = e => res(e.target.result));
             window.globalMenuDataRaw = localMenu || [];
             
+            // MENGHAPUS LOGIKA SORTING
             window.globalMenuData = window.globalMenuDataRaw.map(m => {
                 let sJson = {}; try { sJson = JSON.parse(m.stockJson); } catch(e){}
                 m.currentStock = Number(sJson[selectedOutlet]) || 0;
@@ -348,7 +326,7 @@ window.attemptLogin = async function() {
                 let outs = m.outlets.split(',').map(s=>s.trim().toLowerCase());
                 if (outs.length === 0 || outs.includes("")) return true;
                 return outs.includes(selectedOutlet.toLowerCase());
-            }).sort((a, b) => String(a.itemId).localeCompare(String(b.itemId)));
+            });
 
             db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(hashedPin).onsuccess = (shiftReq) => {
                 const activeShift = shiftReq.target.result; currentCashier = staff.name; currentPin = hashedPin;
