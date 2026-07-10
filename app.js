@@ -683,13 +683,28 @@ window.submitEditMember = function() {
 function loadMenuUI() {
     if (!globalMenuData || globalMenuData.length === 0) {
         db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = (e) => {
-            globalMenuData = e.target.result || [];
+            let rawMenu = e.target.result || [];
+            let selectedOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
+            
+            globalMenuData = rawMenu.map(m => {
+                let sJson = {}; try { sJson = JSON.parse(m.stockJson); } catch(err){}
+                m.currentStock = Number(sJson[selectedOutlet]) || 0;
+                return m;
+            }).filter(m => {
+                if (!m.outlets) return true;
+                let outs = m.outlets.split(',').map(s=>s.trim().toLowerCase());
+                if (outs.length === 0 || outs.includes("")) return true;
+                return outs.includes(selectedOutlet.toLowerCase());
+            });
+            
             if(globalMenuData.length > 0) loadMenuUI(); 
         };
         return;
     }
 
-    const categories = [...new Set(globalMenuData.map(i => i.category))]; currentCategory = categories[0];
+    const categories = [...new Set(globalMenuData.map(i => i.category))]; 
+    if(!currentCategory || !categories.includes(currentCategory)) currentCategory = categories[0];
+    
     const catContainer = document.getElementById("category-container"); if(!catContainer) return;
     catContainer.innerHTML = "";
     categories.forEach(cat => {
@@ -704,19 +719,17 @@ function renderProductGrid() {
     const grid = document.getElementById("product-grid"); if(!grid) return;
     grid.innerHTML = "";
     
-    // Sort items berdasarkan itemId (itm-001 ascending up)
+    // Sort Paksa Berdasarkan Item ID (itm-001 ascending up)
     let itemsToRender = globalMenuData.filter(i => i.category === currentCategory);
-    itemsToRender.sort((a, b) => String(a.itemId || "").localeCompare(String(b.itemId || "")));
+    itemsToRender.sort((a, b) => String(a.itemId).localeCompare(String(b.itemId)));
     
     itemsToRender.forEach(item => {
         const card = document.createElement("div"); card.className = "product-card";
-        
         let stockHtml = "";
         if (item.trackStock) {
             let stockColor = item.currentStock <= 5 ? "color: #e74c3c;" : "color: #27ae60;";
             stockHtml = `<div style="font-size: 11px; font-weight: bold; margin-top: 5px; ${stockColor}">Sisa Stok: ${item.currentStock}</div>`;
         }
-        
         card.innerHTML = `<div><h4>${item.name}</h4>${stockHtml}</div><div class="price-badge">Rp ${item.price.toLocaleString('id-ID')}</div>`;
         card.onclick = () => { 
             if(!isMenuLocked) { 
@@ -727,6 +740,7 @@ function renderProductGrid() {
         grid.appendChild(card);
     });
 }
+
 window.openNumpad = function(item) { activeNumpadItem = item; numpadValue = "0"; let nd = document.getElementById("numpad-display"); if(nd) nd.innerText = "0"; let mod = document.getElementById("numpad-modal"); if(mod) mod.classList.remove("hidden"); };
 window.closeNumpad = function() { let mod = document.getElementById("numpad-modal"); if(mod) mod.classList.add("hidden"); activeNumpadItem = null; };
 window.numpadPress = function(val) {
@@ -939,12 +953,12 @@ window.finalizeOrder = async function(shouldPrint) {
     
     const totalPiutang = hotelPiutang + tamuPiutang; 
     
-    // VALIDASI KELEBIHAN/KEKURANGAN BAYAR
+    // VALIDASI PEMBAYARAN KURANG / LEBIH
     if ((window.cartGrandTotal - (cash + qris + totalPiutang)) > 0) {
         return alert("⚠️ Nominal Pembayaran masih kurang! Harap periksa kembali.");
     }
     if ((cash + qris + totalPiutang) > window.cartGrandTotal) {
-        return alert("⚠️ Nominal Pembayaran melebihi Total Akhir! Harap periksa kembali.");
+        return alert("⚠️ Nominal Pembayaran melebihi Total Akhir! Harap koreksi angka Cash/QRIS/Piutang Anda.");
     }
 
     const targetOrderId = "ORD-" + Date.now();
@@ -1041,9 +1055,9 @@ window.finalizeOrder = async function(shouldPrint) {
     const orderPayload = {
         orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier || "Unknown", shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
-        paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: 0, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
+        paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, 
-        actualCoins: isLaundry ? 0 : expectedCoinsTotal, // FIX: Koin Aktual disamakan jika Instant
+        actualCoins: isLaundry ? 0 : expectedCoinsTotal, // FIX Instant: Langsung set aktual jika bukan Ticket
         outlet: currentOutlet, syncStatus: "Pending" 
     };
 
@@ -1070,11 +1084,7 @@ window.finalizeOrder = async function(shouldPrint) {
 
         window.clearCart(true); 
         let mod = document.getElementById("review-modal"); if(mod) mod.classList.add("hidden");
-        window.renderActiveTickets(); 
-        window.renderPiutangTickets(); 
-        window.switchWorkspace('new'); 
-        window.lockMenu(); 
-        window.runBackgroundSync();
+        window.renderActiveTickets(); window.renderPiutangTickets(); window.switchWorkspace('new'); window.lockMenu(); window.runBackgroundSync();
     };
 };
 
@@ -1635,17 +1645,13 @@ window.openShiftReport = function(historyData = null) {
         tx.oncomplete = async () => {
             let shiftOrders = activeOrders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
             let shiftExpenses = activeExpenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
-            
             let loginTimeMs = new Date(currentLoginTime).getTime();
             let shiftCoinRets = activeCoinRets.filter(cr => cr.cashier === currentCashier && new Date(cr.timestamp).getTime() >= loginTimeMs);
 
             let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0;
             let hPiu = 0; let tPiu = 0; let tFree = 0; let tExpense = 0; let foodSummary = {};
-            
-            let tFreeItems = 0; let tDiscountNom = 0;
-            let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
+            let tFreeItems = 0; let tDiscountNom = 0; let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
             let coinCategorySummary = {}; 
-            let categorySummary = {}; 
 
             const settings = await window.getDynamicSettings();
             let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
@@ -1657,56 +1663,35 @@ window.openShiftReport = function(historyData = null) {
                 tOrders++; if (o.customerPhone && o.customerPhone !== "-") tCust++;
                 tOmset += o.grandTotal; tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0);
                 hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0);
-                
                 tDiscountNom += (o.discounts || 0);
                 if (o.redeemedPromos && o.redeemedPromos.length > 0) o.redeemedPromos.forEach(rp => { tFreeItems += (rp.qty || 0); });
 
-                let orderExpectedCoins = 0;
-                let orderCoinBreakdown = {};
+                let orderExpectedCoins = 0; let orderCoinBreakdown = {};
 
                 if (o.items) {
                     o.items.forEach(i => { 
                         foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
-                        let cat = i.category || "Lainnya";
-                        categorySummary[cat] = (categorySummary[cat] || 0) + (i.qty * i.originalPrice);
+                        let cat = i.category || "Lainnya"; 
+                        let name = String(i.name).toUpperCase(); let itemCoins = 0;
 
-                        let name = String(i.name).toUpperCase();
-                        let itemCoins = 0;
+                        if (name.includes("KESET")) { itemCoins = Math.ceil(i.qty / kesetPerBatch) * 3; } 
+                        else if (name.includes("BANTAL")) { itemCoins = Math.ceil(i.qty / bantalPerBatch) * 2; } 
+                        else if (i.inputMode === "DECIMAL") { itemCoins = Math.ceil(i.qty / kgPerCuci) + Math.ceil(i.qty / kgPerKering); } 
+                        else { let divisor = (i.hasMoq && i.moqQty > 0) ? i.moqQty : 1; let multiplier = Math.ceil(i.qty / divisor); itemCoins = (i.expectedCoins || 0) * multiplier; }
 
-                        if (name.includes("KESET")) {
-                            itemCoins = Math.ceil(i.qty / kesetPerBatch) * 3;
-                        } else if (name.includes("BANTAL")) {
-                            itemCoins = Math.ceil(i.qty / bantalPerBatch) * 2;
-                        } else if (i.inputMode === "DECIMAL") {
-                            itemCoins = Math.ceil(i.qty / kgPerCuci) + Math.ceil(i.qty / kgPerKering);
-                        } else {
-                            let divisor = (i.hasMoq && i.moqQty > 0) ? i.moqQty : 1;
-                            let multiplier = Math.ceil(i.qty / divisor);
-                            itemCoins = (i.expectedCoins || 0) * multiplier;
-                        }
-
-                        if (itemCoins > 0) {
-                            orderExpectedCoins += itemCoins;
-                            orderCoinBreakdown[cat] = (orderCoinBreakdown[cat] || 0) + itemCoins;
-                        }
+                        if (itemCoins > 0) { orderExpectedCoins += itemCoins; orderCoinBreakdown[cat] = (orderCoinBreakdown[cat] || 0) + itemCoins; }
                     });
                 }
                 
                 let orderTotalCoins = (o.actualCoins !== undefined) ? o.actualCoins : (o.expectedCoins || orderExpectedCoins);
                 tCoinsUsed += orderTotalCoins;
-                
-                for (let cat in orderCoinBreakdown) {
-                    coinCategorySummary[cat] = (coinCategorySummary[cat] || 0) + orderCoinBreakdown[cat];
-                }
+                for (let cat in orderCoinBreakdown) { coinCategorySummary[cat] = (coinCategorySummary[cat] || 0) + orderCoinBreakdown[cat]; }
                 
                 let diff = orderTotalCoins - orderExpectedCoins;
-                if (diff !== 0) {
-                    coinCategorySummary["Penyesuaian Manual"] = (coinCategorySummary["Penyesuaian Manual"] || 0) + diff;
-                }
+                if (diff !== 0) { coinCategorySummary["Penyesuaian Manual"] = (coinCategorySummary["Penyesuaian Manual"] || 0) + diff; }
             });
             
             shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
-            
             shiftCoinRets.forEach(cr => {
                 if (cr.notes && cr.notes.includes("Macet")) tCoinsJammed += cr.qty;
                 else tCoinsRecycled += cr.qty;
@@ -1718,10 +1703,9 @@ window.openShiftReport = function(historyData = null) {
                 shiftId: currentShiftId, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), cashier: currentCashier, 
                 totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, 
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary,
-                totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom,
-                totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
-                categorySummary: categorySummary,
-                coinCategorySummary: coinCategorySummary
+                totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom, totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
+                coinCategorySummary: coinCategorySummary, 
+                outlet: localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat" 
             };
             
             populateShiftModal(window.currentShiftData, true);
@@ -1746,15 +1730,14 @@ function populateShiftModal(data, isActive) {
     }
     if (document.getElementById("sd-categories")) document.getElementById("sd-categories").innerHTML = catHtml || "-";
 
-    // MENAMPILKAN OUTLET DI SAMPING ID SHIFT
-    let outletDisplay = data.outlet ? ` (${data.outlet})` : "";
-    if (document.getElementById("sd-id")) document.getElementById("sd-id").innerText = data.shiftId + outletDisplay;
+    // Outlet Ditampilkan di Samping ID Shift
+    let displayedOutlet = data.outlet || localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
+    if (document.getElementById("sd-id")) document.getElementById("sd-id").innerText = data.shiftId + ` (${displayedOutlet})`;
     
     if (document.getElementById("sd-login")) document.getElementById("sd-login").innerText = formatWIB(data.loginTime);
     if (document.getElementById("sd-logout")) document.getElementById("sd-logout").innerText = isActive ? "Saat Ini" : formatWIB(data.logoutTime);
     if (document.getElementById("sd-cash")) document.getElementById("sd-cash").innerText = "Rp " + (data.totalCash || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-qris")) document.getElementById("sd-qris").innerText = "Rp " + (data.totalQris || 0).toLocaleString('id-ID');
-    if (document.getElementById("sd-transfer")) document.getElementById("sd-transfer").innerText = "Rp " + (data.totalTransfer || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-hotel-piutang")) document.getElementById("sd-hotel-piutang").innerText = "Rp " + (data.totalHotelPiutang || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-tamu-piutang")) document.getElementById("sd-tamu-piutang").innerText = "Rp " + (data.totalTamuPiutang || 0).toLocaleString('id-ID');
     if (document.getElementById("sd-expenses")) document.getElementById("sd-expenses").innerText = "Rp " + (data.totalExpenses || 0).toLocaleString('id-ID');
