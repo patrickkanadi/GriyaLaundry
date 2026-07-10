@@ -683,28 +683,13 @@ window.submitEditMember = function() {
 function loadMenuUI() {
     if (!globalMenuData || globalMenuData.length === 0) {
         db.transaction(["menu"], "readonly").objectStore("menu").getAll().onsuccess = (e) => {
-            let rawMenu = e.target.result || [];
-            let selectedOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
-            
-            globalMenuData = rawMenu.map(m => {
-                let sJson = {}; try { sJson = JSON.parse(m.stockJson); } catch(err){}
-                m.currentStock = Number(sJson[selectedOutlet]) || 0;
-                return m;
-            }).filter(m => {
-                if (!m.outlets) return true;
-                let outs = m.outlets.split(',').map(s=>s.trim().toLowerCase());
-                if (outs.length === 0 || outs.includes("")) return true;
-                return outs.includes(selectedOutlet.toLowerCase());
-            });
-            
+            globalMenuData = e.target.result || [];
             if(globalMenuData.length > 0) loadMenuUI(); 
         };
         return;
     }
 
-    const categories = [...new Set(globalMenuData.map(i => i.category))]; 
-    if(!currentCategory || !categories.includes(currentCategory)) currentCategory = categories[0];
-    
+    const categories = [...new Set(globalMenuData.map(i => i.category))]; currentCategory = categories[0];
     const catContainer = document.getElementById("category-container"); if(!catContainer) return;
     catContainer.innerHTML = "";
     categories.forEach(cat => {
@@ -718,18 +703,15 @@ function loadMenuUI() {
 function renderProductGrid() {
     const grid = document.getElementById("product-grid"); if(!grid) return;
     grid.innerHTML = "";
-    
-    // Sort Paksa Berdasarkan Item ID (itm-001 ascending up)
-    let itemsToRender = globalMenuData.filter(i => i.category === currentCategory);
-    itemsToRender.sort((a, b) => String(a.itemId).localeCompare(String(b.itemId)));
-    
-    itemsToRender.forEach(item => {
+    globalMenuData.filter(i => i.category === currentCategory).forEach(item => {
         const card = document.createElement("div"); card.className = "product-card";
+        
         let stockHtml = "";
         if (item.trackStock) {
             let stockColor = item.currentStock <= 5 ? "color: #e74c3c;" : "color: #27ae60;";
             stockHtml = `<div style="font-size: 11px; font-weight: bold; margin-top: 5px; ${stockColor}">Sisa Stok: ${item.currentStock}</div>`;
         }
+        
         card.innerHTML = `<div><h4>${item.name}</h4>${stockHtml}</div><div class="price-badge">Rp ${item.price.toLocaleString('id-ID')}</div>`;
         card.onclick = () => { 
             if(!isMenuLocked) { 
