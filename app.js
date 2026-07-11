@@ -1460,13 +1460,8 @@ window.saveCoinJammed = function() {
 // 10. SINKRONISASI INTI (FAST PIN SYNC)
 // ==========================================
 window.syncMasterData = async function(isSilent = false) {
-    let nTxt = document.getElementById("network-text");
-    let nDot = document.getElementById("network-dot");
-    if (!navigator.onLine) { 
-        if(nTxt) nTxt.innerText = "Mode Offline"; 
-        if(nDot) nDot.style.backgroundColor = "#e74c3c"; 
-        return;
-    }
+    let nTxt = document.getElementById("network-text"); let nDot = document.getElementById("network-dot");
+    if (!navigator.onLine) { if(nTxt) nTxt.innerText = "Mode Offline"; if(nDot) nDot.style.backgroundColor = "#e74c3c"; return; }
     try {
         const response = await fetch(API_URL, { method: 'GET', mode: 'cors' });
         const result = await response.json();
@@ -1488,39 +1483,28 @@ window.syncMasterData = async function(isSilent = false) {
             window.coinsInMachines = result.coinsInMachine || {};
             
             let outletSel = document.getElementById("outlet-select");
+            let savedOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
             if (outletSel) {
-                let savedOutlet = localStorage.getItem("selectedOutlet");
                 outletSel.innerHTML = "";
                 window.availableOutlets.forEach(out => {
-                    let opt = document.createElement("option");
-                    opt.value = out; opt.innerText = out;
-                    if (out === savedOutlet) opt.selected = true;
-                    outletSel.appendChild(opt);
+                    let opt = document.createElement("option"); opt.value = out; opt.innerText = out;
+                    if (out === savedOutlet) opt.selected = true; outletSel.appendChild(opt);
                 });
                 outletSel.onchange = (e) => localStorage.setItem("selectedOutlet", e.target.value);
             }
 
-            if (result.data.staff) {
-                let txStaff = db.transaction(["staff"], "readwrite");
-                result.data.staff.forEach(s => txStaff.objectStore("staff").put(s));
-            }
-            if (result.data.menu) {
-                window.globalMenuDataRaw = result.data.menu;
-                let txMenu = db.transaction(["menu"], "readwrite");
-                result.data.menu.forEach(m => txMenu.objectStore("menu").put(m));
-            }
-            if (result.data.members) {
-                let txMem = db.transaction(["members"], "readwrite");
-                result.data.members.forEach(m => txMem.objectStore("members").put(m));
-            }
+            // AUTO UPDATE ANGKA LACI & MESIN DI LAYAR KASIR SETIAP SYNC
+            let btnKoin = document.getElementById("btn-koin-top");
+            if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[savedOutlet] || 0} | Mesin: ${window.coinsInMachines[savedOutlet] || 0}`;
+
+            if (result.data.staff) { let txStaff = db.transaction(["staff"], "readwrite"); result.data.staff.forEach(s => txStaff.objectStore("staff").put(s)); }
+            if (result.data.menu) { window.globalMenuDataRaw = result.data.menu; let txMenu = db.transaction(["menu"], "readwrite"); result.data.menu.forEach(m => txMenu.objectStore("menu").put(m)); }
+            if (result.data.members) { let txMem = db.transaction(["members"], "readwrite"); result.data.members.forEach(m => txMem.objectStore("members").put(m)); }
 
             let txOthers = db.transaction(["unsynced_members"], "readonly");
             txOthers.objectStore("unsynced_members").getAll().onsuccess = (e) => {
                 let unsynced = e.target.result;
-                if (unsynced.length > 0) {
-                    let txPut = db.transaction(["members"], "readwrite");
-                    unsynced.forEach(m => txPut.objectStore("members").put(m));
-                }
+                if (unsynced.length > 0) { let txPut = db.transaction(["members"], "readwrite"); unsynced.forEach(m => txPut.objectStore("members").put(m)); }
                 
                 activeLaundryTickets = result.data.activeLaundryOrders || [];
                 let tCount = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
@@ -1529,9 +1513,7 @@ window.syncMasterData = async function(isSilent = false) {
                 let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
                 let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
                 
-                if (!document.getElementById("pos-screen").classList.contains("hidden")) { 
-                    window.renderActiveTickets(); window.renderPiutangTickets(); 
-                }
+                if (!document.getElementById("pos-screen").classList.contains("hidden")) { window.renderActiveTickets(); window.renderPiutangTickets(); }
                 if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
             };
         }
