@@ -17,6 +17,11 @@ window.masterDrawerBalance = 0; window.coinsInMachine = 0; let isLoggingOut = fa
 let isMenuLocked = true; let isSyncing = false; let activeCustomerProfile = null; let activeCoinPrice = 10000;
 window.loyaltyTarget = 10; window.globalPromos = []; window.enableDrawerTracking = true;
 
+// HELPER UNTUK MENDAPATKAN OUTLET SECARA AKURAT
+window.getActiveOutlet = function() {
+    return localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
+};
+
 let btDevice = null; let btCharacteristic = null; let printShiftOnLogout = false;
 window.lastActivityWrite = Date.now();
 
@@ -1222,8 +1227,7 @@ window.saveExpense = function() {
     if (amount <= 0 || !category) return alert("Harap masukkan jumlah dan kategori yang benar."); 
     db.transaction(["expense_categories"], "readwrite").objectStore("expense_categories").put({ name: category });
     
-    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
-    const payload = { expenseId: "EXP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, category: category, description: document.getElementById("exp-desc").value || "-", amount: amount, status: "Active", outlet: currentOutlet, syncStatus: "Pending" }; 
+    const payload = { expenseId: "EXP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, category: category, description: document.getElementById("exp-desc").value || "-", amount: amount, status: "Active", outlet: window.getActiveOutlet(), syncStatus: "Pending" }; 
     db.transaction(["expenses"], "readwrite").objectStore("expenses").add(payload); 
     document.getElementById("expense-modal").classList.add("hidden"); 
     document.getElementById("exp-amount").value = ""; document.getElementById("exp-category").value = ""; document.getElementById("exp-desc").value = ""; 
@@ -1407,8 +1411,7 @@ window.submitCashDrop = function() {
     const bank = Number(document.getElementById("drop-bank").value) || 0; 
     const drawer = Number(document.getElementById("drop-drawer").value) || 0;
     if (admin === 0 && bank === 0) return alert("Masukkan nominal setor uang."); 
-    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
-    const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, toAdmin: admin, toBank: bank, leftInDrawer: drawer, notes: document.getElementById("drop-notes").value || "-", outlet: currentOutlet, syncStatus: "Pending" };
+    const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, toAdmin: admin, toBank: bank, leftInDrawer: drawer, notes: document.getElementById("drop-notes").value || "-", outlet: window.getActiveOutlet(), syncStatus: "Pending" };
     db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").add(payload);
     document.getElementById("cashdrop-modal").classList.add("hidden");
     document.getElementById("drop-admin").value = ""; document.getElementById("drop-bank").value = ""; document.getElementById("drop-drawer").value = ""; document.getElementById("drop-notes").value = "";
@@ -1423,18 +1426,16 @@ window.submitCoinManagement = function() {
     const actionType = document.getElementById("coin-action-type").value;
     const qty = Number(document.getElementById("manage-coin-qty").value);
     let note = document.getElementById("manage-coin-note").value.trim();
-
     if (qty <= 0) return alert("Jumlah koin tidak valid.");
 
     let prefix = actionType === "jammed" ? "JAM-" : "RET-";
     if (!note) { note = actionType === "jammed" ? "Mesin Macet / Tertelan" : "Daur Ulang Koin Fisik"; }
 
-    const payload = { retrievalId: prefix + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: note, syncStatus: "Pending" };
+    const payload = { retrievalId: prefix + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: note, outlet: window.getActiveOutlet(), syncStatus: "Pending" };
     db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
     
     document.getElementById("manage-coin-qty").value = ""; document.getElementById("manage-coin-note").value = "";
     document.getElementById("coin-management-modal").classList.add("hidden");
-    
     alert("Laporan koin berhasil dicatat!"); window.runBackgroundSync();
 };
 
@@ -1776,21 +1777,23 @@ window.triggerEndShift = async function() {
         if (confirm("Shift ini berjalan kurang dari 5 menit tanpa transaksi.\nApakah Anda ingin membatalkan dan menghapus shift ini tanpa dikirim ke server?")) {
             let tx = db.transaction(["active_shifts"], "readwrite");
             tx.objectStore("active_shifts").delete(currentPin);
-            tx.oncomplete = () => { window.location.reload(); };
-            return;
+            tx.oncomplete = () => { window.location.reload(); }; return;
         }
     }
     let mt = document.getElementById("meter-token"); let meterT = mt ? (parseFloat(mt.value) || 0) : 0;
     let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(mp.value) || 0) : 0;
     if (meterT <= 0 && meterP <= 0) return alert("⚠️ Harap isi Meteran Listrik!");
-    if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?\nLaporan penutupan akan langsung dikirim ke Cloud Google Sheet.")) return;
+    if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?")) return;
+    
     if (btCharacteristic && typeof window.buildShiftReportReceipt === "function") {
-        try { data.meterToken = meterT; data.meterPasca = meterP; await window.buildShiftReportReceipt(data); } catch (e) { console.error(e); }
+        try { data.meterToken = meterT; data.meterPasca = meterP; await window.buildShiftReportReceipt(data); } catch (e) {}
     }
-    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
+    
+    // MENGGUNAKAN OUTLET HELPER
     const shiftPayload = {
         shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
-        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree, totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary, totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0, coinCategorySummary: data.coinCategorySummary || {}, meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", outlet: currentOutlet, syncStatus: "Pending"
+        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree, totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary, totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0, coinCategorySummary: data.coinCategorySummary || {}, meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", 
+        outlet: window.getActiveOutlet(), syncStatus: "Pending"
     };
     let tx = db.transaction(["local_shift_history", "shift_reports", "active_shifts"], "readwrite");
     tx.objectStore("local_shift_history").add(shiftPayload); tx.objectStore("shift_reports").add(shiftPayload);
@@ -1802,6 +1805,20 @@ window.triggerEndShift = async function() {
     };
 };
 
+function performAutoClose(shift) {
+    let tx = db.transaction(["orders", "expenses"], "readonly");
+    tx.objectStore("orders").getAll().onsuccess = (e) => {
+        let vOrders = e.target.result.filter(o => o.shiftId === shift.shiftId && o.orderStatus !== "Voided");
+        let tOmset = vOrders.reduce((s, o) => s + o.grandTotal, 0);
+        const report = { shiftId: shift.shiftId, cashier: shift.cashierName, loginTime: shift.loginTime, logoutTime: new Date().toISOString(), totalCustomers: vOrders.length, totalOrders: vOrders.length, totalOmset: tOmset, totalCash: tOmset, totalQris: 0, totalHotelPiutang: 0, totalTamuPiutang: 0, totalFree: 0, totalExpenses: 0, netCash: tOmset, foodSummary: {}, closeNote: "System Auto-Closed (>4h Idle Expired)", 
+        outlet: window.getActiveOutlet(), syncStatus: "Pending" };
+        let txW = db.transaction(["local_shift_history", "shift_reports", "active_shifts"], "readwrite");
+        txW.objectStore("local_shift_history").add(report); txW.objectStore("shift_reports").add(report);
+        txW.objectStore("active_shifts").delete(shift.pin);
+        if (shift.shiftId === currentShiftId) { alert("Shift kadaluarsa!"); window.location.reload(); }
+    };
+}
+
 function checkExpiredShifts() {
     if (!db) return;
     db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").getAll().onsuccess = (e) => {
@@ -1810,20 +1827,6 @@ function checkExpiredShifts() {
             let referenceTime = shift.lastActiveTime ? new Date(shift.lastActiveTime).getTime() : new Date(shift.loginTime).getTime();
             if (now - referenceTime > 4 * 60 * 60 * 1000) performAutoClose(shift);
         });
-    };
-}
-
-function performAutoClose(shift) {
-    let tx = db.transaction(["orders", "expenses"], "readonly");
-    tx.objectStore("orders").getAll().onsuccess = (e) => {
-        let vOrders = e.target.result.filter(o => o.shiftId === shift.shiftId && o.orderStatus !== "Voided");
-        let tOmset = vOrders.reduce((s, o) => s + o.grandTotal, 0);
-        let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
-        const report = { shiftId: shift.shiftId, cashier: shift.cashierName, loginTime: shift.loginTime, logoutTime: new Date().toISOString(), totalCustomers: vOrders.length, totalOrders: vOrders.length, totalOmset: tOmset, totalCash: tOmset, totalQris: 0, totalHotelPiutang: 0, totalTamuPiutang: 0, totalFree: 0, totalExpenses: 0, netCash: tOmset, foodSummary: {}, closeNote: "System Auto-Closed (>4h Idle Expired)", outlet: currentOutlet, syncStatus: "Pending" };
-        let txW = db.transaction(["local_shift_history", "shift_reports", "active_shifts"], "readwrite");
-        txW.objectStore("local_shift_history").add(report); txW.objectStore("shift_reports").add(report);
-        txW.objectStore("active_shifts").delete(shift.pin);
-        if (shift.shiftId === currentShiftId) { alert("Shift kadaluarsa!"); window.location.reload(); }
     };
 }
 
