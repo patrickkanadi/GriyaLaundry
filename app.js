@@ -820,7 +820,7 @@ window.renderCart = function() {
 window.openReview = async function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
-    // Ambil setting Promo
+    // Ambil setting Promo Buy X Get 1
     const settings = await window.getDynamicSettings();
     let promoBuyX = settings["Promo_Buy_X_Get_1"] || "";
     let promoRules = {};
@@ -839,7 +839,11 @@ window.openReview = async function() {
     window.cartGrandTotal = window.cartSubtotal;
     
     let promoHtml = "";
+
+    // PROMO EKSKLUSIF HANYA UNTUK MEMBER (Nomor HP Terisi)
     if (activeCustomerProfile) {
+        
+        // 1. LOYALTY KOIN
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
         let maxRedeemable = 0; let F = activeCustomerProfile.freeCoins || 0; let P = activeCustomerProfile.points || 0; let T = window.loyaltyTarget || 10;
 
@@ -856,27 +860,32 @@ window.openReview = async function() {
            </div>`;
         }
 
-        // Gabungkan cart agar matematika tidak bentrok jika item diinput 2x terpisah
+        // 2. PROMO INSTAN (BUY X GET 1) & HADIAH TERSIMPAN (KHUSUS MEMBER)
         let cartAgg = {};
         currentCart.forEach(item => {
             if (!cartAgg[item.name]) cartAgg[item.name] = { qty: 0, price: item.originalPrice };
             cartAgg[item.name].qty += Math.floor(item.qty);
         });
 
-        // Matematika Pintar untuk Promo Instan / Klaim Hadiah Biasa
         for (let rewardName in cartAgg) {
             let cartQty = cartAgg[rewardName].qty;
             let price = cartAgg[rewardName].price;
             let ruleQty = promoRules[rewardName];
             
             if (ruleQty) {
+                // Tarik histori dari member (jika ada)
                 let fullyStored = 0; let historyProg = 0;
                 if (activeCustomerProfile.storedRewards) {
                     fullyStored = activeCustomerProfile.storedRewards[rewardName] || 0;
                     historyProg = activeCustomerProfile.storedRewards["_prog_" + rewardName] || 0;
                 }
-                // Kalkulasi Bank Poin (Riwayat + Hari Ini)
+                
+                // Matematika Instan
+                // Bank saat ini = (Hadiah utuh x syarat) + tabungan sebelumnya
                 let currentBank = (fullyStored * ruleQty) + historyProg;
+                
+                // Berapa banyak yang bisa digratiskan? = Total barang yang dipunya + yang dibeli dibagi (Syarat + 1)
+                // Contoh Beli 7 Gratis 1 = Pembagi nya 8
                 let maxClaimable = Math.floor((currentBank + cartQty) / (ruleQty + 1));
                 let possibleClaim = Math.min(maxClaimable, cartQty);
 
@@ -887,6 +896,7 @@ window.openReview = async function() {
                    </div>`;
                 }
             } else if (activeCustomerProfile.storedRewards && activeCustomerProfile.storedRewards[rewardName] > 0 && !rewardName.startsWith("_prog_")) {
+                // Logika untuk klaim hadiah reguler dari undian / sistem lain
                 let qtyOwned = activeCustomerProfile.storedRewards[rewardName];
                 let possibleClaim = Math.min(qtyOwned, cartQty);
                 if (possibleClaim > 0) {
