@@ -441,8 +441,16 @@ window.updatePromoIndicator = function() {
     if (!pi) return;
     if (!activeCustomerProfile) { pi.classList.add("hidden"); return; }
     let promoText = `🎁 ${activeCustomerProfile.freeCoins || 0} Koin Gratis! (Poin: ${activeCustomerProfile.points || 0}/${window.loyaltyTarget})`;
-    let storedCount = Object.values(activeCustomerProfile.storedRewards || {}).reduce((a,b)=>a+b,0);
-    if (storedCount > 0) promoText += ` | <span style="cursor:pointer; text-decoration:underline; color:purple;" onclick="window.showStoredRewards()">🎫 ${storedCount} Undian Tersimpan</span>`;
+    
+    let storedCount = 0;
+    if (activeCustomerProfile.storedRewards) {
+        for (let k in activeCustomerProfile.storedRewards) {
+            // Mencegah histori progress (ex: _prog_Bed Cover) terhitung sebagai hadiah utuh
+            if (!k.startsWith("_prog_")) storedCount += activeCustomerProfile.storedRewards[k];
+        }
+    }
+    
+    if (storedCount > 0) promoText += ` | <span style="cursor:pointer; text-decoration:underline; color:purple;" onclick="window.showStoredRewards()">🎫 ${storedCount} Hadiah Tersimpan</span>`;
     
     let pending = antreans[currentAntreanIndex].pendingPromoCode;
     if (pending) promoText += ` | ⏳ Menunggu Checkout: ${pending}`;
@@ -453,9 +461,11 @@ window.updatePromoIndicator = function() {
 
 window.showStoredRewards = function() {
     if(!activeCustomerProfile || !activeCustomerProfile.storedRewards) return;
-    let items = Object.entries(activeCustomerProfile.storedRewards).filter(([k,v]) => v > 0);
+    let items = Object.entries(activeCustomerProfile.storedRewards).filter(([k,v]) => v > 0 && !k.startsWith("_prog_"));
     if(items.length === 0) return alert("Tidak ada hadiah tersimpan.");
-    let msg = "🎁 Hadiah Undian Tersimpan:\n\n"; items.forEach(([k,v]) => msg += `- ${v}x ${k}\n`); alert(msg);
+    let msg = "🎁 Hadiah Tersimpan (Harap masukkan item ini ke keranjang untuk klaim):\n\n"; 
+    items.forEach(([k,v]) => msg += `- ${v}x ${k}\n`); 
+    alert(msg);
 };
 
 window.openLotteryModal = function() {
@@ -810,7 +820,7 @@ window.renderCart = function() {
 window.openReview = function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
-    let inputs = ["pay-cash", "pay-qris", "pay-hotel-piutang", "pay-tamu-piutang"];
+    let inputs = ["pay-cash", "pay-qris", "pay-transfer", "pay-hotel-piutang", "pay-tamu-piutang"];
     inputs.forEach(id => { let el = document.getElementById(id); if(el && el.tagName === 'INPUT') el.value = 0; });
     let pf = document.getElementById("pay-free"); if(pf) { if(pf.tagName === 'INPUT') pf.value = 0; else pf.innerText = 0; }
     
@@ -837,13 +847,14 @@ window.openReview = function() {
 
         if (activeCustomerProfile.storedRewards) {
             for (const [rewardName, qtyOwned] of Object.entries(activeCustomerProfile.storedRewards)) {
+                // HANYA MUNCUL JIKA ITEM TERSEBUT ADA DI KERANJANG SAAT INI
                 if (qtyOwned > 0 && !rewardName.startsWith("_prog_")) {
                     let cartItem = currentCart.find(i => i.name === rewardName || i.subCategory === rewardName || i.category === rewardName);
                     if (cartItem) {
                         let possibleClaim = Math.min(qtyOwned, Math.floor(cartItem.qty));
                         if (possibleClaim > 0) {
                             promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f9ebff; padding:8px; border-radius:6px; border:1px solid #d6b4fc;">
-                               <div><strong style="color:#8e44ad; font-size:12px;">🎫 Undian: ${rewardName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks guna: ${possibleClaim}</small></div>
+                               <div><strong style="color:#8e44ad; font-size:12px;">🎁 Klaim Hadiah: ${rewardName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks guna: ${possibleClaim}</small></div>
                                <input type="number" class="promo-input" data-type="stored" data-item="${rewardName}" data-price="${cartItem.originalPrice}" value="0" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
                            </div>`;
                         }
@@ -866,6 +877,7 @@ window.openReview = function() {
     
     let mod = document.getElementById("review-modal"); if(mod) mod.classList.remove("hidden");
 };
+
 window.reviewOrder = window.openReview;
 
 window.closeReview = function() {
