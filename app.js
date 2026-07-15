@@ -938,6 +938,7 @@ window.clearCart = function(force = false) {
 window.finalizeOrder = async function(shouldPrint) {
     let pc = document.getElementById("pay-cash"); let cash = pc ? Number(pc.value) : 0;
     let elQ = document.getElementById("pay-qris"); let qris = elQ ? Number(elQ.value) : 0;
+    let elT = document.getElementById("pay-transfer"); let transfer = elT ? Number(elT.value) : 0;
     let elHP = document.getElementById("pay-hotel-piutang"); let hotelPiutang = elHP ? Number(elHP.value) : 0;
     let elTP = document.getElementById("pay-tamu-piutang"); let tamuPiutang = elTP ? Number(elTP.value) : 0;
     let pf = document.getElementById("pay-free"); let free = pf ? Number(pf.value) : 0;
@@ -945,11 +946,11 @@ window.finalizeOrder = async function(shouldPrint) {
     const totalPiutang = hotelPiutang + tamuPiutang; 
     
     // VALIDASI PEMBAYARAN KURANG / LEBIH
-    if ((window.cartGrandTotal - (cash + qris + totalPiutang)) > 0) {
+    if ((window.cartGrandTotal - (cash + qris + transfer + totalPiutang)) > 0) {
         return alert("⚠️ Nominal Pembayaran masih kurang! Harap periksa kembali.");
     }
-    if ((cash + qris + totalPiutang) > window.cartGrandTotal) {
-        return alert("⚠️ Nominal Pembayaran melebihi Total Akhir! Harap koreksi angka Cash/QRIS/Piutang Anda.");
+    if ((cash + qris + transfer + totalPiutang) > window.cartGrandTotal) {
+        return alert("⚠️ Nominal Pembayaran melebihi Total Akhir! Harap koreksi angka yang dimasukkan.");
     }
 
     const targetOrderId = "ORD-" + Date.now();
@@ -957,6 +958,7 @@ window.finalizeOrder = async function(shouldPrint) {
     let payMethod = ""; let activeMethods = [];
     if (cash > 0) activeMethods.push("Cash");
     if (qris > 0) activeMethods.push("QRIS");
+    if (transfer > 0) activeMethods.push("Transfer");
     if (hotelPiutang > 0) activeMethods.push("Piutang Hotel");
     if (tamuPiutang > 0) activeMethods.push("Piutang Tamu");
     if (free > 0) activeMethods.push("Gratis");
@@ -983,6 +985,34 @@ window.finalizeOrder = async function(shouldPrint) {
     let paidCoins = Math.max(0, cartCoins - redeemedLoyaltyCoins);
 
     const settings = await window.getDynamicSettings();
+    let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
+    let bantalPerBatch = Number(settings["Sarung_Bantal_Per_Batch"]) || 10;
+    let kgPerCuci = Number(settings["Kilo_Per_Koin_Cuci"]) || 5;
+    let kgPerKering = Number(settings["Kilo_Per_Koin_Kering"]) || 5;
+
+    let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0; 
+    let koinSoldQty = 0;
+
+    currentCart.forEach(item => {
+        let name = String(item.name).toUpperCase();
+        if (name.includes("KOIN")) { koinSoldQty += item.qty; } 
+        else if (name.includes("KESET")) { kesetQty += item.qty; } 
+        else if (name.includes("BANTAL")) { bantalQty += item.qty; } 
+        else if (item.inputMode === "DECIMAL") { regularWeight += item.qty; } 
+        else {
+            let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; 
+            let multiplier = Math.ceil(item.qty / divisor); 
+            otherCoins += ((item.expectedCoins || 0) * multiplier);
+        }
+    });
+
+    let assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
+    let expectedCoinsTotal = assumedWashingCoins + koinSoldQty;
+
+    // DEFINISI VARIABEL AGAR TIDAK ERROR
+    let newEarnedRewards = [];
+    let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
+
     let promoBuyX = settings["Promo_Buy_X_Get_1"] || "";
     let promoRules = {};
     if (promoBuyX) {
@@ -1041,7 +1071,7 @@ window.finalizeOrder = async function(shouldPrint) {
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
                 let d = new Date(); let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
-                db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({ claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier, shiftId: currentShiftId, orderId: targetOrderId, outlet: currentOutlet, syncStatus: "Pending" });
+                db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({ claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier || "Unknown", shiftId: currentShiftId, orderId: targetOrderId, outlet: currentOutlet, syncStatus: "Pending" });
             }
         }
         antreans[currentAntreanIndex].pendingPromoCode = null;
@@ -1054,9 +1084,9 @@ window.finalizeOrder = async function(shouldPrint) {
     const orderPayload = {
         orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier || "Unknown", shiftId: currentShiftId,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
-        paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
+        paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, 
-        actualCoins: isLaundry ? 0 : expectedCoinsTotal, // FIX Instant: Langsung set aktual jika bukan Ticket
+        actualCoins: isLaundry ? 0 : expectedCoinsTotal, // FIX Instant: Langsung set aktual jika Instant
         outlet: currentOutlet, syncStatus: "Pending" 
     };
 
@@ -1073,17 +1103,21 @@ window.finalizeOrder = async function(shouldPrint) {
         if (shouldPrint) {
             if (typeof window.buildEscPosReceipt === "function" && typeof btCharacteristic !== "undefined" && btCharacteristic) {
                 try {
-                    await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + totalPiutang), 0, payMethod, newPoints, newFree);
-                    alert("✅ Order has been recorded & printed!");
-                } catch (e) { alert("⚠️ Gagal mencetak: Printer error/terputus. Order has been recorded."); }
-            } else { alert("⚠️ Printer Bluetooth belum terhubung! Order has been recorded."); }
+                    await window.buildEscPosReceipt(orderPayload.orderId, orderPayload, (cash + qris + transfer + totalPiutang), 0, payMethod, newPoints, newFree);
+                    alert("✅ Order berhasil direkam & dicetak!");
+                } catch (e) { alert("⚠️ Printer tidak merespons, namun order BERHASIL direkam."); }
+            } else { alert("⚠️ Printer Bluetooth belum terhubung! Order berhasil direkam."); }
         } else {
-            alert("✅ Order has been recorded!"); 
+            alert("✅ Order berhasil direkam!"); 
         }
 
         window.clearCart(true); 
         let mod = document.getElementById("review-modal"); if(mod) mod.classList.add("hidden");
-        window.renderActiveTickets(); window.renderPiutangTickets(); window.switchWorkspace('new'); window.lockMenu(); window.runBackgroundSync();
+        window.renderActiveTickets(); 
+        window.renderPiutangTickets(); 
+        window.switchWorkspace('new'); 
+        window.lockMenu(); 
+        window.runBackgroundSync();
     };
 };
 
