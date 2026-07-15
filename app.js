@@ -837,7 +837,7 @@ window.openReview = function() {
 
         if (activeCustomerProfile.storedRewards) {
             for (const [rewardName, qtyOwned] of Object.entries(activeCustomerProfile.storedRewards)) {
-                if (qtyOwned > 0) {
+                if (qtyOwned > 0 && !rewardName.startsWith("_prog_")) {
                     let cartItem = currentCart.find(i => i.name === rewardName || i.subCategory === rewardName || i.category === rewardName);
                     if (cartItem) {
                         let possibleClaim = Math.min(qtyOwned, Math.floor(cartItem.qty));
@@ -983,32 +983,14 @@ window.finalizeOrder = async function(shouldPrint) {
     let paidCoins = Math.max(0, cartCoins - redeemedLoyaltyCoins);
 
     const settings = await window.getDynamicSettings();
-    let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
-    let bantalPerBatch = Number(settings["Sarung_Bantal_Per_Batch"]) || 10;
-    let kgPerCuci = Number(settings["Kilo_Per_Koin_Cuci"]) || 5;
-    let kgPerKering = Number(settings["Kilo_Per_Koin_Kering"]) || 5;
-
-    let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0; 
-    let koinSoldQty = 0;
-
-    currentCart.forEach(item => {
-        let name = String(item.name).toUpperCase();
-        if (name.includes("KOIN")) { koinSoldQty += item.qty; } 
-        else if (name.includes("KESET")) { kesetQty += item.qty; } 
-        else if (name.includes("BANTAL")) { bantalQty += item.qty; } 
-        else if (item.inputMode === "DECIMAL") { regularWeight += item.qty; } 
-        else {
-            let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; 
-            let multiplier = Math.ceil(item.qty / divisor); 
-            otherCoins += ((item.expectedCoins || 0) * multiplier);
-        }
-    });
-
-    let assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
-    let expectedCoinsTotal = assumedWashingCoins + koinSoldQty;
-
-    let newEarnedRewards = [];
-    let currentOutlet = localStorage.getItem("selectedOutlet") || "Pusat";
+    let promoBuyX = settings["Promo_Buy_X_Get_1"] || "";
+    let promoRules = {};
+    if (promoBuyX) {
+        promoBuyX.split(",").forEach(p => {
+            let parts = p.split(":");
+            if (parts.length === 2) promoRules[parts[0].trim()] = Number(parts[1].trim());
+        });
+    }
 
     if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
@@ -1024,6 +1006,32 @@ window.finalizeOrder = async function(shouldPrint) {
             }
         });
 
+        // PROSES PROMO BUY X GET 1 UNTUK KASIR/STRUK
+        currentCart.forEach(item => {
+            if (promoRules[item.name]) {
+                let ruleQty = promoRules[item.name];
+                let boughtQty = Math.floor(item.qty);
+                if (boughtQty > 0) {
+                    let pKey = "_prog_" + item.name;
+                    if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
+                    let curProg = Number(activeCustomerProfile.storedRewards[pKey]) || 0;
+                    let totalAccum = curProg + boughtQty;
+                    let earned = Math.floor(totalAccum / ruleQty);
+                    let leftover = totalAccum % ruleQty;
+                    
+                    if (earned > 0) {
+                        activeCustomerProfile.storedRewards[item.name] = (Number(activeCustomerProfile.storedRewards[item.name]) || 0) + earned;
+                        newEarnedRewards.push({ item: item.name, qty: earned, code: "BUY_X_GET_1" });
+                    }
+                    if (leftover > 0) {
+                        activeCustomerProfile.storedRewards[pKey] = leftover;
+                    } else {
+                        delete activeCustomerProfile.storedRewards[pKey];
+                    }
+                }
+            }
+        });
+
         let pendingPromoCode = antreans[currentAntreanIndex].pendingPromoCode;
         if (pendingPromoCode) {
             let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
@@ -1033,7 +1041,7 @@ window.finalizeOrder = async function(shouldPrint) {
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
                 let d = new Date(); let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
-                db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({ claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier || "Unknown", shiftId: currentShiftId, orderId: targetOrderId, outlet: currentOutlet, syncStatus: "Pending" });
+                db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({ claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier, shiftId: currentShiftId, orderId: targetOrderId, outlet: currentOutlet, syncStatus: "Pending" });
             }
         }
         antreans[currentAntreanIndex].pendingPromoCode = null;
@@ -1431,12 +1439,15 @@ window.submitCoinManagement = function() {
     let prefix = actionType === "jammed" ? "JAM-" : "RET-";
     if (!note) { note = actionType === "jammed" ? "Mesin Macet / Tertelan" : "Daur Ulang Koin Fisik"; }
 
-    const payload = { retrievalId: prefix + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: note, outlet: window.getActiveOutlet(), syncStatus: "Pending" };
+    // KUNCI GANDA: Tarik dari localStorage pada detik terakhir tombol dipencet
+    let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
+    
+    const payload = { retrievalId: prefix + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: note, outlet: currentOutlet, syncStatus: "Pending" };
     db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
     
     document.getElementById("manage-coin-qty").value = ""; document.getElementById("manage-coin-note").value = "";
     document.getElementById("coin-management-modal").classList.add("hidden");
-    alert("Laporan koin berhasil dicatat!"); window.runBackgroundSync();
+    alert("Laporan koin berhasil dicatat di outlet: " + currentOutlet); window.runBackgroundSync();
 };
 
 window.saveCoinRetrieval = function() { 
