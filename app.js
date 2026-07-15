@@ -817,7 +817,7 @@ window.renderCart = function() {
     window.cartSubtotal = total; window.cartGrandTotal = total;
 };
 
-window.openReview = function() {
+window.openReview = async function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
     let inputs = ["pay-cash", "pay-qris", "pay-transfer", "pay-hotel-piutang", "pay-tamu-piutang"];
@@ -827,8 +827,19 @@ window.openReview = function() {
     window.cartSubtotal = currentCart.reduce((sum, item) => sum + (item.qty * item.price), 0);
     window.cartGrandTotal = window.cartSubtotal;
     
+    const settings = await window.getDynamicSettings();
+    let promoBuyX = settings["Promo_Buy_X_Get_1"] || "";
+    let promoRules = {};
+    if (promoBuyX) {
+        promoBuyX.split(",").forEach(p => {
+            let parts = p.split(":");
+            if (parts.length === 2) promoRules[parts[0].trim()] = Number(parts[1].trim());
+        });
+    }
+
     let promoHtml = "";
     if (activeCustomerProfile) {
+        // --- 1. LOYALTY KOIN ---
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
         let maxRedeemable = 0; let F = activeCustomerProfile.freeCoins || 0; let P = activeCustomerProfile.points || 0; let T = window.loyaltyTarget || 10;
 
@@ -845,20 +856,27 @@ window.openReview = function() {
            </div>`;
         }
 
-        if (activeCustomerProfile.storedRewards) {
-            for (const [rewardName, qtyOwned] of Object.entries(activeCustomerProfile.storedRewards)) {
-                // HANYA MUNCUL JIKA ITEM TERSEBUT ADA DI KERANJANG SAAT INI
-                if (qtyOwned > 0 && !rewardName.startsWith("_prog_")) {
-                    let cartItem = currentCart.find(i => i.name === rewardName || i.subCategory === rewardName || i.category === rewardName);
-                    if (cartItem) {
-                        let possibleClaim = Math.min(qtyOwned, Math.floor(cartItem.qty));
-                        if (possibleClaim > 0) {
-                            promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f9ebff; padding:8px; border-radius:6px; border:1px solid #d6b4fc;">
-                               <div><strong style="color:#8e44ad; font-size:12px;">🎁 Klaim Hadiah: ${rewardName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks guna: ${possibleClaim}</small></div>
-                               <input type="number" class="promo-input" data-type="stored" data-item="${rewardName}" data-price="${cartItem.originalPrice}" value="0" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
-                           </div>`;
-                        }
-                    }
+        // --- 2. PROMO BUY X GET 1 (Bisa Diklaim di Transaksi yang Sama) ---
+        for (const [rewardName, ruleQty] of Object.entries(promoRules)) {
+            let cartItem = currentCart.find(i => i.name === rewardName);
+            if (cartItem) {
+                let cartQty = Math.floor(cartItem.qty);
+                let pastFree = 0; let pastProg = 0;
+                if (activeCustomerProfile.storedRewards) {
+                    pastFree = Number(activeCustomerProfile.storedRewards[rewardName]) || 0;
+                    pastProg = Number(activeCustomerProfile.storedRewards["_prog_" + rewardName]) || 0;
+                }
+                
+                // Matematika: Menggabungkan tabungan masa lalu + keranjang saat ini
+                let totalPoints = (pastFree * ruleQty) + pastProg; 
+                let possibleClaim = Math.floor((totalPoints + cartQty) / (ruleQty + 1));
+                possibleClaim = Math.min(possibleClaim, cartQty);
+
+                if (possibleClaim > 0) {
+                    promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f9ebff; padding:8px; border-radius:6px; border:1px solid #d6b4fc;">
+                       <div><strong style="color:#8e44ad; font-size:12px;">🎁 Klaim Hadiah: ${rewardName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks klaim: ${possibleClaim}</small></div>
+                       <input type="number" class="promo-input" data-type="stored" data-item="${rewardName}" data-price="${cartItem.originalPrice}" value="0" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
+                   </div>`;
                 }
             }
         }
@@ -956,17 +974,10 @@ window.finalizeOrder = async function(shouldPrint) {
     let pf = document.getElementById("pay-free"); let free = pf ? Number(pf.value) : 0;
     
     const totalPiutang = hotelPiutang + tamuPiutang; 
-    
-    // VALIDASI PEMBAYARAN KURANG / LEBIH
-    if ((window.cartGrandTotal - (cash + qris + transfer + totalPiutang)) > 0) {
-        return alert("⚠️ Nominal Pembayaran masih kurang! Harap periksa kembali.");
-    }
-    if ((cash + qris + transfer + totalPiutang) > window.cartGrandTotal) {
-        return alert("⚠️ Nominal Pembayaran melebihi Total Akhir! Harap koreksi angka yang dimasukkan.");
-    }
+    if ((window.cartGrandTotal - (cash + qris + transfer + totalPiutang)) > 0) return alert("⚠️ Nominal Pembayaran masih kurang! Harap periksa kembali.");
+    if ((cash + qris + transfer + totalPiutang) > window.cartGrandTotal) return alert("⚠️ Nominal Pembayaran melebihi Total Akhir! Harap koreksi angka yang dimasukkan.");
 
     const targetOrderId = "ORD-" + Date.now();
-
     let payMethod = ""; let activeMethods = [];
     if (cash > 0) activeMethods.push("Cash");
     if (qris > 0) activeMethods.push("QRIS");
@@ -1002,37 +1013,25 @@ window.finalizeOrder = async function(shouldPrint) {
     let kgPerCuci = Number(settings["Kilo_Per_Koin_Cuci"]) || 5;
     let kgPerKering = Number(settings["Kilo_Per_Koin_Kering"]) || 5;
 
-    let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0; 
-    let koinSoldQty = 0;
-
+    let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0; let koinSoldQty = 0;
     currentCart.forEach(item => {
         let name = String(item.name).toUpperCase();
         if (name.includes("KOIN")) { koinSoldQty += item.qty; } 
         else if (name.includes("KESET")) { kesetQty += item.qty; } 
         else if (name.includes("BANTAL")) { bantalQty += item.qty; } 
         else if (item.inputMode === "DECIMAL") { regularWeight += item.qty; } 
-        else {
-            let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; 
-            let multiplier = Math.ceil(item.qty / divisor); 
-            otherCoins += ((item.expectedCoins || 0) * multiplier);
-        }
+        else { let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; let multiplier = Math.ceil(item.qty / divisor); otherCoins += ((item.expectedCoins || 0) * multiplier); }
     });
 
     let assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
     let expectedCoinsTotal = assumedWashingCoins + koinSoldQty;
 
-    // DEFINISI VARIABEL AGAR TIDAK ERROR
     let newEarnedRewards = [];
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
-
+    
     let promoBuyX = settings["Promo_Buy_X_Get_1"] || "";
     let promoRules = {};
-    if (promoBuyX) {
-        promoBuyX.split(",").forEach(p => {
-            let parts = p.split(":");
-            if (parts.length === 2) promoRules[parts[0].trim()] = Number(parts[1].trim());
-        });
-    }
+    if (promoBuyX) { promoBuyX.split(",").forEach(p => { let parts = p.split(":"); if (parts.length === 2) promoRules[parts[0].trim()] = Number(parts[1].trim()); }); }
 
     if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
@@ -1041,45 +1040,46 @@ window.finalizeOrder = async function(shouldPrint) {
         let totalPoints = initialPoints + paidCoins; let newlyEarnedFree = Math.floor(totalPoints / window.loyaltyTarget);
         let remainingPoints = totalPoints % window.loyaltyTarget; let finalFreeCoins = Math.max(0, (initialFree + newlyEarnedFree) - redeemedLoyaltyCoins);
 
-        redeemedList.forEach(rp => {
-            if (rp.source === 'stored' && activeCustomerProfile.storedRewards && activeCustomerProfile.storedRewards[rp.item] !== undefined) {
-                activeCustomerProfile.storedRewards[rp.item] -= rp.qty;
-                if (activeCustomerProfile.storedRewards[rp.item] <= 0) delete activeCustomerProfile.storedRewards[rp.item]; 
-            }
-        });
+        if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
 
-        // PROSES PROMO BUY X GET 1 UNTUK KASIR/STRUK
-        currentCart.forEach(item => {
-            if (promoRules[item.name]) {
-                let ruleQty = promoRules[item.name];
-                let boughtQty = Math.floor(item.qty);
-                if (boughtQty > 0) {
-                    let pKey = "_prog_" + item.name;
-                    if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
-                    let curProg = Number(activeCustomerProfile.storedRewards[pKey]) || 0;
-                    let totalAccum = curProg + boughtQty;
-                    let earned = Math.floor(totalAccum / ruleQty);
-                    let leftover = totalAccum % ruleQty;
-                    
-                    if (earned > 0) {
-                        activeCustomerProfile.storedRewards[item.name] = (Number(activeCustomerProfile.storedRewards[item.name]) || 0) + earned;
-                        newEarnedRewards.push({ item: item.name, qty: earned, code: "BUY_X_GET_1" });
-                    }
-                    if (leftover > 0) {
-                        activeCustomerProfile.storedRewards[pKey] = leftover;
-                    } else {
-                        delete activeCustomerProfile.storedRewards[pKey];
-                    }
-                }
+        // MENGHITUNG PROMO BUY X GET 1
+        for (const [rewardName, ruleQty] of Object.entries(promoRules)) {
+            let cartItem = currentCart.find(i => i.name === rewardName);
+            let claimedItem = redeemedList.find(r => r.item === rewardName && r.source === 'stored');
+            
+            let cartQty = cartItem ? Math.floor(cartItem.qty) : 0;
+            let claimedQty = claimedItem ? claimedItem.qty : 0;
+            let paidQty = Math.max(0, cartQty - claimedQty);
+            
+            let pastFree = Number(activeCustomerProfile.storedRewards[rewardName]) || 0;
+            let pastProg = Number(activeCustomerProfile.storedRewards["_prog_" + rewardName]) || 0;
+            
+            let totalItemPoints = (pastFree * ruleQty) + pastProg;
+            let newTotalItemPoints = totalItemPoints + paidQty - (claimedQty * ruleQty);
+            
+            if (newTotalItemPoints < 0) newTotalItemPoints = 0; 
+            
+            let finalFree = Math.floor(newTotalItemPoints / ruleQty);
+            let finalProg = newTotalItemPoints % ruleQty;
+            
+            if (finalFree > 0) activeCustomerProfile.storedRewards[rewardName] = finalFree;
+            else delete activeCustomerProfile.storedRewards[rewardName];
+            
+            if (finalProg > 0) activeCustomerProfile.storedRewards["_prog_" + rewardName] = finalProg;
+            else delete activeCustomerProfile.storedRewards["_prog_" + rewardName];
+            
+            // Catat di Struk jika tabungan dompetnya BERTAMBAH (Disimpan untuk besok)
+            let newlyEarnedThisTime = Math.max(0, finalFree - pastFree);
+            if (newlyEarnedThisTime > 0) {
+                newEarnedRewards.push({ item: rewardName, qty: newlyEarnedThisTime, code: "BUY_X_GET_1" });
             }
-        });
+        }
 
         let pendingPromoCode = antreans[currentAntreanIndex].pendingPromoCode;
         if (pendingPromoCode) {
             let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
             if (promo) {
                 newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty, code: promo.code });
-                if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
                 let d = new Date(); let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
@@ -1098,7 +1098,7 @@ window.finalizeOrder = async function(shouldPrint) {
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, 
-        actualCoins: isLaundry ? 0 : expectedCoinsTotal, // FIX Instant: Langsung set aktual jika Instant
+        actualCoins: isLaundry ? 0 : expectedCoinsTotal,
         outlet: currentOutlet, syncStatus: "Pending" 
     };
 
@@ -1125,11 +1125,7 @@ window.finalizeOrder = async function(shouldPrint) {
 
         window.clearCart(true); 
         let mod = document.getElementById("review-modal"); if(mod) mod.classList.add("hidden");
-        window.renderActiveTickets(); 
-        window.renderPiutangTickets(); 
-        window.switchWorkspace('new'); 
-        window.lockMenu(); 
-        window.runBackgroundSync();
+        window.renderActiveTickets(); window.renderPiutangTickets(); window.switchWorkspace('new'); window.lockMenu(); window.runBackgroundSync();
     };
 };
 
