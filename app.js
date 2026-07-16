@@ -820,19 +820,21 @@ window.renderCart = function() {
 window.openReview = async function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
-    // 1. Tarik Aturan Promo (Anti Huruf Besar/Kecil & Anti Spasi)
+    // 1. Tarik Aturan Promo
     const settings = await window.getDynamicSettings();
-    let promoBuyX = settings["Promo_Buy_X_Get_1"] || settings["Promo_Buy_X_Get_1 "] || "";
     let promoRules = {};
-    if (promoBuyX) {
-        promoBuyX.split(",").forEach(p => {
-            let parts = p.split(":");
-            if (parts.length === 2) {
-                let key = parts[0].trim().toUpperCase();
-                let val = Number(parts[1].trim());
-                if (key && !isNaN(val)) promoRules[key] = val;
-            }
-        });
+    for (let key in settings) {
+        if (key.toUpperCase().includes("PROMO_BUY")) {
+            let valStr = settings[key] || "";
+            valStr.split(",").forEach(p => {
+                let parts = p.split(":");
+                if (parts.length === 2) {
+                    let itemName = parts[0].trim().toUpperCase();
+                    let reqQty = Number(parts[1].trim());
+                    if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
+                }
+            });
+        }
     }
 
     let inputs = ["pay-cash", "pay-qris", "pay-transfer", "pay-hotel-piutang", "pay-tamu-piutang"];
@@ -845,8 +847,6 @@ window.openReview = async function() {
 
     // KOTAK PROMO HANYA MUNCUL JIKA KASIR SUDAH MEMASUKKAN NO. HP
     if (activeCustomerProfile) {
-        
-        // Proteksi Data (Ubah String JSON menjadi Objek Asli)
         let storedObj = {};
         if (activeCustomerProfile.storedRewards) {
             try { storedObj = typeof activeCustomerProfile.storedRewards === 'string' ? JSON.parse(activeCustomerProfile.storedRewards) : activeCustomerProfile.storedRewards; } 
@@ -870,7 +870,7 @@ window.openReview = async function() {
            </div>`;
         }
 
-        // B. PROMO INSTAN (BUY X GET 1) & HADIAH UNDIAN REGULER
+        // B. PROMO INSTAN (BUY X GET 1) & HADIAH UNDIAN
         let cartAgg = {};
         currentCart.forEach(item => {
             let nameKey = item.name.trim();
@@ -882,19 +882,24 @@ window.openReview = async function() {
             let cartQty = cartAgg[itemName].qty;
             let price = cartAgg[itemName].price;
             let ruleKey = itemName.toUpperCase();
-            let ruleQty = promoRules[ruleKey];
+            
+            let ruleQty = 0;
+            for (let pk in promoRules) {
+                if (ruleKey.includes(pk) || pk.includes(ruleKey)) { ruleQty = promoRules[pk]; break; }
+            }
             
             if (ruleQty) {
-                // KALKULASI INTERNAL POS: (Tabungan Lama + Belanjaan Hari Ini)
+                // KALKULASI INTERNAL: (Tabungan Lama dari Database + Belanjaan Keranjang Hari Ini)
                 let fullyStored = Number(storedObj[itemName]) || 0;
                 let historyProg = Number(storedObj["_prog_" + itemName]) || 0;
                 
                 let currentBank = (fullyStored * ruleQty) + historyProg;
-                let maxClaimable = Math.floor((currentBank + cartQty) / (ruleQty + 1));
+                let totalSistemDanKeranjang = currentBank + cartQty; // Misal: Punya 3 + Beli 5 = 8
+                
+                let maxClaimable = Math.floor(totalSistemDanKeranjang / (ruleQty + 1));
                 let possibleClaim = Math.min(maxClaimable, cartQty);
 
                 if (possibleClaim > 0) {
-                    // Nilai awal tetap 0 sesuai instruksi agar kasir manual ketik klaim
                     promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f9ebff; padding:8px; border-radius:6px; border:1px solid #d6b4fc;">
                        <div><strong style="color:#8e44ad; font-size:12px;">🎁 Klaim Promo: ${itemName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks guna: ${possibleClaim}</small></div>
                        <input type="number" class="promo-input" data-type="stored" data-item="${itemName}" data-price="${price}" value="0" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
@@ -927,6 +932,9 @@ window.openReview = async function() {
     let mod = document.getElementById("review-modal"); if(mod) mod.classList.remove("hidden");
 };
 
+// ==============================================================
+// INI KUNCI UTAMANYA: Mengarahkan ulang tombol UI ke fungsi baru
+// ==============================================================
 window.reviewOrder = window.openReview;
 
 window.closeReview = function() {
