@@ -797,6 +797,28 @@ window.updateCartItemQty = function(itemId, delta) {
 };
 
 window.renderCart = function() {
+    // CACHE SETTING PROMO KE MEMORI INTERNAL AGAR TIDAK JEDA SAAT CHECKOUT
+    if (typeof db !== "undefined" && !window.isFetchingPromoCache) {
+        window.isFetchingPromoCache = true;
+        db.transaction(["settings"], "readonly").objectStore("settings").getAll().onsuccess = (e) => {
+            window.globalPromoRulesCache = {};
+            if(e.target.result) {
+                e.target.result.forEach(s => {
+                    if (String(s.key).toUpperCase().includes("PROMO")) {
+                        let valStr = String(s.value || "");
+                        if (valStr.includes(":")) {
+                            valStr.split(",").forEach(p => {
+                                let parts = p.split(":");
+                                if (parts.length === 2) window.globalPromoRulesCache[parts[0].trim().toUpperCase()] = Number(parts[1].trim());
+                            });
+                        }
+                    }
+                });
+            }
+            window.isFetchingPromoCache = false;
+        };
+    }
+
     const container = document.getElementById("cart-items"); if(!container) return;
     container.innerHTML = ""; let total = 0;
     currentCart.forEach(item => {
@@ -817,27 +839,11 @@ window.renderCart = function() {
     window.cartSubtotal = total; window.cartGrandTotal = total;
 };
 
-window.openReview = async function() {
+window.openReview = function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
-    // 1. PENGEKSTRAK SETTING SUPER AMAN (FAIL-PROOF)
-    const settings = await window.getDynamicSettings();
-    let promoRules = {};
-    for (let key in settings) {
-        if (String(key).toUpperCase().includes("PROMO")) { // Tarik semua key yang mengandung kata PROMO
-            let valStr = String(settings[key] || ""); // Paksa jadi String untuk mencegah error JSON
-            if (valStr.includes(":")) {
-                valStr.split(",").forEach(p => {
-                    let parts = p.split(":");
-                    if (parts.length === 2) {
-                        let itemName = parts[0].trim().toUpperCase();
-                        let reqQty = Number(parts[1].trim());
-                        if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
-                    }
-                });
-            }
-        }
-    }
+    // TARIK MEMORI INSTAN (Tanpa Async/Await)
+    let promoRules = window.globalPromoRulesCache || {};
 
     let inputs = ["pay-cash", "pay-qris", "pay-transfer", "pay-hotel-piutang", "pay-tamu-piutang"];
     inputs.forEach(id => { let el = document.getElementById(id); if(el && el.tagName === 'INPUT') el.value = 0; });
@@ -847,6 +853,7 @@ window.openReview = async function() {
     window.cartGrandTotal = window.cartSubtotal;
     let promoHtml = "";
 
+    // KOTAK PROMO HANYA MUNCUL JIKA KASIR SUDAH MEMASUKKAN NO. HP
     if (activeCustomerProfile) {
         let storedObj = {};
         if (activeCustomerProfile.storedRewards) {
