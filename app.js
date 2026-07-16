@@ -820,14 +820,18 @@ window.renderCart = function() {
 window.openReview = async function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
-    // 1. Tarik Aturan Promo
+    // 1. Tarik Aturan Promo (Anti Huruf Besar/Kecil & Anti Spasi)
     const settings = await window.getDynamicSettings();
-    let promoBuyX = settings["Promo_Buy_X_Get_1"] || "";
+    let promoBuyX = settings["Promo_Buy_X_Get_1"] || settings["Promo_Buy_X_Get_1 "] || "";
     let promoRules = {};
     if (promoBuyX) {
         promoBuyX.split(",").forEach(p => {
             let parts = p.split(":");
-            if (parts.length === 2) promoRules[parts[0].trim().toUpperCase()] = Number(parts[1].trim()); // Anti huruf besar/kecil
+            if (parts.length === 2) {
+                let key = parts[0].trim().toUpperCase();
+                let val = Number(parts[1].trim());
+                if (key && !isNaN(val)) promoRules[key] = val;
+            }
         });
     }
 
@@ -839,7 +843,16 @@ window.openReview = async function() {
     window.cartGrandTotal = window.cartSubtotal;
     let promoHtml = "";
 
+    // KOTAK PROMO HANYA MUNCUL JIKA KASIR SUDAH MEMASUKKAN NO. HP
     if (activeCustomerProfile) {
+        
+        // Proteksi Data (Ubah String JSON menjadi Objek Asli)
+        let storedObj = {};
+        if (activeCustomerProfile.storedRewards) {
+            try { storedObj = typeof activeCustomerProfile.storedRewards === 'string' ? JSON.parse(activeCustomerProfile.storedRewards) : activeCustomerProfile.storedRewards; } 
+            catch(e) { storedObj = {}; }
+        }
+
         // A. LOYALTY KOIN
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
         let maxRedeemable = 0; let F = activeCustomerProfile.freeCoins || 0; let P = activeCustomerProfile.points || 0; let T = window.loyaltyTarget || 10;
@@ -860,8 +873,9 @@ window.openReview = async function() {
         // B. PROMO INSTAN (BUY X GET 1) & HADIAH UNDIAN REGULER
         let cartAgg = {};
         currentCart.forEach(item => {
-            if (!cartAgg[item.name]) cartAgg[item.name] = { qty: 0, price: item.originalPrice };
-            cartAgg[item.name].qty += Math.floor(item.qty);
+            let nameKey = item.name.trim();
+            if (!cartAgg[nameKey]) cartAgg[nameKey] = { qty: 0, price: item.originalPrice };
+            cartAgg[nameKey].qty += Math.floor(item.qty);
         });
 
         for (let itemName in cartAgg) {
@@ -872,25 +886,22 @@ window.openReview = async function() {
             
             if (ruleQty) {
                 // KALKULASI INTERNAL POS: (Tabungan Lama + Belanjaan Hari Ini)
-                let fullyStored = 0; let historyProg = 0;
-                if (activeCustomerProfile.storedRewards) {
-                    fullyStored = activeCustomerProfile.storedRewards[itemName] || 0;
-                    historyProg = activeCustomerProfile.storedRewards["_prog_" + itemName] || 0;
-                }
+                let fullyStored = Number(storedObj[itemName]) || 0;
+                let historyProg = Number(storedObj["_prog_" + itemName]) || 0;
                 
                 let currentBank = (fullyStored * ruleQty) + historyProg;
                 let maxClaimable = Math.floor((currentBank + cartQty) / (ruleQty + 1));
                 let possibleClaim = Math.min(maxClaimable, cartQty);
 
                 if (possibleClaim > 0) {
-                    // NILAI AWAL=0 AGAR KLAIM MANUAL (SESUAI PERMINTAAN ANDA)
+                    // Nilai awal tetap 0 sesuai instruksi agar kasir manual ketik klaim
                     promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f9ebff; padding:8px; border-radius:6px; border:1px solid #d6b4fc;">
                        <div><strong style="color:#8e44ad; font-size:12px;">🎁 Klaim Promo: ${itemName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks guna: ${possibleClaim}</small></div>
                        <input type="number" class="promo-input" data-type="stored" data-item="${itemName}" data-price="${price}" value="0" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
                    </div>`;
                 }
-            } else if (activeCustomerProfile.storedRewards && activeCustomerProfile.storedRewards[itemName] > 0 && !itemName.startsWith("_prog_")) {
-                let qtyOwned = activeCustomerProfile.storedRewards[itemName];
+            } else if (storedObj[itemName] > 0 && !itemName.startsWith("_prog_")) {
+                let qtyOwned = Number(storedObj[itemName]) || 0;
                 let possibleClaim = Math.min(qtyOwned, cartQty);
                 if (possibleClaim > 0) {
                     promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#e8f4f8; padding:8px; border-radius:6px; border:1px solid #bce8f1;">
@@ -1051,12 +1062,16 @@ window.finalizeOrder = async function(shouldPrint) {
     let newEarnedRewards = [];
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
 
-    let promoBuyX = settings["Promo_Buy_X_Get_1"] || "";
+    let promoBuyX = settings["Promo_Buy_X_Get_1"] || settings["Promo_Buy_X_Get_1 "] || "";
     let promoRules = {};
     if (promoBuyX) { 
         promoBuyX.split(",").forEach(p => { 
             let parts = p.split(":"); 
-            if (parts.length === 2) promoRules[parts[0].trim().toUpperCase()] = Number(parts[1].trim()); 
+            if (parts.length === 2) {
+                let key = parts[0].trim().toUpperCase();
+                let val = Number(parts[1].trim());
+                if (key && !isNaN(val)) promoRules[key] = val;
+            }
         }); 
     }
 
@@ -1071,26 +1086,36 @@ window.finalizeOrder = async function(shouldPrint) {
         activeCustomerProfile.points = remainingPoints;
         activeCustomerProfile.freeCoins = Math.max(0, (initialFree + newlyEarnedFree) - redeemedLoyaltyCoins);
 
-        if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
+        // Proteksi JSON Stringifikasi
+        let storedObj = {};
+        if (activeCustomerProfile.storedRewards) {
+            try { storedObj = typeof activeCustomerProfile.storedRewards === 'string' ? JSON.parse(activeCustomerProfile.storedRewards) : activeCustomerProfile.storedRewards; } 
+            catch(e) { storedObj = {}; }
+        }
+        activeCustomerProfile.storedRewards = storedObj; // Jadikan objek solid kembali
 
         let claimedMap = {};
         redeemedList.forEach(rp => { if (rp.source === 'stored') { claimedMap[rp.item] = (claimedMap[rp.item] || 0) + rp.qty; } });
 
         let cartAgg = {};
-        currentCart.forEach(item => { cartAgg[item.name] = (cartAgg[item.name] || 0) + Math.floor(item.qty); });
+        currentCart.forEach(item => { 
+            let nameKey = item.name.trim();
+            cartAgg[nameKey] = (cartAgg[nameKey] || 0) + Math.floor(item.qty); 
+        });
 
-        // PROSES MATEMATIKA BUY X GET 1 (Mencegah Glitch Potongan Ganda)
+        // PROSES MATEMATIKA BUY X GET 1
         for (let itemName in cartAgg) {
             let ruleKey = itemName.toUpperCase();
             if (promoRules[ruleKey]) {
                 let cartQty = cartAgg[itemName]; let ruleQty = promoRules[ruleKey];
-                let fullyStored = activeCustomerProfile.storedRewards[itemName] || 0;
-                let historyProg = activeCustomerProfile.storedRewards["_prog_" + itemName] || 0;
+                let fullyStored = Number(activeCustomerProfile.storedRewards[itemName]) || 0;
+                let historyProg = Number(activeCustomerProfile.storedRewards["_prog_" + itemName]) || 0;
                 let claimedQty = claimedMap[itemName] || 0;
                 
                 let currentBank = (fullyStored * ruleQty) + historyProg;
                 let paidQty = cartQty - claimedQty;
                 
+                // Bank Baru = Tabungan lama + yang dibayar - tabungan yang diklaim/dipakai
                 let newBank = currentBank + paidQty - (claimedQty * ruleQty);
                 let earned = Math.floor(newBank / ruleQty); let leftover = newBank % ruleQty;
 
@@ -1102,7 +1127,7 @@ window.finalizeOrder = async function(shouldPrint) {
                 
                 let newlyMintedTokens = earned - (fullyStored - claimedQty);
                 if (newlyMintedTokens > 0) newEarnedRewards.push({ item: itemName, qty: newlyMintedTokens, code: "BUY_X_GET_1" });
-                delete claimedMap[itemName]; 
+                delete claimedMap[itemName]; // Hindari pemotongan ganda
             }
         }
 
@@ -1120,7 +1145,7 @@ window.finalizeOrder = async function(shouldPrint) {
             let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
             if (promo) {
                 newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty, code: promo.code });
-                activeCustomerProfile.storedRewards[promo.rewardItem] = (activeCustomerProfile.storedRewards[promo.rewardItem] || 0) + promo.rewardQty;
+                activeCustomerProfile.storedRewards[promo.rewardItem] = (Number(activeCustomerProfile.storedRewards[promo.rewardItem]) || 0) + promo.rewardQty;
                 let d = new Date(); let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
                 db.transaction(["promo_claims"], "readwrite").objectStore("promo_claims").add({ claimId: "CLM-" + Date.now(), timestamp: todayStr + "T" + d.toLocaleTimeString('en-GB'), phone: activeCustomerProfile.phone, code: pendingPromoCode, rewardItem: promo.rewardItem, rewardQty: promo.rewardQty, cashier: currentCashier || "Unknown", shiftId: currentShiftId, orderId: targetOrderId, outlet: currentOutlet, syncStatus: "Pending" });
