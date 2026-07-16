@@ -443,11 +443,15 @@ window.updatePromoIndicator = function() {
     let promoText = `🎁 ${activeCustomerProfile.freeCoins || 0} Koin Gratis! (Poin: ${activeCustomerProfile.points || 0}/${window.loyaltyTarget})`;
     
     let storedCount = 0;
+    let storedObj = {};
     if (activeCustomerProfile.storedRewards) {
-        for (let k in activeCustomerProfile.storedRewards) {
-            // Mencegah histori progress (ex: _prog_Bed Cover) terhitung sebagai hadiah utuh
-            if (!k.startsWith("_prog_")) storedCount += activeCustomerProfile.storedRewards[k];
-        }
+        try { storedObj = typeof activeCustomerProfile.storedRewards === 'string' ? JSON.parse(activeCustomerProfile.storedRewards) : activeCustomerProfile.storedRewards; }
+        catch(e) { storedObj = {}; }
+    }
+
+    for (let k in storedObj) {
+        // Mencegah histori progress (ex: _prog_Bed Cover) terhitung sebagai hadiah utuh
+        if (!k.startsWith("_prog_")) storedCount += storedObj[k];
     }
     
     if (storedCount > 0) promoText += ` | <span style="cursor:pointer; text-decoration:underline; color:purple;" onclick="window.showStoredRewards()">🎫 ${storedCount} Hadiah Tersimpan</span>`;
@@ -460,8 +464,14 @@ window.updatePromoIndicator = function() {
 };
 
 window.showStoredRewards = function() {
-    if(!activeCustomerProfile || !activeCustomerProfile.storedRewards) return;
-    let items = Object.entries(activeCustomerProfile.storedRewards).filter(([k,v]) => v > 0 && !k.startsWith("_prog_"));
+    if(!activeCustomerProfile) return;
+    let storedObj = {};
+    if (activeCustomerProfile.storedRewards) {
+        try { storedObj = typeof activeCustomerProfile.storedRewards === 'string' ? JSON.parse(activeCustomerProfile.storedRewards) : activeCustomerProfile.storedRewards; }
+        catch(e) { storedObj = {}; }
+    }
+
+    let items = Object.entries(storedObj).filter(([k,v]) => v > 0 && !k.startsWith("_prog_"));
     if(items.length === 0) return alert("Tidak ada hadiah tersimpan.");
     let msg = "🎁 Hadiah Tersimpan (Harap masukkan item ini ke keranjang untuk klaim):\n\n"; 
     items.forEach(([k,v]) => msg += `- ${v}x ${k}\n`); 
@@ -587,6 +597,13 @@ window.unlockMenu = function(isGuest) {
                 if(!activeCustomerProfile) {
                     activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
                     alert(`✅ Member baru berhasil ditambahkan!\nNama: ${name}\nWA: ${phone}`);
+                } else {
+                    // PERBAIKAN: Menghidupkan Teks JSON dari Database menjadi Objek Asli
+                    if (typeof activeCustomerProfile.storedRewards === 'string') {
+                        try { activeCustomerProfile.storedRewards = JSON.parse(activeCustomerProfile.storedRewards); } 
+                        catch(err) { activeCustomerProfile.storedRewards = {}; }
+                    }
+                    if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
                 }
                 proceedToUnlock(phone, name);
             };
@@ -598,6 +615,13 @@ window.selectMember = function(phone) {
     db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
         activeCustomerProfile = e.target.result;
         if(activeCustomerProfile) {
+            // PERBAIKAN: Menghidupkan Teks JSON dari Database menjadi Objek Asli
+            if (typeof activeCustomerProfile.storedRewards === 'string') {
+                try { activeCustomerProfile.storedRewards = JSON.parse(activeCustomerProfile.storedRewards); } 
+                catch(err) { activeCustomerProfile.storedRewards = {}; }
+            }
+            if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
+
             let cp = document.getElementById("cust-phone"); if(cp) cp.value = activeCustomerProfile.phone;
             let cn = document.getElementById("cust-name"); if(cn) cn.value = activeCustomerProfile.name;
             let rb = document.getElementById("autocomplete-results"); if(rb) { rb.classList.add("hidden"); rb.style.display = "none"; }
