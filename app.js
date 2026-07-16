@@ -817,9 +817,20 @@ window.renderCart = function() {
     window.cartSubtotal = total; window.cartGrandTotal = total;
 };
 
-window.openReview = function() {
+window.openReview = async function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
+    // 1. Ambil setting Promo Buy X Get 1
+    const settings = await window.getDynamicSettings();
+    let promoBuyX = settings["Promo_Buy_X_Get_1"] || "";
+    let promoRules = {};
+    if (promoBuyX) {
+        promoBuyX.split(",").forEach(p => {
+            let parts = p.split(":");
+            if (parts.length === 2) promoRules[parts[0].trim()] = Number(parts[1].trim());
+        });
+    }
+
     let inputs = ["pay-cash", "pay-qris", "pay-transfer", "pay-hotel-piutang", "pay-tamu-piutang"];
     inputs.forEach(id => { let el = document.getElementById(id); if(el && el.tagName === 'INPUT') el.value = 0; });
     let pf = document.getElementById("pay-free"); if(pf) { if(pf.tagName === 'INPUT') pf.value = 0; else pf.innerText = 0; }
@@ -828,7 +839,9 @@ window.openReview = function() {
     window.cartGrandTotal = window.cartSubtotal;
     
     let promoHtml = "";
+
     if (activeCustomerProfile) {
+        // 2. LOYALTY KOIN
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
         let maxRedeemable = 0; let F = activeCustomerProfile.freeCoins || 0; let P = activeCustomerProfile.points || 0; let T = window.loyaltyTarget || 10;
 
@@ -845,20 +858,43 @@ window.openReview = function() {
            </div>`;
         }
 
-        if (activeCustomerProfile.storedRewards) {
-            for (const [rewardName, qtyOwned] of Object.entries(activeCustomerProfile.storedRewards)) {
-                // HANYA MUNCUL JIKA ITEM TERSEBUT ADA DI KERANJANG SAAT INI
-                if (qtyOwned > 0 && !rewardName.startsWith("_prog_")) {
-                    let cartItem = currentCart.find(i => i.name === rewardName || i.subCategory === rewardName || i.category === rewardName);
-                    if (cartItem) {
-                        let possibleClaim = Math.min(qtyOwned, Math.floor(cartItem.qty));
-                        if (possibleClaim > 0) {
-                            promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f9ebff; padding:8px; border-radius:6px; border:1px solid #d6b4fc;">
-                               <div><strong style="color:#8e44ad; font-size:12px;">🎁 Klaim Hadiah: ${rewardName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks guna: ${possibleClaim}</small></div>
-                               <input type="number" class="promo-input" data-type="stored" data-item="${rewardName}" data-price="${cartItem.originalPrice}" value="0" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
-                           </div>`;
-                        }
-                    }
+        // 3. PROMO INSTAN (BUY X GET 1) & HADIAH UNDIAN REGULER
+        let cartAgg = {};
+        currentCart.forEach(item => {
+            if (!cartAgg[item.name]) cartAgg[item.name] = { qty: 0, price: item.originalPrice };
+            cartAgg[item.name].qty += Math.floor(item.qty);
+        });
+
+        for (let itemName in cartAgg) {
+            let cartQty = cartAgg[itemName].qty;
+            let price = cartAgg[itemName].price;
+            let ruleQty = promoRules[itemName];
+            
+            if (ruleQty) {
+                let fullyStored = 0; let historyProg = 0;
+                if (activeCustomerProfile && activeCustomerProfile.storedRewards) {
+                    fullyStored = activeCustomerProfile.storedRewards[itemName] || 0;
+                    historyProg = activeCustomerProfile.storedRewards["_prog_" + itemName] || 0;
+                }
+                
+                let currentBank = (fullyStored * ruleQty) + historyProg;
+                let maxClaimable = Math.floor((currentBank + cartQty) / (ruleQty + 1));
+                let possibleClaim = Math.min(maxClaimable, cartQty);
+
+                if (possibleClaim > 0) {
+                    promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f9ebff; padding:8px; border-radius:6px; border:1px solid #d6b4fc;">
+                       <div><strong style="color:#8e44ad; font-size:12px;">🎁 Klaim Promo: ${itemName}</strong><br><small style="color:#6c3483; font-size:11px;">Otomatis dipotong: ${possibleClaim}</small></div>
+                       <input type="number" class="promo-input" data-type="stored" data-item="${itemName}" data-price="${price}" value="${possibleClaim}" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
+                   </div>`;
+                }
+            } else if (activeCustomerProfile.storedRewards && activeCustomerProfile.storedRewards[itemName] > 0 && !itemName.startsWith("_prog_")) {
+                let qtyOwned = activeCustomerProfile.storedRewards[itemName];
+                let possibleClaim = Math.min(qtyOwned, cartQty);
+                if (possibleClaim > 0) {
+                    promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#e8f4f8; padding:8px; border-radius:6px; border:1px solid #bce8f1;">
+                       <div><strong style="color:#2980b9; font-size:12px;">🎁 Hadiah Undian: ${itemName}</strong><br><small style="color:#2471a3; font-size:11px;">Otomatis dipotong: ${possibleClaim}</small></div>
+                       <input type="number" class="promo-input" data-type="stored" data-item="${itemName}" data-price="${price}" value="${possibleClaim}" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #5dade2; border-radius:4px; font-size:14px;">
+                   </div>`;
                 }
             }
         }
@@ -873,6 +909,8 @@ window.openReview = function() {
  
     let rst = document.getElementById("review-subtotal"); if(rst) rst.innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
     let rgt = document.getElementById("review-grandtotal"); if(rgt) rgt.innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
+    
+    // PEMANGGILAN OTOMATIS: Sistem langsung menghitung potongan harga tanpa menunggu kasir
     window.applyPromo();
     
     let mod = document.getElementById("review-modal"); if(mod) mod.classList.remove("hidden");
