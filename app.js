@@ -820,19 +820,22 @@ window.renderCart = function() {
 window.openReview = async function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
+    // 1. PENGEKSTRAK SETTING SUPER AMAN (FAIL-PROOF)
     const settings = await window.getDynamicSettings();
     let promoRules = {};
     for (let key in settings) {
-        if (key.toUpperCase().includes("PROMO_BUY")) {
-            let valStr = settings[key] || "";
-            valStr.split(",").forEach(p => {
-                let parts = p.split(":");
-                if (parts.length === 2) {
-                    let itemName = parts[0].trim().toUpperCase();
-                    let reqQty = Number(parts[1].trim());
-                    if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
-                }
-            });
+        if (String(key).toUpperCase().includes("PROMO")) { // Tarik semua key yang mengandung kata PROMO
+            let valStr = String(settings[key] || ""); // Paksa jadi String untuk mencegah error JSON
+            if (valStr.includes(":")) {
+                valStr.split(",").forEach(p => {
+                    let parts = p.split(":");
+                    if (parts.length === 2) {
+                        let itemName = parts[0].trim().toUpperCase();
+                        let reqQty = Number(parts[1].trim());
+                        if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
+                    }
+                });
+            }
         }
     }
 
@@ -840,7 +843,7 @@ window.openReview = async function() {
     inputs.forEach(id => { let el = document.getElementById(id); if(el && el.tagName === 'INPUT') el.value = 0; });
     let pf = document.getElementById("pay-free"); if(pf) { if(pf.tagName === 'INPUT') pf.value = 0; else pf.innerText = 0; }
     
-    window.cartSubtotal = currentCart.reduce((sum, item) => sum + (item.qty * item.price), 0);
+    window.cartSubtotal = currentCart.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0);
     window.cartGrandTotal = window.cartSubtotal;
     let promoHtml = "";
 
@@ -852,8 +855,8 @@ window.openReview = async function() {
         }
 
         // A. LOYALTY KOIN
-        let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
-        let maxRedeemable = 0; let F = activeCustomerProfile.freeCoins || 0; let P = activeCustomerProfile.points || 0; let T = window.loyaltyTarget || 10;
+        let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
+        let maxRedeemable = 0; let F = Number(activeCustomerProfile.freeCoins) || 0; let P = Number(activeCustomerProfile.points) || 0; let T = Number(window.loyaltyTarget) || 10;
 
         for (let r = cartCoins; r >= 0; r--) {
             let paidItems = cartCoins - r;
@@ -871,9 +874,9 @@ window.openReview = async function() {
         // B. PROMO INSTAN (BUY X GET 1) & HADIAH UNDIAN
         let cartAgg = {};
         currentCart.forEach(item => {
-            let nameKey = item.name.trim();
-            if (!cartAgg[nameKey]) cartAgg[nameKey] = { qty: 0, price: item.originalPrice };
-            cartAgg[nameKey].qty += Math.floor(item.qty);
+            let nameKey = String(item.name).trim();
+            if (!cartAgg[nameKey]) cartAgg[nameKey] = { qty: 0, price: Number(item.originalPrice || item.price) };
+            cartAgg[nameKey].qty += Math.floor(Number(item.qty));
         });
 
         for (let itemName in cartAgg) {
@@ -886,8 +889,8 @@ window.openReview = async function() {
                 if (ruleKey.includes(pk) || pk.includes(ruleKey)) { ruleQty = promoRules[pk]; break; }
             }
             
-            if (ruleQty) {
-                // LOGIKA SAMA PERSIS DENGAN KOIN
+            if (ruleQty > 0) {
+                // LOGIKA SIMULASI MUNDUR PERSIS SEPERTI KOIN
                 let fItem = Number(storedObj[itemName]) || 0;
                 let pItem = Number(storedObj["_prog_" + itemName]) || 0;
                 let tItem = ruleQty;
@@ -905,7 +908,7 @@ window.openReview = async function() {
                        <input type="number" class="promo-input" data-type="stored" data-item="${itemName}" data-price="${price}" value="0" max="${maxItemRedeemable}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
                    </div>`;
                 }
-            } else if (storedObj[itemName] > 0 && !itemName.startsWith("_prog_")) {
+            } else if (Number(storedObj[itemName]) > 0 && !itemName.startsWith("_prog_")) {
                 let qtyOwned = Number(storedObj[itemName]) || 0;
                 let possibleClaim = Math.min(qtyOwned, cartQty);
                 if (possibleClaim > 0) {
@@ -931,9 +934,7 @@ window.openReview = async function() {
     
     let mod = document.getElementById("review-modal"); if(mod) mod.classList.remove("hidden");
 };
-
-// KUNCI TOMBOL UI
-window.reviewOrder = window.openReview;
+window.reviewOrder = window.openReview; // KUNCI TOMBOL UI
 
 window.closeReview = function() {
     let reviewModal = document.getElementById("review-modal");
@@ -1043,7 +1044,7 @@ window.finalizeOrder = async function(shouldPrint) {
     let cn = document.getElementById("cust-name"); let custName = cn ? cn.value.trim() : "Walk-in"; if(!custName) custName = "Walk-in";
     let newPoints = 0; let newFree = 0;
 
-    let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + i.qty, 0);
+    let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
     let paidCoins = Math.max(0, cartCoins - redeemedLoyaltyCoins);
 
     const settings = await window.getDynamicSettings();
@@ -1055,11 +1056,12 @@ window.finalizeOrder = async function(shouldPrint) {
     let regularWeight = 0; let kesetQty = 0; let bantalQty = 0; let otherCoins = 0; let koinSoldQty = 0;
     currentCart.forEach(item => {
         let name = String(item.name).toUpperCase();
-        if (name.includes("KOIN")) { koinSoldQty += item.qty; } 
-        else if (name.includes("KESET")) { kesetQty += item.qty; } 
-        else if (name.includes("BANTAL")) { bantalQty += item.qty; } 
-        else if (item.inputMode === "DECIMAL") { regularWeight += item.qty; } 
-        else { let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; let multiplier = Math.ceil(item.qty / divisor); otherCoins += ((item.expectedCoins || 0) * multiplier); }
+        let iQty = Number(item.qty) || 0;
+        if (name.includes("KOIN")) { koinSoldQty += iQty; } 
+        else if (name.includes("KESET")) { kesetQty += iQty; } 
+        else if (name.includes("BANTAL")) { bantalQty += iQty; } 
+        else if (item.inputMode === "DECIMAL") { regularWeight += iQty; } 
+        else { let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; let multiplier = Math.ceil(iQty / divisor); otherCoins += ((Number(item.expectedCoins) || 0) * multiplier); }
     });
 
     let assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
@@ -1068,18 +1070,21 @@ window.finalizeOrder = async function(shouldPrint) {
     let newEarnedRewards = [];
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
 
+    // PENGEKSTRAK SETTING SUPER AMAN
     let promoRules = {};
     for (let key in settings) {
-        if (key.toUpperCase().includes("PROMO_BUY")) {
-            let valStr = settings[key] || "";
-            valStr.split(",").forEach(p => {
-                let parts = p.split(":");
-                if (parts.length === 2) {
-                    let itemName = parts[0].trim().toUpperCase();
-                    let reqQty = Number(parts[1].trim());
-                    if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
-                }
-            });
+        if (String(key).toUpperCase().includes("PROMO")) {
+            let valStr = String(settings[key] || "");
+            if (valStr.includes(":")) {
+                valStr.split(",").forEach(p => {
+                    let parts = p.split(":");
+                    if (parts.length === 2) {
+                        let itemName = parts[0].trim().toUpperCase();
+                        let reqQty = Number(parts[1].trim());
+                        if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
+                    }
+                });
+            }
         }
     }
 
@@ -1087,10 +1092,10 @@ window.finalizeOrder = async function(shouldPrint) {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
         activeCustomerProfile.spent += window.cartGrandTotal;
         
-        // Finalisasi LOGIKA KOIN
-        let initialPoints = activeCustomerProfile.points || 0; let initialFree = activeCustomerProfile.freeCoins || 0;
-        let totalPoints = initialPoints + paidCoins; let newlyEarnedFree = Math.floor(totalPoints / window.loyaltyTarget);
-        let remainingPoints = totalPoints % window.loyaltyTarget; 
+        let initialPoints = Number(activeCustomerProfile.points) || 0; let initialFree = Number(activeCustomerProfile.freeCoins) || 0;
+        let tLoyalty = Number(window.loyaltyTarget) || 10;
+        let totalPoints = initialPoints + paidCoins; let newlyEarnedFree = Math.floor(totalPoints / tLoyalty);
+        let remainingPoints = totalPoints % tLoyalty; 
         
         activeCustomerProfile.points = remainingPoints;
         activeCustomerProfile.freeCoins = Math.max(0, (initialFree + newlyEarnedFree) - redeemedLoyaltyCoins);
@@ -1103,15 +1108,15 @@ window.finalizeOrder = async function(shouldPrint) {
         activeCustomerProfile.storedRewards = storedObj;
 
         let claimedMap = {};
-        redeemedList.forEach(rp => { if (rp.source === 'stored') { claimedMap[rp.item] = (claimedMap[rp.item] || 0) + rp.qty; } });
+        redeemedList.forEach(rp => { if (rp.source === 'stored') { claimedMap[rp.item] = (claimedMap[rp.item] || 0) + Number(rp.qty); } });
 
         let cartAgg = {};
         currentCart.forEach(item => { 
-            let nameKey = item.name.trim();
-            cartAgg[nameKey] = (cartAgg[nameKey] || 0) + Math.floor(item.qty); 
+            let nameKey = String(item.name).trim();
+            cartAgg[nameKey] = (cartAgg[nameKey] || 0) + Math.floor(Number(item.qty)); 
         });
 
-        // Finalisasi LOGIKA BUY X GET 1 (PERSIS SEPERTI KOIN)
+        // PROSES MATEMATIKA BUY X GET 1 (SIMULASI MUNDUR)
         for (let itemName in cartAgg) {
             let ruleKey = itemName.toUpperCase();
             let ruleQty = 0;
@@ -1119,7 +1124,7 @@ window.finalizeOrder = async function(shouldPrint) {
                 if (ruleKey.includes(pk) || pk.includes(ruleKey)) { ruleQty = promoRules[pk]; break; }
             }
 
-            if (ruleQty) {
+            if (ruleQty > 0) {
                 let cartQty = cartAgg[itemName];
                 let claimedQty = claimedMap[itemName] || 0;
                 let paidQty = Math.max(0, cartQty - claimedQty);
@@ -1144,7 +1149,7 @@ window.finalizeOrder = async function(shouldPrint) {
             }
         }
 
-        // POTONG HADIAH REGULER (Undian dll)
+        // POTONG HADIAH REGULER
         for (let itemName in claimedMap) {
             let qty = claimedMap[itemName];
             if (activeCustomerProfile.storedRewards[itemName]) {
@@ -1169,7 +1174,7 @@ window.finalizeOrder = async function(shouldPrint) {
         window.saveMemberToDB(activeCustomerProfile);
     }
 
-    let isLaundry = currentCart.some(i => i.workflow === "TICKET");
+    let isLaundry = currentCart.some(i => String(i.workflow).toUpperCase() === "TICKET");
     let finalStatus = isLaundry ? "Processing" : (totalPiutang > 0 ? "Pending Debt" : "Completed");
 
     const orderPayload = {
