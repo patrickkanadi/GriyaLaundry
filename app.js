@@ -1275,17 +1275,14 @@ window.finalizeOrder = async function(shouldPrint) {
     let isLaundry = currentCart.some(i => String(i.workflow).toUpperCase() === "TICKET");
     let finalStatus = isLaundry ? "Processing" : (totalPiutang > 0 ? "Pending Debt" : "Completed");
 
-    const orderPayload = {
-        orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier || "Unknown", shiftId: currentShiftId,
-        customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
-        paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, actualCoins: isLaundry ? 0 : expectedCoinsTotal, 
-        
-        // PENTING: MENGIRIM JSON FINAL KE CODE.GS
-        finalStoredRewards: activeCustomerProfile ? JSON.stringify(activeCustomerProfile.storedRewards) : null,
-        
-        outlet: currentOutlet, syncStatus: "Pending" 
-    };
+    const orderPayload = { 
+    orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, 
+    customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal, 
+    paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0, 
+    coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, koinSold: koinSoldQty,
+    updatedStoredRewards: storedObj, // <--- TAMBAHKAN BARIS INI
+    syncStatus: "Pending" 
+};
 
     let tx = db.transaction(["orders"], "readwrite");
     tx.objectStore("orders").add(orderPayload);
