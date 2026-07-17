@@ -449,11 +449,19 @@ window.updatePromoIndicator = function() {
         catch(e) { storedObj = {}; }
     }
 
+    let stampTexts = [];
     for (let k in storedObj) {
-        // Abaikan progress dan stempel
-        if (!k.startsWith("_prog_") && !k.startsWith("_stamp_")) storedCount += storedObj[k];
+        if (k.startsWith("_stamp_")) {
+            // Memunculkan informasi Stamp di Banner Kasir
+            let cleanName = k.replace("_stamp_", "");
+            stampTexts.push(`🏷️ ${cleanName}: ${storedObj[k]}x`);
+        } else if (!k.startsWith("_prog_")) {
+            // Menghitung total barang gratis yang siap diklaim
+            storedCount += storedObj[k];
+        }
     }
     
+    if (stampTexts.length > 0) promoText += ` | ${stampTexts.join(" | ")}`;
     if (storedCount > 0) promoText += ` | <span style="cursor:pointer; text-decoration:underline; color:purple;" onclick="window.showStoredRewards()">🎫 ${storedCount} Hadiah Tersimpan</span>`;
     
     let pending = antreans[currentAntreanIndex].pendingPromoCode;
