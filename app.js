@@ -840,30 +840,25 @@ window.openReview = async function() {
     
     // TARIK PENGATURAN PROMO
     const settings = await window.getDynamicSettings();
-    let promoRules = {}; // Untuk Buy X Get 1
-    let promoStampRules = {}; // Untuk Stamp Card (MinKg : TargetVisits : FreeKg)
-
+    let promoRules = {};
+    window.promoStampRules = {}; // Global untuk dipakai di finalizeOrder
     for (let key in settings) {
         if (String(key).toUpperCase().includes("PROMO")) {
             let valStr = String(settings[key] || "");
             if (valStr.includes(":")) {
                 valStr.split(",").forEach(p => {
                     let parts = p.split(":");
-                    // Format Buy X Get 1 (ItemName:ReqQty) -> Contoh: Cuci Bedcover:5
                     if (parts.length === 2) {
                         let itemName = parts[0].trim().toUpperCase();
                         let reqQty = Number(parts[1].trim());
                         if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
-                    }
-                    // Format Stamp Card (ItemName:MinKg:Target:FreeKg) -> Contoh: Regular - Cuci Kering Setrika:3:7:3
-                    else if (parts.length === 4) {
+                    } else if (parts.length === 4) {
+                        // Parser untuk promo Stamp (Buy X Times Min Y)
                         let itemName = parts[0].trim().toUpperCase();
-                        let minQty = Number(parts[1].trim());
-                        let target = Number(parts[2].trim());
+                        let target = Number(parts[1].trim());
+                        let minQty = Number(parts[2].trim());
                         let rewardQty = Number(parts[3].trim());
-                        if (itemName && !isNaN(minQty) && !isNaN(target) && !isNaN(rewardQty)) {
-                            promoStampRules[itemName] = { minQty: minQty, target: target, rewardQty: rewardQty };
-                        }
+                        if (itemName && !isNaN(target)) window.promoStampRules[itemName] = { target, minQty, rewardQty };
                     }
                 });
             }
@@ -909,36 +904,22 @@ window.openReview = async function() {
             cartAgg[nameKey].qty += Number(item.qty);
         });
 
-        // 4. BOX INFO STAMP CARD (VISUAL KASIR)
-        for (let ruleKey in promoStampRules) {
-            let rule = promoStampRules[ruleKey];
-            let stampKey = " stamp " + ruleKey;
-            let currentStamps = Number(storedObj[stampKey]) || 0;
-            
-            // Cek apakah item ini sedang ada di keranjang untuk memicu '+1 Stempel'
-            let isItemInCartAndEligible = false;
+        // VIRTUAL INJECTION UNTUK STAMP PROMO AGAR BISA INSTANT REDEEM
+        for (let ruleKey in window.promoStampRules) {
+            let rule = window.promoStampRules[ruleKey];
+            let cartItem = null; let actualItemName = "";
             for (let itemName in cartAgg) {
-                if (itemName.toUpperCase() === ruleKey || itemName.toUpperCase().includes(ruleKey)) {
-                    if (cartAgg[itemName].qty >= rule.minQty) {
-                        isItemInCartAndEligible = true;
-                        break;
-                    }
+                if (itemName.toUpperCase() === ruleKey) { cartItem = cartAgg[itemName]; actualItemName = itemName; break; }
+            }
+            if (cartItem && cartItem.qty >= rule.minQty) {
+                let stampsOwned = Number(storedObj["_stamp_" + ruleKey]) || 0;
+                if (stampsOwned + 1 >= rule.target) {
+                    storedObj[actualItemName] = (Number(storedObj[actualItemName]) || 0) + rule.rewardQty;
                 }
             }
-
-            if (currentStamps > 0 || isItemInCartAndEligible) {
-                let infoText = `Terkumpul: ${currentStamps}/${rule.target}`;
-                if (isItemInCartAndEligible) infoText += ` <span style="color:#2ecc71; font-weight:bold;">(+1 Stempel Hari Ini!)</span>`;
-                
-                promoHtml += `
-                    <div style="background:#fdfae6; padding:10px; border-radius:6px; margin-bottom:8px; border-left:4px solid #f1c40f;">
-                        <div style="font-weight:bold; color:#f39c12;">🏷️ Stamp Card: ${ruleKey}</div>
-                        <div style="font-size:12px; color:#555;">${infoText}</div>
-                        <div style="font-size:11px; color:#999; margin-top:4px;">(Min. ${rule.minQty} Kg untuk dapat 1 Stempel -> Gratis ${rule.rewardQty} Kg)</div>
-                    </div>
-                `;
-            }
         }
+
+        let promoItemsProcessed = [];
 
         // 2. BOX PROMO INSTAN (BUY X GET 1)
         for (let itemName in cartAgg) {
@@ -1076,43 +1057,6 @@ window.clearCart = function(force = false) {
 };
 
 window.finalizeOrder = async function(shouldPrint) {
-
-    if (currentCart.length === 0) {
-        alert("Keranjang kosong!");
-        return;
-    }
-
-    // 1. DEKLARASI VARIABEL DI PALING ATAS AGAR TERBACA DI SELURUH FUNGSI
-    const settings = await window.getDynamicSettings();
-    let promoRules = {};
-    let promoStampRules = {}; // INI SANGAT PENTING, HARUS ADA DI SINI
-
-    // 2. PARSING PROMO DARI SETTINGS
-    for (let key in settings) {
-        if (String(key).toUpperCase().includes("PROMO")) {
-            let valStr = String(settings[key] || "");
-            if (valStr.includes(":")) {
-                valStr.split(",").forEach(p => {
-                    let parts = p.split(":");
-                    if (parts.length === 2) {
-                        let itemName = parts[0].trim().toUpperCase();
-                        let reqQty = Number(parts[1].trim());
-                        if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
-                    }
-                    else if (parts.length === 4) {
-                        let itemName = parts[0].trim().toUpperCase();
-                        let minQty = Number(parts[1].trim());
-                        let target = Number(parts[2].trim());
-                        let rewardQty = Number(parts[3].trim());
-                        if (itemName && !isNaN(minQty) && !isNaN(target) && !isNaN(rewardQty)) {
-                            promoStampRules[itemName] = { minQty: minQty, target: target, rewardQty: rewardQty };
-                        }
-                    }
-                });
-            }
-        }
-    }
-    
     let pc = document.getElementById("pay-cash"); let cash = pc ? Number(pc.value) : 0;
     let elQ = document.getElementById("pay-qris"); let qris = elQ ? Number(elQ.value) : 0;
     let elT = document.getElementById("pay-transfer"); let transfer = elT ? Number(elT.value) : 0;
@@ -1162,7 +1106,7 @@ window.finalizeOrder = async function(shouldPrint) {
     let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
     let paidCoins = Math.max(0, cartCoins - redeemedLoyaltyCoins);
 
-    
+    const settings = await window.getDynamicSettings();
     let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
     let bantalPerBatch = Number(settings["Sarung_Bantal_Per_Batch"]) || 10;
     let kgPerCuci = Number(settings["Kilo_Per_Koin_Cuci"]) || 5;
@@ -1185,7 +1129,7 @@ window.finalizeOrder = async function(shouldPrint) {
     let newEarnedRewards = [];
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
 
-    
+    let promoRules = {};
     let stampRules = {};
     for (let key in settings) {
         let upperKey = String(key).toUpperCase();
@@ -1278,44 +1222,27 @@ window.finalizeOrder = async function(shouldPrint) {
             }
         }
 
-        // PROSES STAMP CARD (BERDASARKAN KUNJUNGAN BUKAN KELIPATAN QTY)
-        for (let ruleKey in promoStampRules) {
-            let rule = promoStampRules[ruleKey];
+        // 1.5 PROSES STAMP PROMO
+        for (let ruleKey in window.promoStampRules) {
+            let rule = window.promoStampRules[ruleKey];
             let matchedItemName = null;
-            let paidQty = 0;
-            
-            // Cek apakah ada barang di keranjang yang namanya sesuai (atau mengandung) ruleKey
-            currentCart.forEach(item => {
-                if (item.name.toUpperCase() === ruleKey || item.name.toUpperCase().includes(ruleKey)) {
-                    matchedItemName = item.name;
-                    paidQty += item.qty; // Gabungkan qty jika ada pemecahan baris
-                }
-            });
-
-            // Jika pelanggan mencuci mencapai Minimum Kg (misal 3kg)
-            if (matchedItemName && paidQty >= rule.minQty) {
-                let stampKey = " stamp " + ruleKey;
-                if (!activeCustomerProfile.storedRewards) activeCustomerProfile.storedRewards = {};
-                
-                let currentStamps = Number(activeCustomerProfile.storedRewards[stampKey]) || 0;
-                
-                // Tambah 1 stempel karena telah memenuhi syarat hari ini
-                currentStamps += 1;
-
-                // Cek apakah sudah tembus target (misal: 7 kali)
-                if (currentStamps >= rule.target) {
-                    currentStamps -= rule.target; // Reset atau kurangi target
+            for (let itemName in cartAgg) {
+                if (itemName.toUpperCase() === ruleKey) { matchedItemName = itemName; break; }
+            }
+            if (matchedItemName) {
+                let paidQty = cartAgg[matchedItemName] - (claimedMap[matchedItemName] || 0);
+                if (paidQty >= rule.minQty) {
+                    let stampKey = "_stamp_" + ruleKey;
+                    let currentStamps = Number(activeCustomerProfile.storedRewards[stampKey]) || 0;
+                    currentStamps += 1;
                     
-                    // Beri Hadiah Gratis 3 Kg (Tersimpan di Hadiah Reguler untuk dipakai next time)
-                    activeCustomerProfile.storedRewards[matchedItemName] = (Number(activeCustomerProfile.storedRewards[matchedItemName]) || 0) + rule.rewardQty;
-                    newEarnedRewards.push({ item: matchedItemName, qty: rule.rewardQty, code: "STAMP_CARD" });
-                }
-
-                // Simpan sisa stempel ke profil
-                if (currentStamps > 0) {
-                    activeCustomerProfile.storedRewards[stampKey] = currentStamps;
-                } else {
-                    delete activeCustomerProfile.storedRewards[stampKey];
+                    if (currentStamps >= rule.target) {
+                        currentStamps -= rule.target;
+                        activeCustomerProfile.storedRewards[matchedItemName] = (Number(activeCustomerProfile.storedRewards[matchedItemName]) || 0) + rule.rewardQty;
+                        newEarnedRewards.push({ item: matchedItemName, qty: rule.rewardQty, code: "STAMP_REWARD" });
+                    }
+                    if (currentStamps > 0) activeCustomerProfile.storedRewards[stampKey] = currentStamps;
+                    else delete activeCustomerProfile.storedRewards[stampKey];
                 }
             }
         }
@@ -1354,7 +1281,7 @@ window.finalizeOrder = async function(shouldPrint) {
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, actualCoins: isLaundry ? 0 : expectedCoinsTotal, 
         
-        // MENGGUNAKAN VARIABEL YANG BENAR SESUAI KODE ANDA
+        // PENTING: MENGIRIM JSON FINAL KE CODE.GS
         finalStoredRewards: activeCustomerProfile ? JSON.stringify(activeCustomerProfile.storedRewards) : null,
         
         outlet: currentOutlet, syncStatus: "Pending" 
