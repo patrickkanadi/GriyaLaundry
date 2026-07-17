@@ -1185,7 +1185,7 @@ window.finalizeOrder = async function(shouldPrint) {
     let newEarnedRewards = [];
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
 
-    let promoRules = {};
+    
     let stampRules = {};
     for (let key in settings) {
         let upperKey = String(key).toUpperCase();
