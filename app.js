@@ -868,7 +868,8 @@ window.openReview = async function() {
     if (activeCustomerProfile) {
         let storedObj = {};
         if (activeCustomerProfile.storedRewards) {
-            try { storedObj = typeof activeCustomerProfile.storedRewards === 'string' ? JSON.parse(activeCustomerProfile.storedRewards) : activeCustomerProfile.storedRewards; } 
+            // MENGGUNAKAN JSON.stringify UNTUK DEEP COPY AGAR INJEKSI VIRTUAL TIDAK MERUSAK DATA ASLI
+            try { storedObj = typeof activeCustomerProfile.storedRewards === 'string' ? JSON.parse(activeCustomerProfile.storedRewards) : JSON.parse(JSON.stringify(activeCustomerProfile.storedRewards)); } 
             catch(e) { storedObj = {}; }
         }
 
@@ -1725,6 +1726,11 @@ window.syncMasterData = async function(isSilent = false) {
             let btnKoin = document.getElementById("btn-koin-top");
             if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[savedOutlet] || 0} | Mesin: ${window.coinsInMachines[savedOutlet] || 0}`;
 
+            // Menambahkan kode untuk menyimpan Settings agar Promo Rules bisa dibaca tablet
+            if (result.data.settings) {
+                let txSet = db.transaction(["settings"], "readwrite");
+                for (let k in result.data.settings) { txSet.objectStore("settings").put({ key: k, value: result.data.settings[k] }); }
+            }
             if (result.data.staff) { let txStaff = db.transaction(["staff"], "readwrite"); result.data.staff.forEach(s => txStaff.objectStore("staff").put(s)); }
             if (result.data.menu) { window.globalMenuDataRaw = result.data.menu; let txMenu = db.transaction(["menu"], "readwrite"); result.data.menu.forEach(m => txMenu.objectStore("menu").put(m)); }
             if (result.data.members) { let txMem = db.transaction(["members"], "readwrite"); result.data.members.forEach(m => txMem.objectStore("members").put(m)); }
