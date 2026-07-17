@@ -853,12 +853,13 @@ window.openReview = async function() {
                         let reqQty = Number(parts[1].trim());
                         if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
                     } else if (parts.length === 4) {
-                        // Parser untuk promo Stamp (Buy X Times Min Y)
                         let itemName = parts[0].trim().toUpperCase();
-                        let target = Number(parts[1].trim());
-                        let minQty = Number(parts[2].trim());
+                        let minQty = Number(parts[1].trim());
+                        let target = Number(parts[2].trim());
                         let rewardQty = Number(parts[3].trim());
-                        if (itemName && !isNaN(target)) window.promoStampRules[itemName] = { target, minQty, rewardQty };
+                        if (itemName && !isNaN(minQty) && !isNaN(target) && !isNaN(rewardQty)) {
+                            stampRules[itemName] = { minQty, target, rewardQty };
+                        }
                     }
                 });
             }
@@ -1223,8 +1224,8 @@ window.finalizeOrder = async function(shouldPrint) {
         }
 
         // 1.5 PROSES STAMP PROMO
-        for (let ruleKey in window.promoStampRules) {
-            let rule = window.promoStampRules[ruleKey];
+        for (let ruleKey in stampRules) {
+            let rule = stampRules[ruleKey];
             let matchedItemName = null;
             for (let itemName in cartAgg) {
                 if (itemName.toUpperCase() === ruleKey) { matchedItemName = itemName; break; }
