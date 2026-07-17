@@ -820,7 +820,6 @@ window.renderCart = function() {
 window.openReview = async function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
-    // 1. TARIK DATA SECARA ASYNC
     const settings = await window.getDynamicSettings();
     let promoRules = {};
     for (let key in settings) {
@@ -858,7 +857,7 @@ window.openReview = async function() {
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
         let maxRedeemable = 0; let F = Number(activeCustomerProfile.freeCoins) || 0; let P = Number(activeCustomerProfile.points) || 0; let T = Number(window.loyaltyTarget) || 10;
 
-        for (let r = cartCoins; r >= 0; r--) {
+        for (let r = Math.floor(cartCoins); r >= 0; r--) {
             let paidItems = cartCoins - r;
             let earnedFree = Math.floor((P + paidItems) / T);
             if (r <= F + earnedFree) { maxRedeemable = r; break; }
@@ -876,7 +875,8 @@ window.openReview = async function() {
         currentCart.forEach(item => {
             let nameKey = String(item.name).trim();
             if (!cartAgg[nameKey]) cartAgg[nameKey] = { qty: 0, price: Number(item.originalPrice || item.price) };
-            cartAgg[nameKey].qty += Math.floor(Number(item.qty));
+            // PENTING: Jangan gunakan Math.floor di sini agar bisa menerima desimal (8.5 kg)
+            cartAgg[nameKey].qty += Number(item.qty);
         });
 
         for (let itemName in cartAgg) {
@@ -890,14 +890,15 @@ window.openReview = async function() {
             }
             
             if (ruleQty > 0) {
-                // MENGGUNAKAN LOGIKA SIMULASI MUNDUR ANDA
                 let fItem = Number(storedObj[itemName]) || 0;
                 let pItem = Number(storedObj["_prog_" + itemName]) || 0;
                 let tItem = ruleQty;
 
                 let maxItemRedeemable = 0;
-                for (let r = cartQty; r >= 0; r--) {
-                    let paidItems = cartQty - r;
+                let flooredCartQty = Math.floor(cartQty); // Loop klaimnya hanya untuk barang bulat
+                
+                for (let r = flooredCartQty; r >= 0; r--) {
+                    let paidItems = cartQty - r; // cartQty bisa desimal, contoh 8.5
                     let earnedFree = Math.floor((pItem + paidItems) / tItem);
                     if (r <= fItem + earnedFree) { maxItemRedeemable = r; break; }
                 }
@@ -910,7 +911,7 @@ window.openReview = async function() {
                 }
             } else if (Number(storedObj[itemName]) > 0 && !itemName.startsWith("_prog_")) {
                 let qtyOwned = Number(storedObj[itemName]) || 0;
-                let possibleClaim = Math.min(qtyOwned, cartQty);
+                let possibleClaim = Math.min(qtyOwned, Math.floor(cartQty));
                 if (possibleClaim > 0) {
                     promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#e8f4f8; padding:8px; border-radius:6px; border:1px solid #bce8f1;">
                        <div><strong style="color:#2980b9; font-size:12px;">🎁 Hadiah Reguler: ${itemName}</strong><br><small style="color:#2471a3; font-size:11px;">Maks guna: ${possibleClaim}</small></div>
@@ -1030,7 +1031,6 @@ window.finalizeOrder = async function(shouldPrint) {
     else if (activeMethods.length === 0) payMethod = "Unpaid";
     else payMethod = activeMethods.join(" + ");
 
-    // PISAHKAN PENCATATAN HADIAH PROMO VS HADIAH REGULER
     let redeemedList = []; let redeemedLoyaltyCoins = 0;
     let claimedMap = {}; let claimedPromoMap = {};
     
@@ -1054,7 +1054,6 @@ window.finalizeOrder = async function(shouldPrint) {
     let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
     let paidCoins = Math.max(0, cartCoins - redeemedLoyaltyCoins);
 
-    // TARIK DATA SETTINGS ASYNC
     const settings = await window.getDynamicSettings();
     let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
     let bantalPerBatch = Number(settings["Sarung_Bantal_Per_Batch"]) || 10;
@@ -1117,10 +1116,10 @@ window.finalizeOrder = async function(shouldPrint) {
         let cartAgg = {};
         currentCart.forEach(item => { 
             let nameKey = String(item.name).trim();
-            cartAgg[nameKey] = (cartAgg[nameKey] || 0) + Math.floor(Number(item.qty)); 
+            cartAgg[nameKey] = (cartAgg[nameKey] || 0) + Number(item.qty); // TERIMA DESIMAL
         });
 
-        // PROSES MATEMATIKA BUY X GET 1 (MENGGUNAKAN SIMULASI MUNDUR)
+        // PROSES MATEMATIKA BUY X GET 1
         for (let itemName in cartAgg) {
             let ruleKey = itemName.toUpperCase();
             let ruleQty = 0;
@@ -1138,7 +1137,9 @@ window.finalizeOrder = async function(shouldPrint) {
 
                 let totalProg = initialProg + paidQty;
                 let newlyEarnedFItem = Math.floor(totalProg / ruleQty);
-                let remainingProg = totalProg % ruleQty;
+                
+                // MENGGUNAKAN toFixed UNTUK MENCEGAH BUG PERHITUNGAN DESIMAL JS (Misal: 7.5 % 7)
+                let remainingProg = Number((totalProg % ruleQty).toFixed(2)); 
 
                 let finalFItem = Math.max(0, (initialFItem + newlyEarnedFItem) - claimedQty);
 
@@ -1153,7 +1154,6 @@ window.finalizeOrder = async function(shouldPrint) {
             }
         }
 
-        // POTONG HADIAH REGULER
         for (let itemName in claimedMap) {
             let qty = claimedMap[itemName];
             if (activeCustomerProfile.storedRewards[itemName]) {
