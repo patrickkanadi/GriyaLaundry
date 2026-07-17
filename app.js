@@ -1162,7 +1162,7 @@ window.finalizeOrder = async function(shouldPrint) {
     let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
     let paidCoins = Math.max(0, cartCoins - redeemedLoyaltyCoins);
 
-    const settings = await window.getDynamicSettings();
+    
     let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
     let bantalPerBatch = Number(settings["Sarung_Bantal_Per_Batch"]) || 10;
     let kgPerCuci = Number(settings["Kilo_Per_Koin_Cuci"]) || 5;
