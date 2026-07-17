@@ -1076,6 +1076,43 @@ window.clearCart = function(force = false) {
 };
 
 window.finalizeOrder = async function(shouldPrint) {
+
+    if (currentCart.length === 0) {
+        alert("Keranjang kosong!");
+        return;
+    }
+
+    // 1. DEKLARASI VARIABEL DI PALING ATAS AGAR TERBACA DI SELURUH FUNGSI
+    const settings = await window.getDynamicSettings();
+    let promoRules = {};
+    let promoStampRules = {}; // INI SANGAT PENTING, HARUS ADA DI SINI
+
+    // 2. PARSING PROMO DARI SETTINGS
+    for (let key in settings) {
+        if (String(key).toUpperCase().includes("PROMO")) {
+            let valStr = String(settings[key] || "");
+            if (valStr.includes(":")) {
+                valStr.split(",").forEach(p => {
+                    let parts = p.split(":");
+                    if (parts.length === 2) {
+                        let itemName = parts[0].trim().toUpperCase();
+                        let reqQty = Number(parts[1].trim());
+                        if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
+                    }
+                    else if (parts.length === 4) {
+                        let itemName = parts[0].trim().toUpperCase();
+                        let minQty = Number(parts[1].trim());
+                        let target = Number(parts[2].trim());
+                        let rewardQty = Number(parts[3].trim());
+                        if (itemName && !isNaN(minQty) && !isNaN(target) && !isNaN(rewardQty)) {
+                            promoStampRules[itemName] = { minQty: minQty, target: target, rewardQty: rewardQty };
+                        }
+                    }
+                });
+            }
+        }
+    }
+    
     let pc = document.getElementById("pay-cash"); let cash = pc ? Number(pc.value) : 0;
     let elQ = document.getElementById("pay-qris"); let qris = elQ ? Number(elQ.value) : 0;
     let elT = document.getElementById("pay-transfer"); let transfer = elT ? Number(elT.value) : 0;
