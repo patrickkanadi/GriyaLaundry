@@ -817,11 +817,27 @@ window.renderCart = function() {
     window.cartSubtotal = total; window.cartGrandTotal = total;
 };
 
-window.openReview = function() {
+window.openReview = async function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
-    // MENGGUNAKAN CACHE (Tanpa Async) AGAR MENCEGAH BUG LAYAR KOSONG
-    let promoRules = window.globalPromoRulesCache || {};
+    // 1. TARIK DATA SECARA ASYNC
+    const settings = await window.getDynamicSettings();
+    let promoRules = {};
+    for (let key in settings) {
+        if (String(key).toUpperCase().includes("PROMO")) {
+            let valStr = String(settings[key] || "");
+            if (valStr.includes(":")) {
+                valStr.split(",").forEach(p => {
+                    let parts = p.split(":");
+                    if (parts.length === 2) {
+                        let itemName = parts[0].trim().toUpperCase();
+                        let reqQty = Number(parts[1].trim());
+                        if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
+                    }
+                });
+            }
+        }
+    }
 
     let inputs = ["pay-cash", "pay-qris", "pay-transfer", "pay-hotel-piutang", "pay-tamu-piutang"];
     inputs.forEach(id => { let el = document.getElementById(id); if(el && el.tagName === 'INPUT') el.value = 0; });
@@ -855,7 +871,7 @@ window.openReview = function() {
            </div>`;
         }
 
-        // B. MATEMATIKA INSTAN "BUY X GET 1"
+        // B. PROMO INSTAN (BUY X GET 1) & HADIAH UNDIAN
         let cartAgg = {};
         currentCart.forEach(item => {
             let nameKey = String(item.name).trim();
@@ -874,21 +890,22 @@ window.openReview = function() {
             }
             
             if (ruleQty > 0) {
-                let pKey = "_prog_" + itemName;
-                let curProg = Number(storedObj[pKey]) || 0;
-                
-                // Jika punya tabungan utuh dari masa lalu, konversi ke progress
-                let legacyStored = Number(storedObj[itemName]) || 0;
-                let totalAccum = curProg + cartQty + (legacyStored * (ruleQty + 1));
+                // MENGGUNAKAN LOGIKA SIMULASI MUNDUR ANDA
+                let fItem = Number(storedObj[itemName]) || 0;
+                let pItem = Number(storedObj["_prog_" + itemName]) || 0;
+                let tItem = ruleQty;
 
-                let divisor = ruleQty + 1;
-                let earnedInstantFree = Math.floor(totalAccum / divisor);
+                let maxItemRedeemable = 0;
+                for (let r = cartQty; r >= 0; r--) {
+                    let paidItems = cartQty - r;
+                    let earnedFree = Math.floor((pItem + paidItems) / tItem);
+                    if (r <= fItem + earnedFree) { maxItemRedeemable = r; break; }
+                }
 
-                if (earnedInstantFree > 0) {
-                    // Nilai value tetap 0 agar kasir mengklaim secara manual
-                    promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#e8f8f5; padding:8px; border-radius:6px; border:1px solid #a3e4d7;">
-                       <div><strong style="color:#117a65; font-size:12px;">🎉 Promo Buy ${ruleQty} Get 1: ${itemName}</strong><br><small style="color:#148f77; font-size:11px;">Maks potong: ${earnedInstantFree}</small></div>
-                       <input type="number" class="promo-input" data-type="buy_x_get_1" data-item="${itemName}" data-price="${price}" value="0" max="${earnedInstantFree}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #1abc9c; border-radius:4px; font-size:14px;">
+                if (maxItemRedeemable > 0) {
+                    promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f9ebff; padding:8px; border-radius:6px; border:1px solid #d6b4fc;">
+                       <div><strong style="color:#8e44ad; font-size:12px;">🎁 Klaim Promo: ${itemName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks guna: ${maxItemRedeemable}</small></div>
+                       <input type="number" class="promo-input" data-type="buy_x_get_1" data-item="${itemName}" data-price="${price}" value="0" max="${maxItemRedeemable}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
                    </div>`;
                 }
             } else if (Number(storedObj[itemName]) > 0 && !itemName.startsWith("_prog_")) {
@@ -917,7 +934,7 @@ window.openReview = function() {
     
     let mod = document.getElementById("review-modal"); if(mod) mod.classList.remove("hidden");
 };
-window.reviewOrder = window.openReview; // PENGUNCI TOMBOL
+window.reviewOrder = window.openReview; // KUNCI TOMBOL UI
 
 window.closeReview = function() {
     let reviewModal = document.getElementById("review-modal");
@@ -1037,6 +1054,7 @@ window.finalizeOrder = async function(shouldPrint) {
     let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
     let paidCoins = Math.max(0, cartCoins - redeemedLoyaltyCoins);
 
+    // TARIK DATA SETTINGS ASYNC
     const settings = await window.getDynamicSettings();
     let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
     let bantalPerBatch = Number(settings["Sarung_Bantal_Per_Batch"]) || 10;
@@ -1060,7 +1078,22 @@ window.finalizeOrder = async function(shouldPrint) {
     let newEarnedRewards = [];
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
 
-    let promoRules = window.globalPromoRulesCache || {}; // Pakai cache anti-jeda
+    let promoRules = {};
+    for (let key in settings) {
+        if (String(key).toUpperCase().includes("PROMO")) {
+            let valStr = String(settings[key] || "");
+            if (valStr.includes(":")) {
+                valStr.split(",").forEach(p => {
+                    let parts = p.split(":");
+                    if (parts.length === 2) {
+                        let itemName = parts[0].trim().toUpperCase();
+                        let reqQty = Number(parts[1].trim());
+                        if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
+                    }
+                });
+            }
+        }
+    }
 
     if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
@@ -1087,7 +1120,7 @@ window.finalizeOrder = async function(shouldPrint) {
             cartAgg[nameKey] = (cartAgg[nameKey] || 0) + Math.floor(Number(item.qty)); 
         });
 
-        // REKAM PROSES MATEMATIKA BUY X GET 1
+        // PROSES MATEMATIKA BUY X GET 1 (MENGGUNAKAN SIMULASI MUNDUR)
         for (let itemName in cartAgg) {
             let ruleKey = itemName.toUpperCase();
             let ruleQty = 0;
@@ -1096,28 +1129,27 @@ window.finalizeOrder = async function(shouldPrint) {
             }
 
             if (ruleQty > 0) {
-                let boughtQty = cartAgg[itemName];
+                let cartQty = cartAgg[itemName];
                 let claimedQty = claimedPromoMap[itemName] || 0;
-                
-                let pKey = "_prog_" + itemName;
-                let curProg = Number(activeCustomerProfile.storedRewards[pKey]) || 0;
-                
-                // Meleburkan sisa tabungan utuh lama ke dalam progress
-                let legacyStored = Number(activeCustomerProfile.storedRewards[itemName]) || 0;
-                if (legacyStored > 0) {
-                    curProg += legacyStored * (ruleQty + 1);
-                    delete activeCustomerProfile.storedRewards[itemName];
-                }
+                let paidQty = Math.max(0, cartQty - claimedQty);
 
-                // MATEMATIKA LEFTOVER (Penyimpanan Sisa Progress)
-                let totalAccum = curProg + boughtQty;
-                let leftover = totalAccum - (claimedQty * (ruleQty + 1));
+                let initialProg = Number(activeCustomerProfile.storedRewards["_prog_" + itemName]) || 0;
+                let initialFItem = Number(activeCustomerProfile.storedRewards[itemName]) || 0;
 
-                if (leftover > 0) {
-                    activeCustomerProfile.storedRewards[pKey] = leftover;
-                } else {
-                    delete activeCustomerProfile.storedRewards[pKey];
-                }
+                let totalProg = initialProg + paidQty;
+                let newlyEarnedFItem = Math.floor(totalProg / ruleQty);
+                let remainingProg = totalProg % ruleQty;
+
+                let finalFItem = Math.max(0, (initialFItem + newlyEarnedFItem) - claimedQty);
+
+                if (finalFItem > 0) activeCustomerProfile.storedRewards[itemName] = finalFItem;
+                else delete activeCustomerProfile.storedRewards[itemName];
+
+                if (remainingProg > 0) activeCustomerProfile.storedRewards["_prog_" + itemName] = remainingProg;
+                else delete activeCustomerProfile.storedRewards["_prog_" + itemName];
+                
+                if (newlyEarnedFItem > 0) newEarnedRewards.push({ item: itemName, qty: newlyEarnedFItem, code: "BUY_X_GET_1" });
+                delete claimedMap[itemName]; 
             }
         }
 
