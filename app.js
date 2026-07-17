@@ -443,11 +443,15 @@ window.updatePromoIndicator = function() {
     let promoText = `🎁 ${activeCustomerProfile.freeCoins || 0} Koin Gratis! (Poin: ${activeCustomerProfile.points || 0}/${window.loyaltyTarget})`;
     
     let storedCount = 0;
+    let storedObj = {};
     if (activeCustomerProfile.storedRewards) {
-        for (let k in activeCustomerProfile.storedRewards) {
-            // Mencegah histori progress (ex: _prog_Bed Cover) terhitung sebagai hadiah utuh
-            if (!k.startsWith("_prog_")) storedCount += activeCustomerProfile.storedRewards[k];
-        }
+        try { storedObj = typeof activeCustomerProfile.storedRewards === 'string' ? JSON.parse(activeCustomerProfile.storedRewards) : activeCustomerProfile.storedRewards; }
+        catch(e) { storedObj = {}; }
+    }
+
+    for (let k in storedObj) {
+        // Abaikan progress dan stempel
+        if (!k.startsWith("_prog_") && !k.startsWith("_stamp_")) storedCount += storedObj[k];
     }
     
     if (storedCount > 0) promoText += ` | <span style="cursor:pointer; text-decoration:underline; color:purple;" onclick="window.showStoredRewards()">🎫 ${storedCount} Hadiah Tersimpan</span>`;
@@ -460,8 +464,14 @@ window.updatePromoIndicator = function() {
 };
 
 window.showStoredRewards = function() {
-    if(!activeCustomerProfile || !activeCustomerProfile.storedRewards) return;
-    let items = Object.entries(activeCustomerProfile.storedRewards).filter(([k,v]) => v > 0 && !k.startsWith("_prog_"));
+    if(!activeCustomerProfile) return;
+    let storedObj = {};
+    if (activeCustomerProfile.storedRewards) {
+        try { storedObj = typeof activeCustomerProfile.storedRewards === 'string' ? JSON.parse(activeCustomerProfile.storedRewards) : activeCustomerProfile.storedRewards; }
+        catch(e) { storedObj = {}; }
+    }
+
+    let items = Object.entries(storedObj).filter(([k,v]) => v > 0 && !k.startsWith("_prog_") && !k.startsWith("_stamp_"));
     if(items.length === 0) return alert("Tidak ada hadiah tersimpan.");
     let msg = "🎁 Hadiah Tersimpan (Harap masukkan item ini ke keranjang untuk klaim):\n\n"; 
     items.forEach(([k,v]) => msg += `- ${v}x ${k}\n`); 
@@ -820,10 +830,30 @@ window.renderCart = function() {
 window.openReview = async function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
+    // TARIK DATA SETTINGS (Buy X Get 1 & Stamp Card)
     const settings = await window.getDynamicSettings();
     let promoRules = {};
+    let stampRules = {};
+    
     for (let key in settings) {
-        if (String(key).toUpperCase().includes("PROMO")) {
+        let upperKey = String(key).toUpperCase();
+        if (upperKey.includes("PROMO_STAMP")) {
+            let valStr = String(settings[key] || "");
+            if (valStr.includes(":")) {
+                valStr.split(",").forEach(p => {
+                    let parts = p.split(":");
+                    if (parts.length === 4) { // Item:MinQty:ReqVisits:FreeQty
+                        let itemName = parts[0].trim().toUpperCase();
+                        let minQty = Number(parts[1].trim());
+                        let reqVisits = Number(parts[2].trim());
+                        let freeQty = Number(parts[3].trim());
+                        if (itemName && !isNaN(minQty) && !isNaN(reqVisits) && !isNaN(freeQty)) {
+                            stampRules[itemName] = { minQty, reqVisits, freeQty };
+                        }
+                    }
+                });
+            }
+        } else if (upperKey.includes("PROMO")) { // Aturan Buy X Get 1
             let valStr = String(settings[key] || "");
             if (valStr.includes(":")) {
                 valStr.split(",").forEach(p => {
@@ -853,7 +883,7 @@ window.openReview = async function() {
             catch(e) { storedObj = {}; }
         }
 
-        // 1. BOX LOYALTY KOIN
+        // A. LOYALTY KOIN
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
         let maxRedeemable = 0; let F = Number(activeCustomerProfile.freeCoins) || 0; let P = Number(activeCustomerProfile.points) || 0; let T = Number(window.loyaltyTarget) || 10;
 
@@ -874,12 +904,36 @@ window.openReview = async function() {
         currentCart.forEach(item => {
             let nameKey = String(item.name).trim();
             if (!cartAgg[nameKey]) cartAgg[nameKey] = { qty: 0, price: Number(item.originalPrice || item.price) };
-            cartAgg[nameKey].qty += Number(item.qty); // Bisa menerima desimal
+            cartAgg[nameKey].qty += Number(item.qty);
         });
 
-        let promoItemsProcessed = [];
+        // B. INFO STAMP CARD (VISUALIZER)
+        for (let ruleKey in stampRules) {
+            let rule = stampRules[ruleKey];
+            let pKey = "_stamp_" + ruleKey;
+            let currentStamps = Number(storedObj[pKey]) || 0;
+            
+            let cartItemQty = 0;
+            let realItemName = ruleKey;
+            for (let name in cartAgg) {
+                if (name.toUpperCase().includes(ruleKey) || ruleKey.includes(name.toUpperCase())) {
+                    cartItemQty = cartAgg[name].qty;
+                    realItemName = name; break;
+                }
+            }
+            
+            let willGetStamp = cartItemQty >= rule.minQty;
+            let textKeterangan = willGetStamp ? `<span style="color:#27ae60;">(+1 Stempel transaksi ini)</span>` : `(Beli min. ${rule.minQty} utk stempel)`;
+            
+            if (currentStamps > 0 || cartItemQty > 0) {
+                promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f0f8ff; padding:8px; border-radius:6px; border:1px solid #cce7ff;">
+                   <div><strong style="color:#0056b3; font-size:12px;">🏷️ Stamp Card: ${realItemName}</strong><br><small style="color:#004085; font-size:11px;">Terkumpul: ${currentStamps} / ${rule.reqVisits} ${textKeterangan}</small></div>
+               </div>`;
+            }
+        }
 
-        // 2. BOX PROMO INSTAN (BUY X GET 1)
+        // C. PROMO INSTAN (BUY X GET 1) & HADIAH REGULER
+        let promoItemsProcessed = [];
         for (let itemName in cartAgg) {
             let cartQty = cartAgg[itemName].qty;
             let price = cartAgg[itemName].price;
@@ -891,7 +945,7 @@ window.openReview = async function() {
             }
             
             if (ruleQty > 0) {
-                promoItemsProcessed.push(itemName); // Tandai bahwa item ini dikalkulasi oleh sistem Promo
+                promoItemsProcessed.push(itemName); 
                 
                 let fItem = Number(storedObj[itemName]) || 0;
                 let pItem = Number(storedObj["_prog_" + itemName]) || 0;
@@ -913,17 +967,16 @@ window.openReview = async function() {
             }
         }
 
-        // 3. BOX HADIAH UNDIAN (Benar-benar terpisah dari Box Promo di atas)
+        // D. BOX HADIAH REGULER (Undian & Hasil Jadi dari Stamp Card)
         for (let itemName in storedObj) {
             let qtyOwned = Number(storedObj[itemName]) || 0;
-            // Jika item ini BUKAN bagian dari Promo Buy X Get 1, ATAU dia hasil undian murni
-            if (qtyOwned > 0 && !itemName.startsWith("_prog_") && !promoItemsProcessed.includes(itemName)) {
+            if (qtyOwned > 0 && !itemName.startsWith("_prog_") && !itemName.startsWith("_stamp_") && !promoItemsProcessed.includes(itemName)) {
                 let cartItem = cartAgg[itemName];
                 if (cartItem) {
                     let possibleClaim = Math.min(qtyOwned, Math.floor(cartItem.qty));
                     if (possibleClaim > 0) {
                         promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f9ebff; padding:8px; border-radius:6px; border:1px solid #d6b4fc;">
-                           <div><strong style="color:#8e44ad; font-size:12px;">🎁 Hadiah Undian / Reguler: ${itemName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks guna: ${possibleClaim}</small></div>
+                           <div><strong style="color:#8e44ad; font-size:12px;">🎁 Klaim Hadiah: ${itemName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks guna: ${possibleClaim}</small></div>
                            <input type="number" class="promo-input" data-type="stored" data-item="${itemName}" data-price="${cartItem.price}" value="0" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
                        </div>`;
                     }
@@ -1088,8 +1141,26 @@ window.finalizeOrder = async function(shouldPrint) {
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
 
     let promoRules = {};
+    let stampRules = {};
     for (let key in settings) {
-        if (String(key).toUpperCase().includes("PROMO")) {
+        let upperKey = String(key).toUpperCase();
+        if (upperKey.includes("PROMO_STAMP")) {
+            let valStr = String(settings[key] || "");
+            if (valStr.includes(":")) {
+                valStr.split(",").forEach(p => {
+                    let parts = p.split(":");
+                    if (parts.length === 4) {
+                        let itemName = parts[0].trim().toUpperCase();
+                        let minQty = Number(parts[1].trim());
+                        let reqVisits = Number(parts[2].trim());
+                        let freeQty = Number(parts[3].trim());
+                        if (itemName && !isNaN(minQty) && !isNaN(reqVisits) && !isNaN(freeQty)) {
+                            stampRules[itemName] = { minQty, reqVisits, freeQty };
+                        }
+                    }
+                });
+            }
+        } else if (upperKey.includes("PROMO")) {
             let valStr = String(settings[key] || "");
             if (valStr.includes(":")) {
                 valStr.split(",").forEach(p => {
@@ -1129,7 +1200,7 @@ window.finalizeOrder = async function(shouldPrint) {
             cartAgg[nameKey] = (cartAgg[nameKey] || 0) + Number(item.qty); 
         });
 
-        // PROSES MATEMATIKA BUY X GET 1
+        // 1. PROSES MATEMATIKA BUY X GET 1
         for (let itemName in cartAgg) {
             let ruleKey = itemName.toUpperCase();
             let ruleQty = 0;
@@ -1162,6 +1233,38 @@ window.finalizeOrder = async function(shouldPrint) {
             }
         }
 
+        // 2. PROSES STAMP CARD
+        for (let itemName in cartAgg) {
+            let ruleKey = itemName.toUpperCase();
+            let rule = null; let matchedKey = null;
+            for (let pk in stampRules) {
+                if (ruleKey.includes(pk) || pk.includes(ruleKey)) { rule = stampRules[pk]; matchedKey = pk; break; }
+            }
+
+            if (rule) {
+                let cartQty = cartAgg[itemName];
+                let claimedReg = claimedMap[itemName] || 0;
+                let paidQty = Math.max(0, cartQty - claimedReg); // Hitung berat murni yang DIBAYAR hari ini
+
+                if (paidQty >= rule.minQty) {
+                    let pKey = "_stamp_" + matchedKey;
+                    let curStamps = Number(activeCustomerProfile.storedRewards[pKey]) || 0;
+                    curStamps += 1;
+                    
+                    if (curStamps >= rule.reqVisits) {
+                        curStamps -= rule.reqVisits;
+                        // Langsung tembakkan sebagai hadiah reguler agar bisa dipakai visit berikutnya
+                        activeCustomerProfile.storedRewards[itemName] = (Number(activeCustomerProfile.storedRewards[itemName]) || 0) + rule.freeQty;
+                        newEarnedRewards.push({ item: itemName, qty: rule.freeQty, code: "STAMP_REWARD", isUndian: true }); // Pakai tag isUndian agar tak dobel di Apps Script
+                    }
+                    
+                    if (curStamps > 0) activeCustomerProfile.storedRewards[pKey] = curStamps;
+                    else delete activeCustomerProfile.storedRewards[pKey];
+                }
+            }
+        }
+
+        // 3. POTONG HADIAH REGULER
         for (let itemName in claimedMap) {
             let qty = claimedMap[itemName];
             if (activeCustomerProfile.storedRewards[itemName]) {
@@ -1174,9 +1277,7 @@ window.finalizeOrder = async function(shouldPrint) {
         if (pendingPromoCode) {
             let promo = window.globalPromos.find(p => p.code === pendingPromoCode);
             if (promo) {
-                // TAG TAMBAHAN "isUndian" AGAR CODE.GS BISA MENCEGAH DOUBLE COUNTING
                 newEarnedRewards.push({ item: promo.rewardItem, qty: promo.rewardQty, code: promo.code, isUndian: true });
-                
                 activeCustomerProfile.storedRewards[promo.rewardItem] = (Number(activeCustomerProfile.storedRewards[promo.rewardItem]) || 0) + promo.rewardQty;
                 let d = new Date(); let todayStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
                 activeCustomerProfile.lastClaimDate = todayStr; 
