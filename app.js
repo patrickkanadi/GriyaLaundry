@@ -842,6 +842,7 @@ window.openReview = async function() {
     const settings = await window.getDynamicSettings();
     let promoRules = {};
     window.promoStampRules = {}; // Global untuk dipakai di finalizeOrder
+    
     for (let key in settings) {
         if (String(key).toUpperCase().includes("PROMO")) {
             let valStr = String(settings[key] || "");
@@ -858,7 +859,8 @@ window.openReview = async function() {
                         let target = Number(parts[2].trim());
                         let rewardQty = Number(parts[3].trim());
                         if (itemName && !isNaN(minQty) && !isNaN(target) && !isNaN(rewardQty)) {
-                            stampRules[itemName] = { minQty, target, rewardQty };
+                            // FIX: Changed stampRules to window.promoStampRules
+                            window.promoStampRules[itemName] = { minQty, target, rewardQty };
                         }
                     }
                 });
@@ -1134,23 +1136,9 @@ window.finalizeOrder = async function(shouldPrint) {
     let stampRules = {};
     for (let key in settings) {
         let upperKey = String(key).toUpperCase();
-        if (upperKey.includes("PROMO_STAMP")) {
-            let valStr = String(settings[key] || "");
-            if (valStr.includes(":")) {
-                valStr.split(",").forEach(p => {
-                    let parts = p.split(":");
-                    if (parts.length === 4) {
-                        let itemName = parts[0].trim().toUpperCase();
-                        let minQty = Number(parts[1].trim());
-                        let reqVisits = Number(parts[2].trim());
-                        let freeQty = Number(parts[3].trim());
-                        if (itemName && !isNaN(minQty) && !isNaN(reqVisits) && !isNaN(freeQty)) {
-                            stampRules[itemName] = { minQty, reqVisits, freeQty };
-                        }
-                    }
-                });
-            }
-        } else if (upperKey.includes("PROMO")) {
+        
+        // FIX: Replaced separated PROMO_STAMP and PROMO blocks to parse consistently like openReview
+        if (upperKey.includes("PROMO")) {
             let valStr = String(settings[key] || "");
             if (valStr.includes(":")) {
                 valStr.split(",").forEach(p => {
@@ -1159,6 +1147,17 @@ window.finalizeOrder = async function(shouldPrint) {
                         let itemName = parts[0].trim().toUpperCase();
                         let reqQty = Number(parts[1].trim());
                         if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
+                    } else if (parts.length === 4) {
+                        let itemName = parts[0].trim().toUpperCase();
+                        let minQty = Number(parts[1].trim());
+                        
+                        // FIX: Match the exact property names expected below (target and rewardQty)
+                        let target = Number(parts[2].trim());
+                        let rewardQty = Number(parts[3].trim());
+                        
+                        if (itemName && !isNaN(minQty) && !isNaN(target) && !isNaN(rewardQty)) {
+                            stampRules[itemName] = { minQty, target, rewardQty };
+                        }
                     }
                 });
             }
