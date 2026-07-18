@@ -3244,41 +3244,42 @@ window.openCoinManagement = function() {
 
 
 window.submitCoinManagement = function() {
-
     const actionType = document.getElementById("coin-action-type").value;
-
     const qty = Number(document.getElementById("manage-coin-qty").value);
-
     let note = document.getElementById("manage-coin-note").value.trim();
-
     if (qty <= 0) return alert("Jumlah koin tidak valid.");
 
-
-
     let prefix = actionType === "jammed" ? "JAM-" : "RET-";
-
     if (!note) { note = actionType === "jammed" ? "Mesin Macet / Tertelan" : "Daur Ulang Koin Fisik"; }
 
-
-
     // KUNCI GANDA: Tarik dari localStorage pada detik terakhir tombol dipencet
-
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
-
     
-
     const payload = { retrievalId: prefix + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: note, outlet: currentOutlet, syncStatus: "Pending" };
-
     db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
-
     
-
+    // --- TAMBAHAN: Update stok laci secara instan tanpa menunggu cloud (Optimistic Update) ---
+    if (actionType === "recycle") {
+        if (!window.laciStocks) window.laciStocks = {};
+        if (!window.coinsInMachines) window.coinsInMachines = {};
+        
+        window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + qty;
+        window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - qty);
+        
+        let btnKoin = document.getElementById("btn-koin-top");
+        if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
+        
+        if (window.globalMenuData) {
+            let koinItem = window.globalMenuData.find(m => String(m.name).toUpperCase().includes("KOIN_FISIK") || String(m.name).toUpperCase().includes("KOIN FISIK"));
+            if (koinItem) { koinItem.currentStock = window.laciStocks[currentOutlet]; }
+            if (typeof renderProductGrid === "function") renderProductGrid();
+        }
+    }
+    // -------------------------------------------------------------------------------------
+    
     document.getElementById("manage-coin-qty").value = ""; document.getElementById("manage-coin-note").value = "";
-
     document.getElementById("coin-management-modal").classList.add("hidden");
-
     alert("Laporan koin berhasil dicatat di outlet: " + currentOutlet); window.runBackgroundSync();
-
 };
 
 
