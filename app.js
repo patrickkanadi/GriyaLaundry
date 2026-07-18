@@ -2246,14 +2246,17 @@ window.finalizeOrder = async function(shouldPrint) {
 
 
     let assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
-
     let expectedCoinsTotal = assumedWashingCoins + koinSoldQty;
 
+    let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
 
+    // VALIDASI KUNCI 2: Cegah transaksi jika koin di laci tidak cukup
+    let availableCoinsInDrawer = window.laciStocks ? (window.laciStocks[currentOutlet] || 0) : 0;
+    if (expectedCoinsTotal > availableCoinsInDrawer) {
+        return alert(`⚠️ TRANSAKSI GAGAL: Koin di Laci Tidak Cukup!\n\nKebutuhan koin untuk order ini: ${expectedCoinsTotal} koin.\nSisa koin di Laci: ${availableCoinsInDrawer} koin.\n\nSilakan lakukan "Daur Ulang" (Tarik koin dari mesin) di menu atas terlebih dahulu.`);
+    }
 
     let newEarnedRewards = [];
-
-    let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
 
 
 
@@ -2514,6 +2517,24 @@ window.finalizeOrder = async function(shouldPrint) {
     
 
     tx.oncomplete = async () => {
+        
+        // UPDATE INSTAN SAAT CHECKOUT (Koin pindah dari Laci ke Mesin di layar)
+        if (expectedCoinsTotal > 0) {
+            if (!window.laciStocks) window.laciStocks = {};
+            if (!window.coinsInMachines) window.coinsInMachines = {};
+            
+            window.laciStocks[currentOutlet] = Math.max(0, (window.laciStocks[currentOutlet] || 0) - expectedCoinsTotal);
+            window.coinsInMachines[currentOutlet] = (window.coinsInMachines[currentOutlet] || 0) + expectedCoinsTotal;
+            
+            let btnKoin = document.getElementById("btn-koin-top");
+            if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
+            
+            if (window.globalMenuData) {
+                let koinItem = window.globalMenuData.find(m => String(m.name).toUpperCase().includes("KOIN_FISIK") || String(m.name).toUpperCase().includes("KOIN FISIK"));
+                if (koinItem) { koinItem.currentStock = window.laciStocks[currentOutlet]; }
+                if (typeof renderProductGrid === "function") renderProductGrid();
+            }
+        }
 
         if (finalStatus === "Processing" || hotelPiutang > 0 || tamuPiutang > 0) {
 
@@ -3254,6 +3275,12 @@ window.submitCoinManagement = function() {
 
     // KUNCI GANDA: Tarik dari localStorage pada detik terakhir tombol dipencet
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
+    
+    // VALIDASI KUNCI 1: Cegah Daur Ulang melebihi isi mesin
+    let maxMachine = window.coinsInMachines ? (window.coinsInMachines[currentOutlet] || 0) : 0;
+    if (actionType === "recycle" && qty > maxMachine) {
+        return alert(`⚠️ Gagal Daur Ulang: Anda mencoba menarik ${qty} koin, tapi koin di mesin saat ini hanya ${maxMachine}.`);
+    }
     
     const payload = { retrievalId: prefix + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: note, outlet: currentOutlet, syncStatus: "Pending" };
     db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
