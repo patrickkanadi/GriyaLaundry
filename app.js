@@ -2278,34 +2278,6 @@ window.finalizeOrder = async function(shouldPrint) {
         }
     }
 
-        } else if (upperKey.includes("PROMO")) {
-
-            let valStr = String(settings[key] || "");
-
-            if (valStr.includes(":")) {
-
-                valStr.split(",").forEach(p => {
-
-                    let parts = p.split(":");
-
-                    if (parts.length === 2) {
-
-                        let itemName = parts[0].trim().toUpperCase();
-
-                        let reqQty = Number(parts[1].trim());
-
-                        if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
-
-                    }
-
-                });
-
-            }
-
-        }
-
-    }
-
 
 
     if (custPhone !== "-") {
@@ -2448,7 +2420,6 @@ window.finalizeOrder = async function(shouldPrint) {
                 }
             }
         }
-
 
 
         // 2. POTONG HADIAH REGULER
