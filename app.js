@@ -1706,19 +1706,12 @@ window.openReview = async function() {
                         if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
 
                     } else if (parts.length === 4) {
-
                         // Parser untuk promo Stamp (Buy X Times Min Y)
-
                         let itemName = parts[0].trim().toUpperCase();
-
-                        let target = Number(parts[1].trim());
-
-                        let minQty = Number(parts[2].trim());
-
+                        let minQty = Number(parts[1].trim()); // Posisi 1
+                        let target = Number(parts[2].trim()); // Posisi 2
                         let rewardQty = Number(parts[3].trim());
-
                         if (itemName && !isNaN(target)) window.promoStampRules[itemName] = { target, minQty, rewardQty };
-
                     }
 
                 });
@@ -2278,21 +2271,13 @@ window.finalizeOrder = async function(shouldPrint) {
                     let parts = p.split(":");
 
                     if (parts.length === 4) {
-
                         let itemName = parts[0].trim().toUpperCase();
-
                         let minQty = Number(parts[1].trim());
-
-                        let reqVisits = Number(parts[2].trim());
-
-                        let freeQty = Number(parts[3].trim());
-
-                        if (itemName && !isNaN(minQty) && !isNaN(reqVisits) && !isNaN(freeQty)) {
-
-                            stampRules[itemName] = { minQty, reqVisits, freeQty };
-
+                        let target = Number(parts[2].trim());
+                        let rewardQty = Number(parts[3].trim());
+                        if (itemName && !isNaN(minQty) && !isNaN(target) && !isNaN(rewardQty)) {
+                            stampRules[itemName] = { minQty, target, rewardQty };
                         }
-
                     }
 
                 });
@@ -2446,51 +2431,28 @@ window.finalizeOrder = async function(shouldPrint) {
 
 
         // 1.5 PROSES STAMP PROMO
-
-        for (let ruleKey in window.promoStampRules) {
-
-            let rule = window.promoStampRules[ruleKey];
-
+        for (let ruleKey in stampRules) {
+            let rule = stampRules[ruleKey];
             let matchedItemName = null;
-
             for (let itemName in cartAgg) {
-
                 if (itemName.toUpperCase() === ruleKey) { matchedItemName = itemName; break; }
-
             }
-
             if (matchedItemName) {
-
                 let paidQty = cartAgg[matchedItemName] - (claimedMap[matchedItemName] || 0);
-
                 if (paidQty >= rule.minQty) {
-
                     let stampKey = "_stamp_" + ruleKey;
-
                     let currentStamps = Number(activeCustomerProfile.storedRewards[stampKey]) || 0;
-
                     currentStamps += 1;
-
                     
-
                     if (currentStamps >= rule.target) {
-
                         currentStamps -= rule.target;
-
                         activeCustomerProfile.storedRewards[matchedItemName] = (Number(activeCustomerProfile.storedRewards[matchedItemName]) || 0) + rule.rewardQty;
-
                         newEarnedRewards.push({ item: matchedItemName, qty: rule.rewardQty, code: "STAMP_REWARD" });
-
                     }
-
                     if (currentStamps > 0) activeCustomerProfile.storedRewards[stampKey] = currentStamps;
-
                     else delete activeCustomerProfile.storedRewards[stampKey];
-
                 }
-
             }
-
         }
 
 
