@@ -2253,36 +2253,30 @@ window.finalizeOrder = async function(shouldPrint) {
 
 
     let promoRules = {};
-
     let stampRules = {};
-
     for (let key in settings) {
-
         let upperKey = String(key).toUpperCase();
-
-        if (upperKey.includes("PROMO_STAMP")) {
-
+        if (upperKey.includes("PROMO")) {
             let valStr = String(settings[key] || "");
-
             if (valStr.includes(":")) {
-
                 valStr.split(",").forEach(p => {
-
                     let parts = p.split(":");
-
-                    if (parts.length === 4) {
+                    if (parts.length === 2) {
+                        let itemName = parts[0].trim().toUpperCase();
+                        let reqQty = Number(parts[1].trim());
+                        if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
+                    } else if (parts.length === 4) {
+                        // Membaca urutan Stamp dengan benar dari indeks
                         let itemName = parts[0].trim().toUpperCase();
                         let minQty = Number(parts[1].trim());
                         let target = Number(parts[2].trim());
                         let rewardQty = Number(parts[3].trim());
-                        if (itemName && !isNaN(minQty) && !isNaN(target) && !isNaN(rewardQty)) {
-                            stampRules[itemName] = { minQty, target, rewardQty };
-                        }
+                        if (itemName && !isNaN(target)) stampRules[itemName] = { target, minQty, rewardQty };
                     }
-
                 });
-
             }
+        }
+    }
 
         } else if (upperKey.includes("PROMO")) {
 
