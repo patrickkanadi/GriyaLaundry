@@ -644,15 +644,17 @@ window.attemptLogin = async function() {
             
 
             // MENGHAPUS LOGIKA SORTING
-
             window.globalMenuData = window.globalMenuDataRaw.map(m => {
-
                 let sJson = {}; try { sJson = JSON.parse(m.stockJson); } catch(e){}
-
-                m.currentStock = Number(sJson[selectedOutlet]) || 0;
-
+                
+                // BATASI STOK KOIN FISIK HANYA SEBATAS UANG DI LACI (BUKAN TOTAL)
+                if (String(m.name).toUpperCase().includes("KOIN_FISIK") || String(m.name).toUpperCase().includes("KOIN FISIK")) {
+                    m.currentStock = window.laciStocks ? (window.laciStocks[selectedOutlet] || 0) : 0;
+                } else {
+                    m.currentStock = Number(sJson[selectedOutlet]) || 0;
+                }
+                
                 return m;
-
             }).filter(m => {
 
                 if (!m.outlets) return true;
@@ -1414,13 +1416,16 @@ function loadMenuUI() {
             
 
             globalMenuData = rawMenu.map(m => {
-
                 let sJson = {}; try { sJson = JSON.parse(m.stockJson); } catch(err){}
-
-                m.currentStock = Number(sJson[selectedOutlet]) || 0;
-
+                
+                // BATASI STOK KOIN FISIK HANYA SEBATAS UANG DI LACI (BUKAN TOTAL)
+                if (String(m.name).toUpperCase().includes("KOIN_FISIK") || String(m.name).toUpperCase().includes("KOIN FISIK")) {
+                    m.currentStock = window.laciStocks ? (window.laciStocks[selectedOutlet] || 0) : 0;
+                } else {
+                    m.currentStock = Number(sJson[selectedOutlet]) || 0;
+                }
+                
                 return m;
-
             }).filter(m => {
 
                 if (!m.outlets) return true;
@@ -3408,7 +3413,30 @@ window.syncMasterData = async function(isSilent = false) {
 
             if (result.data.staff) { let txStaff = db.transaction(["staff"], "readwrite"); result.data.staff.forEach(s => txStaff.objectStore("staff").put(s)); }
 
-            if (result.data.menu) { window.globalMenuDataRaw = result.data.menu; let txMenu = db.transaction(["menu"], "readwrite"); result.data.menu.forEach(m => txMenu.objectStore("menu").put(m)); }
+            if (result.data.menu) { 
+                window.globalMenuDataRaw = result.data.menu; 
+                let txMenu = db.transaction(["menu"], "readwrite"); 
+                result.data.menu.forEach(m => txMenu.objectStore("menu").put(m)); 
+                
+                // Live update ke menu yang sedang tampil agar stok laci otomatis menyesuaikan
+                if (!document.getElementById("pos-screen").classList.contains("hidden")) {
+                    window.globalMenuData = window.globalMenuDataRaw.map(m => {
+                        let sJson = {}; try { sJson = JSON.parse(m.stockJson); } catch(e){}
+                        if (String(m.name).toUpperCase().includes("KOIN_FISIK") || String(m.name).toUpperCase().includes("KOIN FISIK")) {
+                            m.currentStock = window.laciStocks ? (window.laciStocks[savedOutlet] || 0) : 0;
+                        } else {
+                            m.currentStock = Number(sJson[savedOutlet]) || 0;
+                        }
+                        return m;
+                    }).filter(m => {
+                        if (!m.outlets) return true;
+                        let outs = m.outlets.split(',').map(s=>s.trim().toLowerCase());
+                        if (outs.length === 0 || outs.includes("")) return true;
+                        return outs.includes(savedOutlet.toLowerCase());
+                    });
+                    if (typeof renderProductGrid === "function") renderProductGrid();
+                }
+            }
 
             if (result.data.members) { let txMem = db.transaction(["members"], "readwrite"); result.data.members.forEach(m => txMem.objectStore("members").put(m)); }
 
