@@ -3207,13 +3207,66 @@ window.viewShiftDetails = function(shiftId) {
 
 
 window.requestVoid = function(type, id) {
-
     currentVoidTarget = { type: type, id: id };
+    let pinInput = document.getElementById("admin-void-pin");
+    if (pinInput) pinInput.value = "";
+    let modal = document.getElementById("admin-void-modal");
+    if (modal) modal.classList.remove("hidden");
+};
 
-    document.getElementById("void-auth-name").value = ""; document.getElementById("void-auth-pin").value = "";
+// Fungsi untuk mengirim permintaan Void ke Admin
+window.submitRemoteVoid = function() {
+    if (!currentVoidTarget.id) return;
+    const payload = { 
+        id: currentVoidTarget.id, 
+        type: currentVoidTarget.type, 
+        status: "Void Pending", 
+        authName: "Waiting" 
+    };
+    db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add(payload);
+    document.getElementById("admin-void-modal").classList.add("hidden");
+    alert("Permintaan Void berhasil dikirim ke Admin!");
+    window.runBackgroundSync();
+    window.renderHistoryList(currentVoidTarget.type);
+};
 
-    document.getElementById("void-auth-modal").classList.remove("hidden");
+// Fungsi untuk Insta-Void (Jika Kasir memasukkan PIN Admin yang sah)
+window.confirmAdminVoid = async function() {
+    let pinInput = document.getElementById("admin-void-pin");
+    let pinVal = pinInput ? pinInput.value.trim() : "";
+    if (!pinVal) return alert("Masukkan PIN Admin!");
+    
+    const settings = await window.getDynamicSettings();
+    const hashedInput = await hashString(pinVal);
+    
+    // Validasi PIN input dengan Master PIN di Setting Spreadsheet
+    if (hashedInput !== settings["Master_PIN"]) { 
+         return alert("PIN Admin salah!");
+    }
 
+    const payload = { 
+        id: currentVoidTarget.id, 
+        type: currentVoidTarget.type, 
+        status: "Voided", 
+        authName: "Admin Insta-Void" 
+    };
+    db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add(payload);
+    
+    // Ubah status lokal secara instan
+    let storeName = currentVoidTarget.type; 
+    db.transaction([storeName], "readwrite").objectStore(storeName).get(currentVoidTarget.id).onsuccess = (e) => {
+         let item = e.target.result;
+         if(item) {
+             if(storeName === 'orders') item.orderStatus = "Voided";
+             else item.status = "Voided";
+             db.transaction([storeName], "readwrite").objectStore(storeName).put(item);
+         }
+    };
+
+    document.getElementById("admin-void-modal").classList.add("hidden");
+    alert("Void Instan Berhasil dieksekusi!");
+    window.runBackgroundSync();
+    window.renderHistoryList(currentVoidTarget.type);
 };
 
 
