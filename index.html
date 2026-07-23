@@ -328,10 +328,11 @@
 
         </div>
 
-            <p>Masukkan PIN Kasir</p>
-
-            <input type="password" id="cashier-pin" placeholder="****" inputmode="numeric">
-
+            <p style="margin-bottom: 5px;">Masukkan PIN Kasir</p>
+            <div style="position: relative; width: 100%; margin-bottom: 20px;">
+                <input type="password" id="cashier-pin" placeholder="****" inputmode="numeric" style="width: 100%; margin-bottom: 0; padding-right: 50px;">
+                <button onclick="togglePinVisibility()" type="button" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 20px; cursor: pointer; padding: 0; width: auto; color: #7f8c8d; box-shadow: none;">👁️</button>
+            </div>
             <button id="btn-login" onclick="attemptLogin()">Masuk / Buka Shift</button>
 
         </div>
