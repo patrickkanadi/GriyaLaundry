@@ -569,7 +569,14 @@ window.buildShiftReportReceipt = async function(data) {
 
 };
 
-
+window.togglePinVisibility = function() {
+    let pinInput = document.getElementById("cashier-pin");
+    if (pinInput.type === "password") {
+        pinInput.type = "text";
+    } else {
+        pinInput.type = "password";
+    }
+};
 
 // ==========================================
 
