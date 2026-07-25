@@ -156,15 +156,14 @@ window.installPWA = function() {
 
 
 // --- NEW HELPER: ROLLBACK POINTS ON VOID ---
-// --- FULLY PATCHED HELPER: ROLLBACK POINTS, COINS, STAMPS & PROG ---
+// --- ULTIMATE PATCHED HELPER: ROLLBACK POINTS, COINS, STAMPS & PROG ---
 window.rollbackOrderImpact = async function(order) {
-    // 1. UPDATE LOCAL LACI & MESIN UI ONLY (No Double Journal Entry)
+    // 1. UPDATE LOCAL LACI & MESIN UI ONLY
     if (order.expectedCoins && order.expectedCoins > 0 && !order.coinsRefunded) {
         let currentOutlet = order.outlet || localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
         if (!window.laciStocks) window.laciStocks = {};
         if (!window.coinsInMachines) window.coinsInMachines = {};
         
-        // Return physical coins to Laci locally
         window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + order.expectedCoins;
         window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - order.expectedCoins);
         
@@ -174,10 +173,10 @@ window.rollbackOrderImpact = async function(order) {
     }
 
     if (!order.customerPhone || order.customerPhone === "-" || order.customerPhone.startsWith("999") || order.customerPhone === "Walk-in") {
-        return; // Guests don't have loyalty to rollback
+        return; 
     }
 
-    // Fetch dynamic settings BEFORE opening DB transaction to prevent auto-close issues
+    // Fetch dynamic settings safely
     const settings = await window.getDynamicSettings();
     let promoRules = {};
     let stampRules = {};
@@ -235,7 +234,7 @@ window.rollbackOrderImpact = async function(order) {
             member.freeCoins = Math.floor(absolutePoints / loyaltyTarget);
             member.points = absolutePoints % loyaltyTarget;
 
-            // -- ROLLBACK PROMO (BUY X GET 1) & STAMPS & UNDIAN --
+            // -- ROLLBACK PROMO & STAMPS & UNDIAN --
             let storedObj = {};
             try { storedObj = typeof member.storedRewards === 'string' ? JSON.parse(member.storedRewards) : member.storedRewards; }
             catch(err) { storedObj = {}; }
@@ -244,93 +243,124 @@ window.rollbackOrderImpact = async function(order) {
             let claimedPromoMap = {};
             let claimedMap = {};
 
-            // A. Add back Promos the customer claimed (Refund to them)
+            // A. Add back Promos the customer claimed
             if (order.redeemedPromos) {
                 order.redeemedPromos.forEach(p => {
-                    if (p.source === 'buy_x_get_1') claimedPromoMap[p.item] = (claimedPromoMap[p.item] || 0) + p.qty;
-                    if (p.source === 'stored') claimedMap[p.item] = (claimedMap[p.item] || 0) + p.qty;
+                    let cleanKey = String(p.item || "").trim();
+                    if (p.source === 'buy_x_get_1') claimedPromoMap[cleanKey] = (claimedPromoMap[cleanKey] || 0) + p.qty;
+                    if (p.source === 'stored') claimedMap[cleanKey] = (claimedMap[cleanKey] || 0) + p.qty;
                     
                     if (p.source === 'stored' || p.source === 'buy_x_get_1') {
-                        storedObj[p.item] = (Number(storedObj[p.item]) || 0) + p.qty;
+                        storedObj[cleanKey] = (Number(storedObj[cleanKey]) || 0) + p.qty;
                     }
                 });
             }
 
-            // B. Remove Full Items the customer earned on this order (Undian, Stamps, Buy X Get 1)
+            // B. Remove Full Items the customer earned on this order
             let hasUndian = false;
             if (order.newEarnedRewards) {
                 order.newEarnedRewards.forEach(r => {
                     if (r.isUndian) hasUndian = true;
                     if (r.item) {
-                        storedObj[r.item] = (Number(storedObj[r.item]) || 0) - r.qty;
-                        if (storedObj[r.item] <= 0) delete storedObj[r.item];
+                        let cleanKey = String(r.item).trim();
+                        storedObj[cleanKey] = (Number(storedObj[cleanKey]) || 0) - r.qty;
+                        if (storedObj[cleanKey] <= 0) delete storedObj[cleanKey];
                     }
                 });
             }
-            if (hasUndian) member.lastClaimDate = null; // Revert daily limit if they voided an undian
+            if (hasUndian) member.lastClaimDate = null; 
 
-            // C. Calculate Cart Aggregates to reverse partial progress
+            // C. Build Cart Aggregates
             let cartAgg = {};
             if (order.items) {
                 order.items.forEach(i => { 
-                    cartAgg[String(i.name).trim()] = (cartAgg[String(i.name).trim()] || 0) + Number(i.qty); 
+                    let cName = String(i.name || "").trim();
+                    cartAgg[cName] = (cartAgg[cName] || 0) + Number(i.qty); 
                 });
             }
 
-            // D. Rollback Buy X Get 1 Progress
-            for (let itemName in cartAgg) {
-                let ruleKey = itemName.toUpperCase();
+            // D. Rollback Buy X Get 1 Progress (Flexible Key Matching)
+            for (let cartItemName in cartAgg) {
+                let upperCartItem = cartItemName.toUpperCase();
+                let matchedRuleKey = null;
                 let ruleQty = 0;
+
                 for (let pk in promoRules) {
-                    if (ruleKey.includes(pk) || pk.includes(ruleKey)) { ruleQty = promoRules[pk]; break; }
+                    let upperPk = pk.toUpperCase();
+                    if (upperCartItem.includes(upperPk) || upperPk.includes(upperCartItem)) {
+                        matchedRuleKey = pk;
+                        ruleQty = promoRules[pk];
+                        break;
+                    }
                 }
-                if (ruleQty > 0) {
-                    let cartQty = cartAgg[itemName];
-                    let claimedQty = claimedPromoMap[itemName] || 0;
+
+                if (ruleQty > 0 && matchedRuleKey) {
+                    let cartQty = cartAgg[cartItemName];
+                    let claimedQty = claimedPromoMap[cartItemName] || claimedPromoMap[matchedRuleKey] || 0;
                     let paidQty = Math.max(0, cartQty - claimedQty);
                     
                     if (paidQty > 0) {
-                        let progKey = "_prog_" + itemName;
-                        let currentProg = Number(storedObj[progKey]) || 0;
+                        // Look for stored progress using exact or fuzzy key inside storedObj
+                        let foundProgKey = null;
+                        for (let sk in storedObj) {
+                            if (sk.startsWith("_prog_") && sk.toUpperCase().includes(matchedRuleKey)) {
+                                foundProgKey = sk;
+                                break;
+                            }
+                        }
+                        if (!foundProgKey) foundProgKey = "_prog_" + matchedRuleKey;
+
+                        let currentProg = Number(storedObj[foundProgKey]) || 0;
                         currentProg -= paidQty;
                         
-                        // Wrap around if it dips below zero
                         while (currentProg <= -0.01) {
                             currentProg += ruleQty;
                         }
                         
-                        if (currentProg > 0.01) storedObj[progKey] = Number(currentProg.toFixed(2));
-                        else delete storedObj[progKey];
+                        if (currentProg > 0.01) storedObj[foundProgKey] = Number(currentProg.toFixed(2));
+                        else delete storedObj[foundProgKey];
                     }
                 }
             }
 
-            // E. Rollback Stamp Progress
+            // E. Rollback Stamp Progress (Flexible Key Matching)
             for (let ruleKey in stampRules) {
                 let rule = stampRules[ruleKey];
                 let matchedItemName = null;
-                for (let itemName in cartAgg) {
-                    if (itemName.toUpperCase() === ruleKey) { matchedItemName = itemName; break; }
+
+                for (let cartItemName in cartAgg) {
+                    if (cartItemName.toUpperCase().includes(ruleKey) || ruleKey.includes(cartItemName.toUpperCase())) {
+                        matchedItemName = cartItemName;
+                        break;
+                    }
                 }
+
                 if (matchedItemName) {
-                    let paidQty = cartAgg[matchedItemName] - (claimedMap[matchedItemName] || 0);
+                    let paidQty = cartAgg[matchedItemName] - (claimedMap[matchedItemName] || claimedMap[ruleKey] || 0);
                     if (paidQty >= rule.minQty) {
-                        let stampKey = "_stamp_" + ruleKey;
-                        let currentStamps = Number(storedObj[stampKey]) || 0;
-                        
-                        currentStamps -= 1; // Order added exactly 1 stamp, so we subtract 1
+                        let foundStampKey = null;
+                        for (let sk in storedObj) {
+                            if (sk.startsWith("_stamp_") && sk.toUpperCase().includes(ruleKey)) {
+                                foundStampKey = sk;
+                                break;
+                            }
+                        }
+                        if (!foundStampKey) foundStampKey = "_stamp_" + ruleKey;
+
+                        let currentStamps = Number(storedObj[foundStampKey]) || 0;
+                        currentStamps -= 1; // Revert 1 stamp added during checkout
                         
                         while (currentStamps < 0) {
                             currentStamps += rule.target;
                         }
                         
-                        if (currentStamps > 0) storedObj[stampKey] = currentStamps;
-                        else delete storedObj[stampKey];
+                        if (currentStamps > 0) storedObj[foundStampKey] = currentStamps;
+                        else delete storedObj[foundStampKey];
                     }
                 }
             }
 
-            // Save clean data back to Member Database
+            // Save clean data back to database
             member.storedRewards = storedObj;
             tx.objectStore("members").put(member);
             tx.objectStore("unsynced_members").put(member);
