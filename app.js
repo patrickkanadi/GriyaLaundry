@@ -156,12 +156,45 @@ window.installPWA = function() {
 
 
 // --- NEW HELPER: ROLLBACK POINTS ON VOID ---
+// --- UPDATED HELPER: ROLLBACK POINTS & REFUND COINS ON VOID ---
 window.rollbackOrderImpact = function(order) {
-    if (!order || !order.customerPhone || order.customerPhone === "-" || order.customerPhone.startsWith("999") || order.customerPhone === "Walk-in") {
-        return Promise.resolve();
-    }
-
     return new Promise((resolve) => {
+        // 1. AUTO-REFUND COINS TO DRAWER & JOURNAL (PREVENTS DOUBLE ENTRY)
+        if (order.expectedCoins && order.expectedCoins > 0 && !order.coinsRefunded) {
+            let currentOutlet = order.outlet || localStorage.getItem("selectedOutlet") || "Pusat";
+            
+            if (!window.laciStocks) window.laciStocks = {};
+            if (!window.coinsInMachines) window.coinsInMachines = {};
+            
+            // Return physical coins to Laci
+            window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + order.expectedCoins;
+            window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - order.expectedCoins);
+            
+            let btnKoin = document.getElementById("btn-koin-top");
+            if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
+            
+            // Write to Coin Journal exactly ONCE
+            const payload = { 
+                retrievalId: "RET-VOID-" + order.orderId, 
+                timestamp: new Date().toISOString(), 
+                cashier: order.cashier || "System", 
+                qty: order.expectedCoins, 
+                notes: "Auto-Refund Koin (Void Nota: " + order.orderId + ")", 
+                outlet: currentOutlet, 
+                syncStatus: "Pending" 
+            };
+            db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
+            
+            // Lock the order so it can never be refunded twice
+            order.coinsRefunded = true; 
+        }
+
+        // 2. ROLLBACK LOYALTY POINTS
+        if (!order.customerPhone || order.customerPhone === "-" || order.customerPhone.startsWith("999") || order.customerPhone === "Walk-in") {
+            resolve(); 
+            return;
+        }
+
         let tx = db.transaction(["members", "unsynced_members"], "readwrite");
         let memStore = tx.objectStore("members");
 
@@ -169,35 +202,29 @@ window.rollbackOrderImpact = function(order) {
             let member = e.target.result;
             if (!member) { resolve(); return; }
 
-            // 1. Rollback Total Spent
+            // Deduct the spent amount
             member.spent = Math.max(0, (member.spent || 0) - (order.grandTotal || 0));
 
-            // 2. Rollback Points & Free Coins
             let loyaltyTarget = window.loyaltyTarget || 10;
             let currentPoints = Number(member.points) || 0;
             let currentFree = Number(member.freeCoins) || 0;
-
-            // Convert current balance to absolute total points
             let absolutePoints = (currentFree * loyaltyTarget) + currentPoints;
 
-            // Subtract points earned during this voided order
+            // Remove points earned during the voided order
             let coinsEarned = Number(order.coinsEarned) || 0;
             absolutePoints -= coinsEarned;
 
-            // Refund loyalty coins that were redeemed/spent in this order
+            // Refund any loyalty rewards that were spent on this voided order
             let redeemedLoyaltyCoins = 0;
             if (order.redeemedPromos && Array.isArray(order.redeemedPromos)) {
                 order.redeemedPromos.forEach(p => {
-                    if (p.source === 'loyalty') {
-                        redeemedLoyaltyCoins += Number(p.qty);
-                    }
+                    if (p.source === 'loyalty') redeemedLoyaltyCoins += Number(p.qty);
                 });
             }
-            // Add back refunded points
+            
             absolutePoints += (redeemedLoyaltyCoins * loyaltyTarget);
-            absolutePoints = Math.max(0, absolutePoints); // Prevent negative points
+            absolutePoints = Math.max(0, absolutePoints);
 
-            // Recalculate Free Coins and remainder Points
             member.freeCoins = Math.floor(absolutePoints / loyaltyTarget);
             member.points = absolutePoints % loyaltyTarget;
 
@@ -566,23 +593,15 @@ window.buildShiftReportReceipt = async function(data) {
 
 
     r += CMD_BOLD_ON + "STATISTIK KOIN FISIK:" + CMD_BOLD_OFF + "\n";
-
     r += formatEscPosLine("Total Terpakai", (data.totalCoinsUsed || 0) + " Koin", false) + "\n";
-
     if (data.coinCategorySummary) {
-
         for (const [cat, val] of Object.entries(data.coinCategorySummary)) {
-
-            if (val > 0) r += formatEscPosLine(" - " + cat.substring(0, 15), val.toFixed(1).replace(".0","") + " Koin", false) + "\n";
-
+            // FIX: Changed from (val > 0) to (val !== 0) to show negative/minus adjustments
+            if (val !== 0) r += formatEscPosLine(" - " + cat.substring(0, 15), val.toFixed(1).replace(".0","") + " Koin", false) + "\n";
         }
-
     }
-
     r += formatEscPosLine("Daur Ulang (Ambil)", (data.totalCoinsRecycled || 0) + " Koin", false) + "\n";
-
     r += formatEscPosLine("Macet/Rusak", (data.totalCoinsJammed || 0) + " Koin", false) + "\n";
-
     r += "--------------------------------\n";
 
 
