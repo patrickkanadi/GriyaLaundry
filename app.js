@@ -156,12 +156,34 @@ window.installPWA = function() {
 
 
 // --- NEW HELPER: ROLLBACK POINTS ON VOID ---
+// --- CORRECTED HELPER: ROLLBACK POINTS & LOCAL COIN UI (No Double Journal Entry) ---
 window.rollbackOrderImpact = function(order) {
-    if (!order || !order.customerPhone || order.customerPhone === "-" || order.customerPhone.startsWith("999") || order.customerPhone === "Walk-in") {
-        return Promise.resolve();
-    }
-
     return new Promise((resolve) => {
+        // 1. UPDATE LOCAL LACI & MESIN UI ONLY (Do NOT push to coin_retrievals)
+        if (order.expectedCoins && order.expectedCoins > 0 && !order.coinsRefunded) {
+            let currentOutlet = order.outlet || localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
+            
+            if (!window.laciStocks) window.laciStocks = {};
+            if (!window.coinsInMachines) window.coinsInMachines = {};
+            
+            // Return physical coins to Laci locally so the cashier's screen updates instantly
+            window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + order.expectedCoins;
+            window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - order.expectedCoins);
+            
+            let btnKoin = document.getElementById("btn-koin-top");
+            if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
+            
+            // Lock the order so the UI doesn't refund it again, 
+            // but notice we removed the db.transaction("coin_retrievals") entirely to stop the double-post!
+            order.coinsRefunded = true; 
+        }
+
+        // 2. ROLLBACK LOYALTY POINTS
+        if (!order.customerPhone || order.customerPhone === "-" || order.customerPhone.startsWith("999") || order.customerPhone === "Walk-in") {
+            resolve(); 
+            return;
+        }
+
         let tx = db.transaction(["members", "unsynced_members"], "readwrite");
         let memStore = tx.objectStore("members");
 
@@ -169,35 +191,29 @@ window.rollbackOrderImpact = function(order) {
             let member = e.target.result;
             if (!member) { resolve(); return; }
 
-            // 1. Rollback Total Spent
+            // Deduct the spent amount
             member.spent = Math.max(0, (member.spent || 0) - (order.grandTotal || 0));
 
-            // 2. Rollback Points & Free Coins
             let loyaltyTarget = window.loyaltyTarget || 10;
             let currentPoints = Number(member.points) || 0;
             let currentFree = Number(member.freeCoins) || 0;
-
-            // Convert current balance to absolute total points
             let absolutePoints = (currentFree * loyaltyTarget) + currentPoints;
 
-            // Subtract points earned during this voided order
+            // Remove points earned during the voided order
             let coinsEarned = Number(order.coinsEarned) || 0;
             absolutePoints -= coinsEarned;
 
-            // Refund loyalty coins that were redeemed/spent in this order
+            // Refund any loyalty rewards that were spent on this voided order
             let redeemedLoyaltyCoins = 0;
             if (order.redeemedPromos && Array.isArray(order.redeemedPromos)) {
                 order.redeemedPromos.forEach(p => {
-                    if (p.source === 'loyalty') {
-                        redeemedLoyaltyCoins += Number(p.qty);
-                    }
+                    if (p.source === 'loyalty') redeemedLoyaltyCoins += Number(p.qty);
                 });
             }
-            // Add back refunded points
+            
             absolutePoints += (redeemedLoyaltyCoins * loyaltyTarget);
             absolutePoints = Math.max(0, absolutePoints); // Prevent negative points
 
-            // Recalculate Free Coins and remainder Points
             member.freeCoins = Math.floor(absolutePoints / loyaltyTarget);
             member.points = absolutePoints % loyaltyTarget;
 
@@ -207,6 +223,7 @@ window.rollbackOrderImpact = function(order) {
         };
     });
 };
+
 function processVoidApprovals(authStatuses) {
     if (!db || !authStatuses) return;
     
