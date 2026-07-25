@@ -155,42 +155,94 @@ window.installPWA = function() {
 
 
 
+// --- NEW HELPER: ROLLBACK POINTS ON VOID ---
+window.rollbackOrderImpact = function(order) {
+    if (!order || !order.customerPhone || order.customerPhone === "-" || order.customerPhone.startsWith("999") || order.customerPhone === "Walk-in") {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+        let tx = db.transaction(["members", "unsynced_members"], "readwrite");
+        let memStore = tx.objectStore("members");
+
+        memStore.get(order.customerPhone).onsuccess = (e) => {
+            let member = e.target.result;
+            if (!member) { resolve(); return; }
+
+            // 1. Rollback Total Spent
+            member.spent = Math.max(0, (member.spent || 0) - (order.grandTotal || 0));
+
+            // 2. Rollback Points & Free Coins
+            let loyaltyTarget = window.loyaltyTarget || 10;
+            let currentPoints = Number(member.points) || 0;
+            let currentFree = Number(member.freeCoins) || 0;
+
+            // Convert current balance to absolute total points
+            let absolutePoints = (currentFree * loyaltyTarget) + currentPoints;
+
+            // Subtract points earned during this voided order
+            let coinsEarned = Number(order.coinsEarned) || 0;
+            absolutePoints -= coinsEarned;
+
+            // Refund loyalty coins that were redeemed/spent in this order
+            let redeemedLoyaltyCoins = 0;
+            if (order.redeemedPromos && Array.isArray(order.redeemedPromos)) {
+                order.redeemedPromos.forEach(p => {
+                    if (p.source === 'loyalty') {
+                        redeemedLoyaltyCoins += Number(p.qty);
+                    }
+                });
+            }
+            // Add back refunded points
+            absolutePoints += (redeemedLoyaltyCoins * loyaltyTarget);
+            absolutePoints = Math.max(0, absolutePoints); // Prevent negative points
+
+            // Recalculate Free Coins and remainder Points
+            member.freeCoins = Math.floor(absolutePoints / loyaltyTarget);
+            member.points = absolutePoints % loyaltyTarget;
+
+            tx.objectStore("members").put(member);
+            tx.objectStore("unsynced_members").put(member);
+            tx.oncomplete = () => resolve();
+        };
+    });
+};
+
 function processVoidApprovals(authStatuses) {
-
     if (!db || !authStatuses) return;
-
+    
     if (authStatuses.orders) {
-
         for (const [orderId, info] of Object.entries(authStatuses.orders)) {
-
             db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = (e) => {
-
                 let order = e.target.result;
-
-                if (order && order.orderStatus !== info.status) { order.orderStatus = info.status; order.voidAuth = info.auth; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); }
-
+                if (order && order.orderStatus !== info.status) {
+                    let oldStatus = order.orderStatus;
+                    order.orderStatus = info.status; 
+                    order.voidAuth = info.auth; 
+                    
+                    // Trigger rollback if order just became Voided remotely
+                    if (info.status === "Voided" && oldStatus !== "Voided") {
+                        window.rollbackOrderImpact(order).then(() => {
+                            db.transaction(["orders"], "readwrite").objectStore("orders").put(order);
+                        });
+                    } else {
+                        db.transaction(["orders"], "readwrite").objectStore("orders").put(order); 
+                    }
+                }
             };
-
         }
-
     }
-
     if (authStatuses.expenses) {
-
         for (const [expenseId, info] of Object.entries(authStatuses.expenses)) {
-
             db.transaction(["expenses"], "readonly").objectStore("expenses").get(expenseId).onsuccess = (e) => {
-
                 let expense = e.target.result;
-
-                if (expense && expense.status !== info.status) { expense.status = info.status; db.transaction(["expenses"], "readwrite").objectStore("expenses").put(expense); }
-
+                if (expense && expense.status !== info.status) { 
+                    expense.status = info.status; 
+                    db.transaction(["expenses"], "readwrite").objectStore("expenses").put(expense); 
+                }
             };
-
         }
-
     }
-
 }
 
 
@@ -3214,16 +3266,24 @@ window.viewShiftDetails = function(shiftId) {
 
 
 window.requestVoid = function(type, id) {
-    currentVoidTarget = { type: type, id: id };
-    let pinInput = document.getElementById("admin-void-pin");
-    if (pinInput) pinInput.value = "";
-    let modal = document.getElementById("admin-void-modal");
-    if (modal) modal.classList.remove("hidden");
+    // Prevent duplicate requests by checking if one is already pending
+    db.transaction(["void_requests"], "readonly").objectStore("void_requests").get(id).onsuccess = (e) => {
+        if (e.target.result) {
+            return alert("⚠️ Permintaan void untuk transaksi ini sudah diajukan dan sedang menunggu persetujuan Admin.");
+        }
+        
+        currentVoidTarget = { type: type, id: id };
+        let pinInput = document.getElementById("admin-void-pin");
+        if (pinInput) pinInput.value = "";
+        let modal = document.getElementById("admin-void-modal");
+        if (modal) modal.classList.remove("hidden");
+    };
 };
 
 // Fungsi untuk mengirim permintaan Void ke Admin
 window.submitRemoteVoid = function() {
     if (!currentVoidTarget.id) return;
+    
     const payload = { 
         id: currentVoidTarget.id, 
         type: currentVoidTarget.type, 
@@ -3231,10 +3291,24 @@ window.submitRemoteVoid = function() {
         authName: "Waiting" 
     };
     db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add(payload);
+    
+    // Update local status instantly to "Void Pending" so the button disappears
+    let storeName = currentVoidTarget.type; 
+    db.transaction([storeName], "readwrite").objectStore(storeName).get(currentVoidTarget.id).onsuccess = (e) => {
+         let item = e.target.result;
+         if(item) {
+             if(storeName === 'orders') item.orderStatus = "Void Pending";
+             else item.status = "Void Pending";
+             db.transaction([storeName], "readwrite").objectStore(storeName).put(item);
+         }
+    };
+
     document.getElementById("admin-void-modal").classList.add("hidden");
-    alert("Permintaan Void berhasil dikirim ke Admin!");
+    alert("✅ Permintaan Void berhasil dikirim ke Admin!");
     window.runBackgroundSync();
-    window.renderHistoryList(currentVoidTarget.type);
+    
+    // Slight delay ensures IndexedDB saves before UI re-renders
+    setTimeout(() => { window.renderHistoryList(currentVoidTarget.type); }, 150);
 };
 
 // Fungsi untuk Insta-Void (Jika Kasir memasukkan PIN Admin yang sah)
@@ -3259,23 +3333,27 @@ window.confirmAdminVoid = async function() {
     };
     db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add(payload);
     
-    // Ubah status lokal secara instan
+    // Ubah status lokal secara instan & Rollback Loyalty Points
     let storeName = currentVoidTarget.type; 
-    db.transaction([storeName], "readwrite").objectStore(storeName).get(currentVoidTarget.id).onsuccess = (e) => {
+    db.transaction([storeName], "readwrite").objectStore(storeName).get(currentVoidTarget.id).onsuccess = async (e) => {
          let item = e.target.result;
          if(item) {
-             if(storeName === 'orders') item.orderStatus = "Voided";
-             else item.status = "Voided";
+             if (storeName === 'orders' && item.orderStatus !== "Voided") {
+                 item.orderStatus = "Voided";
+                 await window.rollbackOrderImpact(item); // Run points rollback
+             }
+             else if (storeName === 'expenses') {
+                 item.status = "Voided";
+             }
              db.transaction([storeName], "readwrite").objectStore(storeName).put(item);
          }
     };
 
     document.getElementById("admin-void-modal").classList.add("hidden");
-    alert("Void Instan Berhasil dieksekusi!");
+    alert("✅ Void Instan Berhasil dieksekusi!");
     window.runBackgroundSync();
-    window.renderHistoryList(currentVoidTarget.type);
+    setTimeout(() => { window.renderHistoryList(currentVoidTarget.type); }, 150);
 };
-
 
 
 // ==========================================
