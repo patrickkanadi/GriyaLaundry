@@ -156,34 +156,55 @@ window.installPWA = function() {
 
 
 // --- NEW HELPER: ROLLBACK POINTS ON VOID ---
-// --- CORRECTED HELPER: ROLLBACK POINTS & LOCAL COIN UI (No Double Journal Entry) ---
-window.rollbackOrderImpact = function(order) {
+// --- FULLY PATCHED HELPER: ROLLBACK POINTS, COINS, STAMPS & PROG ---
+window.rollbackOrderImpact = async function(order) {
+    // 1. UPDATE LOCAL LACI & MESIN UI ONLY (No Double Journal Entry)
+    if (order.expectedCoins && order.expectedCoins > 0 && !order.coinsRefunded) {
+        let currentOutlet = order.outlet || localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
+        if (!window.laciStocks) window.laciStocks = {};
+        if (!window.coinsInMachines) window.coinsInMachines = {};
+        
+        // Return physical coins to Laci locally
+        window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + order.expectedCoins;
+        window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - order.expectedCoins);
+        
+        let btnKoin = document.getElementById("btn-koin-top");
+        if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
+        order.coinsRefunded = true; 
+    }
+
+    if (!order.customerPhone || order.customerPhone === "-" || order.customerPhone.startsWith("999") || order.customerPhone === "Walk-in") {
+        return; // Guests don't have loyalty to rollback
+    }
+
+    // Fetch dynamic settings BEFORE opening DB transaction to prevent auto-close issues
+    const settings = await window.getDynamicSettings();
+    let promoRules = {};
+    let stampRules = {};
+    for (let key in settings) {
+        let upperKey = String(key).toUpperCase();
+        if (upperKey.includes("PROMO")) {
+            let valStr = String(settings[key] || "");
+            if (valStr.includes(":")) {
+                valStr.split(",").forEach(p => {
+                    let parts = p.split(":");
+                    if (parts.length === 2) {
+                        let itemName = parts[0].trim().toUpperCase();
+                        let reqQty = Number(parts[1].trim());
+                        if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
+                    } else if (parts.length === 4) {
+                        let itemName = parts[0].trim().toUpperCase();
+                        let minQty = Number(parts[1].trim());
+                        let target = Number(parts[2].trim());
+                        let rewardQty = Number(parts[3].trim());
+                        if (itemName && !isNaN(target)) stampRules[itemName] = { target, minQty, rewardQty };
+                    }
+                });
+            }
+        }
+    }
+
     return new Promise((resolve) => {
-        // 1. UPDATE LOCAL LACI & MESIN UI ONLY (Do NOT push to coin_retrievals)
-        if (order.expectedCoins && order.expectedCoins > 0 && !order.coinsRefunded) {
-            let currentOutlet = order.outlet || localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
-            
-            if (!window.laciStocks) window.laciStocks = {};
-            if (!window.coinsInMachines) window.coinsInMachines = {};
-            
-            // Return physical coins to Laci locally so the cashier's screen updates instantly
-            window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + order.expectedCoins;
-            window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - order.expectedCoins);
-            
-            let btnKoin = document.getElementById("btn-koin-top");
-            if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
-            
-            // Lock the order so the UI doesn't refund it again, 
-            // but notice we removed the db.transaction("coin_retrievals") entirely to stop the double-post!
-            order.coinsRefunded = true; 
-        }
-
-        // 2. ROLLBACK LOYALTY POINTS
-        if (!order.customerPhone || order.customerPhone === "-" || order.customerPhone.startsWith("999") || order.customerPhone === "Walk-in") {
-            resolve(); 
-            return;
-        }
-
         let tx = db.transaction(["members", "unsynced_members"], "readwrite");
         let memStore = tx.objectStore("members");
 
@@ -191,32 +212,126 @@ window.rollbackOrderImpact = function(order) {
             let member = e.target.result;
             if (!member) { resolve(); return; }
 
-            // Deduct the spent amount
+            // -- ROLLBACK TOTAL SPENT --
             member.spent = Math.max(0, (member.spent || 0) - (order.grandTotal || 0));
 
+            // -- ROLLBACK LOYALTY COINS --
             let loyaltyTarget = window.loyaltyTarget || 10;
             let currentPoints = Number(member.points) || 0;
             let currentFree = Number(member.freeCoins) || 0;
             let absolutePoints = (currentFree * loyaltyTarget) + currentPoints;
+            
+            absolutePoints -= (Number(order.coinsEarned) || 0);
 
-            // Remove points earned during the voided order
-            let coinsEarned = Number(order.coinsEarned) || 0;
-            absolutePoints -= coinsEarned;
-
-            // Refund any loyalty rewards that were spent on this voided order
             let redeemedLoyaltyCoins = 0;
             if (order.redeemedPromos && Array.isArray(order.redeemedPromos)) {
                 order.redeemedPromos.forEach(p => {
                     if (p.source === 'loyalty') redeemedLoyaltyCoins += Number(p.qty);
                 });
             }
-            
             absolutePoints += (redeemedLoyaltyCoins * loyaltyTarget);
-            absolutePoints = Math.max(0, absolutePoints); // Prevent negative points
+            absolutePoints = Math.max(0, absolutePoints);
 
             member.freeCoins = Math.floor(absolutePoints / loyaltyTarget);
             member.points = absolutePoints % loyaltyTarget;
 
+            // -- ROLLBACK PROMO (BUY X GET 1) & STAMPS & UNDIAN --
+            let storedObj = {};
+            try { storedObj = typeof member.storedRewards === 'string' ? JSON.parse(member.storedRewards) : member.storedRewards; }
+            catch(err) { storedObj = {}; }
+            if (!storedObj) storedObj = {};
+
+            let claimedPromoMap = {};
+            let claimedMap = {};
+
+            // A. Add back Promos the customer claimed (Refund to them)
+            if (order.redeemedPromos) {
+                order.redeemedPromos.forEach(p => {
+                    if (p.source === 'buy_x_get_1') claimedPromoMap[p.item] = (claimedPromoMap[p.item] || 0) + p.qty;
+                    if (p.source === 'stored') claimedMap[p.item] = (claimedMap[p.item] || 0) + p.qty;
+                    
+                    if (p.source === 'stored' || p.source === 'buy_x_get_1') {
+                        storedObj[p.item] = (Number(storedObj[p.item]) || 0) + p.qty;
+                    }
+                });
+            }
+
+            // B. Remove Full Items the customer earned on this order (Undian, Stamps, Buy X Get 1)
+            let hasUndian = false;
+            if (order.newEarnedRewards) {
+                order.newEarnedRewards.forEach(r => {
+                    if (r.isUndian) hasUndian = true;
+                    if (r.item) {
+                        storedObj[r.item] = (Number(storedObj[r.item]) || 0) - r.qty;
+                        if (storedObj[r.item] <= 0) delete storedObj[r.item];
+                    }
+                });
+            }
+            if (hasUndian) member.lastClaimDate = null; // Revert daily limit if they voided an undian
+
+            // C. Calculate Cart Aggregates to reverse partial progress
+            let cartAgg = {};
+            if (order.items) {
+                order.items.forEach(i => { 
+                    cartAgg[String(i.name).trim()] = (cartAgg[String(i.name).trim()] || 0) + Number(i.qty); 
+                });
+            }
+
+            // D. Rollback Buy X Get 1 Progress
+            for (let itemName in cartAgg) {
+                let ruleKey = itemName.toUpperCase();
+                let ruleQty = 0;
+                for (let pk in promoRules) {
+                    if (ruleKey.includes(pk) || pk.includes(ruleKey)) { ruleQty = promoRules[pk]; break; }
+                }
+                if (ruleQty > 0) {
+                    let cartQty = cartAgg[itemName];
+                    let claimedQty = claimedPromoMap[itemName] || 0;
+                    let paidQty = Math.max(0, cartQty - claimedQty);
+                    
+                    if (paidQty > 0) {
+                        let progKey = "_prog_" + itemName;
+                        let currentProg = Number(storedObj[progKey]) || 0;
+                        currentProg -= paidQty;
+                        
+                        // Wrap around if it dips below zero
+                        while (currentProg <= -0.01) {
+                            currentProg += ruleQty;
+                        }
+                        
+                        if (currentProg > 0.01) storedObj[progKey] = Number(currentProg.toFixed(2));
+                        else delete storedObj[progKey];
+                    }
+                }
+            }
+
+            // E. Rollback Stamp Progress
+            for (let ruleKey in stampRules) {
+                let rule = stampRules[ruleKey];
+                let matchedItemName = null;
+                for (let itemName in cartAgg) {
+                    if (itemName.toUpperCase() === ruleKey) { matchedItemName = itemName; break; }
+                }
+                if (matchedItemName) {
+                    let paidQty = cartAgg[matchedItemName] - (claimedMap[matchedItemName] || 0);
+                    if (paidQty >= rule.minQty) {
+                        let stampKey = "_stamp_" + ruleKey;
+                        let currentStamps = Number(storedObj[stampKey]) || 0;
+                        
+                        currentStamps -= 1; // Order added exactly 1 stamp, so we subtract 1
+                        
+                        while (currentStamps < 0) {
+                            currentStamps += rule.target;
+                        }
+                        
+                        if (currentStamps > 0) storedObj[stampKey] = currentStamps;
+                        else delete storedObj[stampKey];
+                    }
+                }
+            }
+
+            // Save clean data back to Member Database
+            member.storedRewards = storedObj;
             tx.objectStore("members").put(member);
             tx.objectStore("unsynced_members").put(member);
             tx.oncomplete = () => resolve();
