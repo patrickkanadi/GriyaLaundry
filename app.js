@@ -340,8 +340,8 @@ window.rollbackOrderImpact = async function(order) {
                 if (matchedItemName) {
                     let paidQty = cartAgg[matchedItemName] - (claimedMap[matchedItemName] || claimedMap[ruleKey] || 0);
                     
-                    // FIX: Calculate EXACTLY how many stamps this transaction generated
-                    let stampsEarned = Math.floor(paidQty / rule.minQty); 
+                    // FIX: Checkout only gives 1 stamp per receipt, so rollback must only take 1 stamp
+                    let stampsEarned = (paidQty >= rule.minQty) ? 1 : 0;
                     
                     if (stampsEarned > 0) {
                         let foundStampKey = null;
@@ -383,18 +383,13 @@ function processVoidApprovals(authStatuses) {
             db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = (e) => {
                 let order = e.target.result;
                 if (order && order.orderStatus !== info.status) {
-                    let oldStatus = order.orderStatus;
                     order.orderStatus = info.status; 
                     order.voidAuth = info.auth; 
                     
-                    // Trigger rollback if order just became Voided remotely
-                    if (info.status === "Voided" && oldStatus !== "Voided") {
-                        window.rollbackOrderImpact(order).then(() => {
-                            db.transaction(["orders"], "readwrite").objectStore("orders").put(order);
-                        });
-                    } else {
-                        db.transaction(["orders"], "readwrite").objectStore("orders").put(order); 
-                    }
+                    // FIX: Removed rollbackOrderImpact here! 
+                    // Backend code.gs already did the math perfectly, 
+                    // the tablet just needs to accept the clean data.
+                    db.transaction(["orders"], "readwrite").objectStore("orders").put(order); 
                 }
             };
         }
@@ -411,7 +406,6 @@ function processVoidApprovals(authStatuses) {
         }
     }
 }
-
 
 
 async function hashString(str) {
