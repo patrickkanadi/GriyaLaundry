@@ -3526,7 +3526,20 @@ window.syncMasterData = async function(isSilent = false) {
                 }
             }
 
-            if (result.data.members) { let txMem = db.transaction(["members"], "readwrite"); result.data.members.forEach(m => txMem.objectStore("members").put(m)); }
+           if (result.data.members) { 
+                let txMem = db.transaction(["members"], "readwrite"); 
+                txMem.objectStore("members").clear(); // <--- INI MENCEGAH DATABASE STUCK
+                result.data.members.forEach(m => txMem.objectStore("members").put(m)); 
+                
+                // Segarkan layar profil jika pelanggan sedang aktif di layar
+                if (activeCustomerProfile) {
+                    let updatedProfile = result.data.members.find(m => m.phone === activeCustomerProfile.phone);
+                    if (updatedProfile) {
+                        activeCustomerProfile = updatedProfile;
+                        window.updatePromoIndicator();
+                    }
+                }
+            }
 
 
 
@@ -3818,9 +3831,10 @@ window.openShiftReport = function(historyData = null) {
 
                 hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0);
 
-                tDiscountNom += (o.discounts || 0);
-
-                if (o.redeemedPromos && o.redeemedPromos.length > 0) o.redeemedPromos.forEach(rp => { tFreeItems += (rp.qty || 0); });
+                tDiscountNom += (o.discounts || 0); 
+                    if (o.redeemedPromos && o.redeemedPromos.length > 0) {
+                        o.redeemedPromos.forEach(rp => { tFreeItems += (Number(rp.qty) || 0); });
+                    }
 
 
 
@@ -3858,7 +3872,8 @@ window.openShiftReport = function(historyData = null) {
 
                 
 
-                let orderTotalCoins = (o.actualCoins !== undefined) ? o.actualCoins : (o.expectedCoins || orderExpectedCoins);
+                // Memastikan 0 aktual tidak membunuh data laporan shift
+                let orderTotalCoins = (o.actualCoins && o.actualCoins > 0) ? o.actualCoins : (o.expectedCoins || orderExpectedCoins);
 
                 tCoinsUsed += orderTotalCoins;
 
