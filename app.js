@@ -157,6 +157,7 @@ window.installPWA = function() {
 
 // --- NEW HELPER: ROLLBACK POINTS ON VOID ---
 // --- ULTIMATE PATCHED HELPER: ROLLBACK POINTS, COINS, STAMPS & PROG ---
+// --- ULTIMATE PATCHED HELPER: ROLLBACK POINTS, COINS, STAMPS & PROG ---
 window.rollbackOrderImpact = async function(order) {
     // 1. UPDATE LOCAL LACI & MESIN UI ONLY
     if (order.expectedCoins && order.expectedCoins > 0 && !order.coinsRefunded) {
@@ -181,22 +182,22 @@ window.rollbackOrderImpact = async function(order) {
     let promoRules = {};
     let stampRules = {};
     for (let key in settings) {
-        let upperKey = String(key).toUpperCase();
+        let upperKey = String(key).toUpperCase().replace(/\s+/g, ''); // Strip spaces for bulletproof matching
         if (upperKey.includes("PROMO")) {
             let valStr = String(settings[key] || "");
             if (valStr.includes(":")) {
                 valStr.split(",").forEach(p => {
                     let parts = p.split(":");
                     if (parts.length === 2) {
-                        let itemName = parts[0].trim().toUpperCase();
+                        let itemName = parts[0].trim().toUpperCase().replace(/\s+/g, '');
                         let reqQty = Number(parts[1].trim());
                         if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
                     } else if (parts.length === 4) {
-                        let itemName = parts[0].trim().toUpperCase();
+                        let itemName = parts[0].trim().toUpperCase().replace(/\s+/g, '');
                         let minQty = Number(parts[1].trim());
                         let target = Number(parts[2].trim());
                         let rewardQty = Number(parts[3].trim());
-                        if (itemName && !isNaN(target)) stampRules[itemName] = { target, minQty, rewardQty };
+                        if (itemName && !isNaN(target)) stampRules[itemName] = { target, minQty, rewardQty, originalName: parts[0].trim().toUpperCase() };
                     }
                 });
             }
@@ -211,7 +212,6 @@ window.rollbackOrderImpact = async function(order) {
             let member = e.target.result;
             if (!member) { resolve(); return; }
 
-            // -- ROLLBACK TOTAL SPENT --
             member.spent = Math.max(0, (member.spent || 0) - (order.grandTotal || 0));
 
             // -- ROLLBACK LOYALTY COINS --
@@ -247,8 +247,9 @@ window.rollbackOrderImpact = async function(order) {
             if (order.redeemedPromos) {
                 order.redeemedPromos.forEach(p => {
                     let cleanKey = String(p.item || "").trim();
-                    if (p.source === 'buy_x_get_1') claimedPromoMap[cleanKey] = (claimedPromoMap[cleanKey] || 0) + p.qty;
-                    if (p.source === 'stored') claimedMap[cleanKey] = (claimedMap[cleanKey] || 0) + p.qty;
+                    let ultraClean = cleanKey.toUpperCase().replace(/\s+/g, '');
+                    if (p.source === 'buy_x_get_1') claimedPromoMap[ultraClean] = (claimedPromoMap[ultraClean] || 0) + p.qty;
+                    if (p.source === 'stored') claimedMap[ultraClean] = (claimedMap[ultraClean] || 0) + p.qty;
                     
                     if (p.source === 'stored' || p.source === 'buy_x_get_1') {
                         storedObj[cleanKey] = (Number(storedObj[cleanKey]) || 0) + p.qty;
@@ -274,20 +275,18 @@ window.rollbackOrderImpact = async function(order) {
             let cartAgg = {};
             if (order.items) {
                 order.items.forEach(i => { 
-                    let cName = String(i.name || "").trim();
+                    let cName = String(i.name || "").trim().toUpperCase().replace(/\s+/g, '');
                     cartAgg[cName] = (cartAgg[cName] || 0) + Number(i.qty); 
                 });
             }
 
-            // D. Rollback Buy X Get 1 Progress (Flexible Key Matching)
+            // D. Rollback Buy X Get 1 Progress
             for (let cartItemName in cartAgg) {
-                let upperCartItem = cartItemName.toUpperCase();
                 let matchedRuleKey = null;
                 let ruleQty = 0;
 
                 for (let pk in promoRules) {
-                    let upperPk = pk.toUpperCase();
-                    if (upperCartItem.includes(upperPk) || upperPk.includes(upperCartItem)) {
+                    if (cartItemName.includes(pk) || pk.includes(cartItemName)) {
                         matchedRuleKey = pk;
                         ruleQty = promoRules[pk];
                         break;
@@ -300,18 +299,21 @@ window.rollbackOrderImpact = async function(order) {
                     let paidQty = Math.max(0, cartQty - claimedQty);
                     
                     if (paidQty > 0) {
-                        // Look for stored progress using exact or fuzzy key inside storedObj
                         let foundProgKey = null;
                         for (let sk in storedObj) {
-                            if (sk.startsWith("_prog_") && sk.toUpperCase().includes(matchedRuleKey)) {
+                            if (sk.startsWith("_prog_") && sk.toUpperCase().replace(/\s+/g, '').includes(matchedRuleKey)) {
                                 foundProgKey = sk;
                                 break;
                             }
                         }
-                        if (!foundProgKey) foundProgKey = "_prog_" + matchedRuleKey;
+                        // Default back to original spacing if not found to prevent creating ugly keys
+                        if (!foundProgKey) {
+                            let origName = Object.keys(promoRules).find(k => k.replace(/\s+/g, '') === matchedRuleKey) || matchedRuleKey;
+                            foundProgKey = "_prog_" + origName;
+                        }
 
                         let currentProg = Number(storedObj[foundProgKey]) || 0;
-                        currentProg -= paidQty;
+                        currentProg -= paidQty; // Deduct exact quantity bought
                         
                         while (currentProg <= -0.01) {
                             currentProg += ruleQty;
@@ -323,13 +325,13 @@ window.rollbackOrderImpact = async function(order) {
                 }
             }
 
-            // E. Rollback Stamp Progress (Flexible Key Matching)
+            // E. Rollback Stamp Progress 
             for (let ruleKey in stampRules) {
                 let rule = stampRules[ruleKey];
                 let matchedItemName = null;
 
                 for (let cartItemName in cartAgg) {
-                    if (cartItemName.toUpperCase().includes(ruleKey) || ruleKey.includes(cartItemName.toUpperCase())) {
+                    if (cartItemName.includes(ruleKey) || ruleKey.includes(cartItemName)) {
                         matchedItemName = cartItemName;
                         break;
                     }
@@ -337,18 +339,22 @@ window.rollbackOrderImpact = async function(order) {
 
                 if (matchedItemName) {
                     let paidQty = cartAgg[matchedItemName] - (claimedMap[matchedItemName] || claimedMap[ruleKey] || 0);
-                    if (paidQty >= rule.minQty) {
+                    
+                    // FIX: Calculate EXACTLY how many stamps this transaction generated
+                    let stampsEarned = Math.floor(paidQty / rule.minQty); 
+                    
+                    if (stampsEarned > 0) {
                         let foundStampKey = null;
                         for (let sk in storedObj) {
-                            if (sk.startsWith("_stamp_") && sk.toUpperCase().includes(ruleKey)) {
+                            if (sk.startsWith("_stamp_") && sk.toUpperCase().replace(/\s+/g, '').includes(ruleKey)) {
                                 foundStampKey = sk;
                                 break;
                             }
                         }
-                        if (!foundStampKey) foundStampKey = "_stamp_" + ruleKey;
+                        if (!foundStampKey) foundStampKey = "_stamp_" + rule.originalName;
 
                         let currentStamps = Number(storedObj[foundStampKey]) || 0;
-                        currentStamps -= 1; // Revert 1 stamp added during checkout
+                        currentStamps -= stampsEarned; // Deduct exactly what was earned
                         
                         while (currentStamps < 0) {
                             currentStamps += rule.target;
