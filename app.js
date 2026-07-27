@@ -3678,27 +3678,32 @@ window.syncMasterData = async function(isSilent = false) {
                 if(btn) btn.style.display = window.enableDrawerTracking ? "" : "none";
             });
 
-            // --- TAMBAHKAN KODE INI DI BAWAHNYA ---
+           // --- PENGATURAN PIUTANG (TAB & INPUT DIPISAH) ---
             
-            // 1. Baca pengaturan Enable_Piutang dari Google Sheets (Default = TRUE jika kosong)
-            window.enablePiutang = String(result.data.settings["Enable_Piutang"]).toUpperCase() !== "FALSE";
+            // 1. Baca pengaturan untuk TAB (Menu Atas)
+            window.enablePiutangTab = String(result.data.settings["Enable_Piutang_Tab"]).toUpperCase() !== "FALSE";
             
-            // 2. Sembunyikan Tab Piutang di bagian atas POS
+            // 2. Baca pengaturan untuk INPUT (Saat Checkout)
+            window.enablePiutangInput = String(result.data.settings["Enable_Piutang_Input"]).toUpperCase() !== "FALSE";
+            
+            // 3. Terapkan pada Tab Piutang
             let piutangTabBtn = document.getElementById("tab-piutang");
             if (piutangTabBtn) {
-                piutangTabBtn.style.display = window.enablePiutang ? "" : "none";
+                piutangTabBtn.style.display = window.enablePiutangTab ? "" : "none";
             }
 
-            // 3. (Opsional) Sembunyikan juga kolom input Piutang saat Checkout Review
+            // 4. Terapkan pada Input Pembayaran (Hotel & Tamu)
             let hotelPiutangInput = document.getElementById("pay-hotel-piutang");
             let tamuPiutangInput = document.getElementById("pay-tamu-piutang");
+            
+            // Sembunyikan parent (bungkusan/label) dari input tersebut agar rapi
             if (hotelPiutangInput && hotelPiutangInput.parentElement) {
-                hotelPiutangInput.parentElement.style.display = window.enablePiutang ? "" : "none";
+                hotelPiutangInput.parentElement.style.display = window.enablePiutangInput ? "" : "none";
             }
             if (tamuPiutangInput && tamuPiutangInput.parentElement) {
-                tamuPiutangInput.parentElement.style.display = window.enablePiutang ? "" : "none";
+                tamuPiutangInput.parentElement.style.display = window.enablePiutangInput ? "" : "none";
             }
-            // --------------------------------------
+            // ------------------------------------------------
 
 
 
