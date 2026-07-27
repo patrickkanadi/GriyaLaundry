@@ -3672,13 +3672,33 @@ window.syncMasterData = async function(isSilent = false) {
 
             
 
+            // KODE ASLI ANDA UNTUK LACI (CARI BAGIAN INI)
             window.enableDrawerTracking = String(result.data.settings["Enable_Drawer_Tracking"]).toUpperCase() !== "FALSE";
-
             document.querySelectorAll("button[onclick*='openCashDrop'], #btn-drawer, #btn-cashdrop").forEach(btn => {
-
                 if(btn) btn.style.display = window.enableDrawerTracking ? "" : "none";
-
             });
+
+            // --- TAMBAHKAN KODE INI DI BAWAHNYA ---
+            
+            // 1. Baca pengaturan Enable_Piutang dari Google Sheets (Default = TRUE jika kosong)
+            window.enablePiutang = String(result.data.settings["Enable_Piutang"]).toUpperCase() !== "FALSE";
+            
+            // 2. Sembunyikan Tab Piutang di bagian atas POS
+            let piutangTabBtn = document.getElementById("tab-piutang");
+            if (piutangTabBtn) {
+                piutangTabBtn.style.display = window.enablePiutang ? "" : "none";
+            }
+
+            // 3. (Opsional) Sembunyikan juga kolom input Piutang saat Checkout Review
+            let hotelPiutangInput = document.getElementById("pay-hotel-piutang");
+            let tamuPiutangInput = document.getElementById("pay-tamu-piutang");
+            if (hotelPiutangInput && hotelPiutangInput.parentElement) {
+                hotelPiutangInput.parentElement.style.display = window.enablePiutang ? "" : "none";
+            }
+            if (tamuPiutangInput && tamuPiutangInput.parentElement) {
+                tamuPiutangInput.parentElement.style.display = window.enablePiutang ? "" : "none";
+            }
+            // --------------------------------------
 
 
 
