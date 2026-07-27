@@ -2425,7 +2425,15 @@ window.finalizeOrder = async function(shouldPrint) {
         else { let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; let multiplier = Math.ceil(iQty / divisor); otherCoins += ((Number(item.expectedCoins) || 0) * multiplier); }
     });
 
-    let assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
+    // --- CEK PENGATURAN COIN ASSUMPTION ---
+    let enableCoinAssumption = String(settings["Enable_Coin_Assumption"]).toUpperCase() !== "FALSE";
+
+    let assumedWashingCoins = 0;
+    if (enableCoinAssumption) {
+        assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
+    }
+    
+    // Koin yang dibeli secara fisik (koinSoldQty) tetap dihitung, namun asumsi cuci bisa 0
     let expectedCoinsTotal = assumedWashingCoins + koinSoldQty;
 
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
@@ -3952,15 +3960,15 @@ window.openShiftReport = function(historyData = null) {
 
 
 
-                        if (name.includes("KESET")) { itemCoins = Math.ceil(i.qty / kesetPerBatch) * 3; } 
-
-                        else if (name.includes("BANTAL")) { itemCoins = Math.ceil(i.qty / bantalPerBatch) * 2; } 
-
-                        else if (i.inputMode === "DECIMAL") { itemCoins = Math.ceil(i.qty / kgPerCuci) + Math.ceil(i.qty / kgPerKering); } 
-
-                        else { let divisor = (i.hasMoq && i.moqQty > 0) ? i.moqQty : 1; let multiplier = Math.ceil(i.qty / divisor); itemCoins = (i.expectedCoins || 0) * multiplier; }
-
-
+                       // --- HANYA HITUNG ASUMSI JIKA DIAKTIFKAN DI SETTINGS ---
+                        let enableCoinAssumption = String(settings["Enable_Coin_Assumption"]).toUpperCase() !== "FALSE";
+                        
+                        if (enableCoinAssumption) {
+                            if (name.includes("KESET")) { itemCoins = Math.ceil(i.qty / kesetPerBatch) * 3; } 
+                            else if (name.includes("BANTAL")) { itemCoins = Math.ceil(i.qty / bantalPerBatch) * 2; } 
+                            else if (i.inputMode === "DECIMAL") { itemCoins = Math.ceil(i.qty / kgPerCuci) + Math.ceil(i.qty / kgPerKering); } 
+                            else { let divisor = (i.hasMoq && i.moqQty > 0) ? i.moqQty : 1; let multiplier = Math.ceil(i.qty / divisor); itemCoins = (i.expectedCoins || 0) * multiplier; }
+                        }
 
                         if (itemCoins > 0) { orderExpectedCoins += itemCoins; orderCoinBreakdown[cat] = (orderCoinBreakdown[cat] || 0) + itemCoins; }
 
