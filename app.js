@@ -2737,10 +2737,11 @@ window.submitTicketDone = function() {
 
     const ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
     if (ticket) {
+        ticket.cashier = ticket.cashier || currentCashier; // <--- PENGAMAN KASIR DITAMBAHKAN DI SINI
         let currentOutlet = ticket.outlet || window.getActiveOutlet();
         let diff = actualWashingInput - expectedWashing;
         
-        // Validasi Koin di Laci Cukup Jika Nambah
+     // Validasi Koin di Laci Cukup Jika Nambah
         if (diff > 0) {
             let availableLaci = window.laciStocks ? (window.laciStocks[currentOutlet] || 0) : 0;
             if (diff > availableLaci) {
