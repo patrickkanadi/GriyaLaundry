@@ -155,18 +155,17 @@ window.installPWA = function() {
 
 
 
-// --- NEW HELPER: ROLLBACK POINTS ON VOID ---
-// --- ULTIMATE PATCHED HELPER: ROLLBACK POINTS, COINS, STAMPS & PROG ---
 // --- ULTIMATE PATCHED HELPER: ROLLBACK POINTS, COINS, STAMPS & PROG ---
 window.rollbackOrderImpact = async function(order) {
     // 1. UPDATE LOCAL LACI & MESIN UI ONLY
-    if (order.expectedCoins && order.expectedCoins > 0 && !order.coinsRefunded) {
+    let coinsToRestore = (order.actualCoins && order.actualCoins > 0) ? order.actualCoins : (order.expectedCoins || 0);
+    if (coinsToRestore > 0 && !order.coinsRefunded) {
         let currentOutlet = order.outlet || localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
         if (!window.laciStocks) window.laciStocks = {};
         if (!window.coinsInMachines) window.coinsInMachines = {};
         
-        window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + order.expectedCoins;
-        window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - order.expectedCoins);
+        window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + coinsToRestore;
+        window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - coinsToRestore);
         
         let btnKoin = document.getElementById("btn-koin-top");
         if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
@@ -313,7 +312,7 @@ window.rollbackOrderImpact = async function(order) {
                         }
 
                         let currentProg = Number(storedObj[foundProgKey]) || 0;
-                        currentProg -= paidQty; // Deduct exact quantity bought
+                        currentProg -= paidQty; 
                         
                         while (currentProg <= -0.01) {
                             currentProg += ruleQty;
@@ -340,7 +339,6 @@ window.rollbackOrderImpact = async function(order) {
                 if (matchedItemName) {
                     let paidQty = cartAgg[matchedItemName] - (claimedMap[matchedItemName] || claimedMap[ruleKey] || 0);
                     
-                    // FIX: Checkout only gives 1 stamp per receipt, so rollback must only take 1 stamp
                     let stampsEarned = (paidQty >= rule.minQty) ? 1 : 0;
                     
                     if (stampsEarned > 0) {
@@ -2733,43 +2731,54 @@ window.markTicketReady = function(orderId, expectedWashing) {
 
 
 window.submitTicketDone = function() {
-
     let actualWashingInput = Number(document.getElementById("done-actual-coins").value) || 0;
-
     let expectedWashing = Number(document.getElementById("done-expected-coins").innerText) || 0;
-
     if (actualWashingInput < 0) return alert("Jumlah koin tidak valid.");
 
-
-
     const ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
-
     if (ticket) {
+        let currentOutlet = ticket.outlet || window.getActiveOutlet();
+        let diff = actualWashingInput - expectedWashing;
+        
+        // Validasi Koin di Laci Cukup Jika Nambah
+        if (diff > 0) {
+            let availableLaci = window.laciStocks ? (window.laciStocks[currentOutlet] || 0) : 0;
+            if (diff > availableLaci) {
+                return alert(`⚠️ TRANSAKSI GAGAL: Koin di Laci Tidak Cukup!\nKoin tambahan dibutuhkan: ${diff}\nSisa di Laci: ${availableLaci}`);
+            }
+        }
 
         ticket.orderStatus = "Ready for Pickup"; 
-
         
-
         let instantC = ticket.instantCoins || 0;
-
-        ticket.actualCoins = actualWashingInput + instantC; // Aktual Total = Aktual Cuci + Jual/Instant
-
+        ticket.actualCoins = actualWashingInput + instantC; 
         
-
         if (actualWashingInput !== expectedWashing) { ticket.coinDiscrepancy = true; } 
-
         
-
+        // --- UPDATE LOCAL LACI & MACHINE UI ---
+        if (diff !== 0) {
+            if (!window.laciStocks) window.laciStocks = {};
+            if (!window.coinsInMachines) window.coinsInMachines = {};
+            
+            window.laciStocks[currentOutlet] = Math.max(0, (window.laciStocks[currentOutlet] || 0) - diff);
+            window.coinsInMachines[currentOutlet] = (window.coinsInMachines[currentOutlet] || 0) + diff;
+            
+            let btnKoin = document.getElementById("btn-koin-top");
+            if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
+            
+            if (window.globalMenuData) {
+                let koinItem = window.globalMenuData.find(m => String(m.name).toUpperCase().includes("KOIN_FISIK") || String(m.name).toUpperCase().includes("KOIN FISIK"));
+                if (koinItem) { koinItem.currentStock = window.laciStocks[currentOutlet]; }
+                if (typeof renderProductGrid === "function") renderProductGrid();
+            }
+        }
+        // ----------------------------------------
+        
         ticket.syncStatus = "Pending";
-
         db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
-
         window.renderActiveTickets(); window.runBackgroundSync();
-
     }
-
     document.getElementById("ticket-done-modal").classList.add("hidden");
-
 };
 
 
