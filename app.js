@@ -2733,43 +2733,35 @@ window.markTicketReady = function(orderId, expectedWashing) {
 
 
 window.submitTicketDone = function() {
-
     let actualWashingInput = Number(document.getElementById("done-actual-coins").value) || 0;
-
     let expectedWashing = Number(document.getElementById("done-expected-coins").innerText) || 0;
-
     if (actualWashingInput < 0) return alert("Jumlah koin tidak valid.");
 
-
-
-    const ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
-
+    let ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
     if (ticket) {
-
         ticket.orderStatus = "Ready for Pickup"; 
-
-        
-
         let instantC = ticket.instantCoins || 0;
-
-        ticket.actualCoins = actualWashingInput + instantC; // Aktual Total = Aktual Cuci + Jual/Instant
-
-        
-
+        ticket.actualCoins = actualWashingInput + instantC; 
         if (actualWashingInput !== expectedWashing) { ticket.coinDiscrepancy = true; } 
-
-        
-
         ticket.syncStatus = "Pending";
 
-        db.transaction(["orders"], "readwrite").objectStore("orders").put(ticket);
+        // MERGE DATA LOCALLY INSTEAD OF OVERWRITING
+        let tx = db.transaction(["orders"], "readwrite");
+        tx.objectStore("orders").get(ticket.orderId).onsuccess = (e) => {
+            let localTicket = e.target.result;
+            if (localTicket) {
+                localTicket.orderStatus = ticket.orderStatus;
+                localTicket.actualCoins = ticket.actualCoins;
+                localTicket.syncStatus = "Pending";
+                tx.objectStore("orders").put(localTicket);
+            } else {
+                tx.objectStore("orders").put(ticket);
+            }
+        };
 
         window.renderActiveTickets(); window.runBackgroundSync();
-
     }
-
     document.getElementById("ticket-done-modal").classList.add("hidden");
-
 };
 
 
@@ -2819,21 +2811,33 @@ window.openSettlement = function(orderId, remainingDue) {
 
 
 window.confirmSettlement = function() {
-
     if (!activeSettlementTicket) return;
-
-    const c = Number(document.getElementById("settle-cash").value) || 0; const q = Number(document.getElementById("settle-qris").value) || 0; 
-
-    activeSettlementTicket.cashAmount += c; activeSettlementTicket.qrisAmount += q; 
-
-    activeSettlementTicket.orderStatus = "Completed"; activeSettlementTicket.syncStatus = "Pending";
-
-    db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
+    const c = Number(document.getElementById("settle-cash").value) || 0; 
+    const q = Number(document.getElementById("settle-qris").value) || 0; 
+    
+    activeSettlementTicket.cashAmount += c; 
+    activeSettlementTicket.qrisAmount += q; 
+    activeSettlementTicket.orderStatus = "Completed"; 
+    activeSettlementTicket.syncStatus = "Pending";
+    
+    // MERGE DATA LOCALLY
+    let tx = db.transaction(["orders"], "readwrite");
+    tx.objectStore("orders").get(activeSettlementTicket.orderId).onsuccess = (e) => {
+        let localTicket = e.target.result;
+        if (localTicket) {
+            localTicket.cashAmount = activeSettlementTicket.cashAmount;
+            localTicket.qrisAmount = activeSettlementTicket.qrisAmount;
+            localTicket.orderStatus = "Completed";
+            localTicket.syncStatus = "Pending";
+            tx.objectStore("orders").put(localTicket);
+        } else {
+            tx.objectStore("orders").put(activeSettlementTicket);
+        }
+    };
 
     activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
-
-    document.getElementById("settlement-modal").classList.add("hidden"); window.renderActiveTickets(); window.runBackgroundSync();
-
+    document.getElementById("settlement-modal").classList.add("hidden"); 
+    window.renderActiveTickets(); window.runBackgroundSync();
 };
 
 
@@ -2855,43 +2859,39 @@ window.openPiutangPayment = function(orderId, remainingDue) {
 
 
 window.confirmPiutangPayment = function() {
-
     if (!activeSettlementTicket) return;
-
     const c = Number(document.getElementById("piutang-settle-cash").value) || 0; 
-
     const q = Number(document.getElementById("piutang-settle-qris").value) || 0; 
-
     
-
     activeSettlementTicket.cashAmount = (activeSettlementTicket.cashAmount || 0) + c; 
-
     activeSettlementTicket.qrisAmount = (activeSettlementTicket.qrisAmount || 0) + q; 
-
-    
-
     activeSettlementTicket.hotelPiutangAmount = 0;
-
     activeSettlementTicket.tamuPiutangAmount = 0;
-
     activeSettlementTicket.orderStatus = "Completed"; 
-
     activeSettlementTicket.piutangPaidDate = new Date().toISOString(); 
-
     activeSettlementTicket.syncStatus = "Pending";
-
     
-
-    db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
-
+    // MERGE DATA LOCALLY
+    let tx = db.transaction(["orders"], "readwrite");
+    tx.objectStore("orders").get(activeSettlementTicket.orderId).onsuccess = (e) => {
+        let localTicket = e.target.result;
+        if (localTicket) {
+            localTicket.cashAmount = activeSettlementTicket.cashAmount;
+            localTicket.qrisAmount = activeSettlementTicket.qrisAmount;
+            localTicket.hotelPiutangAmount = 0;
+            localTicket.tamuPiutangAmount = 0;
+            localTicket.orderStatus = "Completed";
+            localTicket.piutangPaidDate = activeSettlementTicket.piutangPaidDate;
+            localTicket.syncStatus = "Pending";
+            tx.objectStore("orders").put(localTicket);
+        } else {
+            tx.objectStore("orders").put(activeSettlementTicket);
+        }
+    };
+    
     activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
-
-    
-
     document.getElementById("piutang-payment-modal").classList.add("hidden"); 
-
     window.renderPiutangTickets(); window.runBackgroundSync();
-
 };
 
 
