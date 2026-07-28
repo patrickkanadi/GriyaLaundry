@@ -2964,26 +2964,36 @@ window.renderHistoryList = function(type) {
     container.innerHTML = "";
 
     if (type === 'orders') {
+        const container = document.getElementById("history-container");
+        container.innerHTML = `<div style="padding:20px; text-align:center; font-weight:bold; color:#2980b9;">⏳ Mengambil data dari server...</div>`;
 
-        db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = (e) => {
+        fetch(API_URL, {
+            method: 'POST',
+            mode: 'cors',
+            body: JSON.stringify({ action: "fetchHistory" })
+        })
+        .then(res => res.json())
+        .then(result => {
+            if (result.status === "Success") {
+                let serverOrders = result.data;
+                window.serverHistoryCache = serverOrders; // Save to cache so the eye button works
+                
+                if(serverOrders.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada riwayat transaksi di server.</div>`;
 
-            const shiftOrders = e.target.result.filter(o => o.shiftId === currentShiftId).reverse();
-
-            if(shiftOrders.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada order di shift ini.</div>`;
-
-            container.innerHTML = shiftOrders.map(o => {
-
-                let badge = o.orderStatus === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : o.orderStatus === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">${o.orderStatus}</span>`;
-
-                let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="window.requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:10px;">Batalkan</button>` : '';
-
-                let detailBtn = `<button onclick="window.viewOrderDetails('${o.orderId}')" style="background:#f39c12; color:white; border:none; padding:4px 8px; border-radius:4px;">👁️</button>`;
-
-                return `<div class="history-row"><div style="flex:1;"><strong>${o.orderId}</strong><br><small>${o.customerName}</small><br><span style="margin-top:4px; display:inline-block;">${badge}</span></div><div style="text-align:right;"><strong>Rp ${o.grandTotal.toLocaleString('id-ID')}</strong><br><div style="margin-top:4px; display:flex; gap:4px; justify-content:flex-end;">${detailBtn} ${btn}</div></div></div>`;
-
-            }).join('');
-
-        };
+                container.innerHTML = serverOrders.map(o => {
+                    let badge = o.orderStatus === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : o.orderStatus === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">${o.orderStatus}</span>`;
+                    let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="window.requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;">Batalkan</button>` : '';
+                    let detailBtn = `<button onclick="window.viewOrderDetails('${o.orderId}')" style="background:#f39c12; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">👁️</button>`;
+                    
+                    return `<div class="history-row"><div style="flex:1;"><strong>${o.orderId}</strong><br><small>${o.customerName}</small><br><span style="margin-top:4px; display:inline-block;">${badge}</span></div><div style="text-align:right;"><strong>Rp ${o.grandTotal.toLocaleString('id-ID')}</strong><br><div style="margin-top:4px; display:flex; gap:4px; justify-content:flex-end;">${detailBtn} ${btn}</div></div></div>`;
+                }).join('');
+            } else {
+                container.innerHTML = `<div style="padding:20px; text-align:center; color:red;">Gagal membaca data server.</div>`;
+            }
+        })
+        .catch(err => {
+            container.innerHTML = `<div style="padding:20px; text-align:center; color:red;">Koneksi terputus. Pastikan internet Anda aktif.</div>`;
+        });
 
     } else if (type === 'expenses') {
 
@@ -3140,35 +3150,38 @@ window.renderHistoryList = function(type) {
 
 
 window.viewOrderDetails = function(orderId) {
-
     db.transaction(["orders"], "readonly").objectStore("orders").get(orderId).onsuccess = (e) => {
-
-        let order = e.target.result; if(!order) return alert("Order tidak ditemukan.");
-
-        let itemsHtml = ""; let remainingPromos = [...(order.redeemedPromos || []).map(p => ({...p}))];
-
-        order.items.forEach(item => {
-
-            let lineTotal = item.qty * item.originalPrice;
-
-            itemsHtml += `<div style="display:flex; justify-content:space-between; margin-top:8px;"><div style="font-weight:bold;">${item.qty}x ${item.name}</div><div style="font-weight:bold;">Rp ${lineTotal.toLocaleString('id-ID')}</div></div>`;
-
-        });
-
+        let order = e.target.result; 
+        
+        // If not in local memory, grab it from the server cache we just downloaded
+        if (!order && window.serverHistoryCache) {
+            order = window.serverHistoryCache.find(o => o.orderId === orderId);
+        }
+        
+        if(!order) return alert("Order tidak ditemukan.");
+        
+        let itemsHtml = ""; 
+        
+        // If it's a local order, format the items array
+        if (order.items && order.items.length > 0) {
+            order.items.forEach(item => {
+                let lineTotal = item.qty * (item.originalPrice || item.price);
+                itemsHtml += `<div style="display:flex; justify-content:space-between; margin-top:8px;"><div style="font-weight:bold;">${item.qty}x ${item.name}</div><div style="font-weight:bold;">Rp ${lineTotal.toLocaleString('id-ID')}</div></div>`;
+            });
+        } 
+        // If it's a server order, just print the readable text receipt
+        else if (order.readableReceipt) {
+            itemsHtml = `<pre style="font-family:inherit; margin:0; white-space:pre-wrap; font-size:14px; color:#2c3e50;">${order.readableReceipt}</pre>`;
+        }
+        
         document.getElementById("detail-items").innerHTML = itemsHtml;
-
         document.getElementById("detail-subtotal").innerText = `Rp ${(order.subtotal || 0).toLocaleString('id-ID')}`;
-
         document.getElementById("detail-discount").innerText = `-Rp ${(order.discounts || 0).toLocaleString('id-ID')}`;
-
         document.getElementById("detail-grandtotal").innerText = `Rp ${(order.grandTotal || 0).toLocaleString('id-ID')}`;
-
         document.getElementById("detail-paymethod").innerText = order.paymentMethod || "-";
-
+        
         document.getElementById("order-detail-modal").classList.remove("hidden");
-
     };
-
 };
 
 
