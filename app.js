@@ -2425,12 +2425,13 @@ window.finalizeOrder = async function(shouldPrint) {
         else { let divisor = (item.hasMoq && item.moqQty > 0) ? item.moqQty : 1; let multiplier = Math.ceil(iQty / divisor); otherCoins += ((Number(item.expectedCoins) || 0) * multiplier); }
     });
 
-    // --- CEK PENGATURAN COIN ASSUMPTION ---
-    let enableCoinAssumption = String(settings["Enable_Coin_Assumption"]).toUpperCase() !== "FALSE";
-
-    let assumedWashingCoins = 0;
-    if (enableCoinAssumption) {
-        assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
+    // --- CEK PENGATURAN COIN ASSUMPTION SECARA KUAT (MENCEGAH ERROR SPASI) ---
+    let enableCoinAssumption = true;
+    for (let key in settings) {
+        if (key.trim().toUpperCase() === "ENABLE_COIN_ASSUMPTION") {
+            enableCoinAssumption = String(settings[key]).trim().toUpperCase() !== "FALSE";
+            break;
+        }
     }
     
     // Koin yang dibeli secara fisik (koinSoldQty) tetap dihitung, namun asumsi cuci bisa 0
@@ -3343,7 +3344,15 @@ window.confirmAdminVoid = async function() {
          if(item) {
              if (storeName === 'orders' && item.orderStatus !== "Voided") {
                  item.orderStatus = "Voided";
-                 await window.rollbackOrderImpact(item); // Run points rollback
+                 
+                 // Kembalikan Angka Visual Laci/Mesin langsung di layar
+                 if (item.expectedCoins && item.expectedCoins > 0) {
+                     let currentOutlet = item.outlet || localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
+                     if (window.laciStocks) window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + item.expectedCoins;
+                     if (window.coinsInMachines) window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - item.expectedCoins);
+                     let btnKoin = document.getElementById("btn-koin-top");
+                     if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
+                 }
              }
              else if (storeName === 'expenses') {
                  item.status = "Voided";
@@ -3351,7 +3360,7 @@ window.confirmAdminVoid = async function() {
              db.transaction([storeName], "readwrite").objectStore(storeName).put(item);
          }
     };
-
+    
     document.getElementById("admin-void-modal").classList.add("hidden");
     alert("✅ Void Instan Berhasil dieksekusi!");
     window.runBackgroundSync();
@@ -3961,10 +3970,17 @@ window.openShiftReport = function(historyData = null) {
 
 
                        // --- HANYA HITUNG ASUMSI JIKA DIAKTIFKAN DI SETTINGS ---
-                        let enableCoinAssumption = String(settings["Enable_Coin_Assumption"]).toUpperCase() !== "FALSE";
+                        let enableCoinAssumption = true;
+                        for (let key in settings) {
+                            if (key.trim().toUpperCase() === "ENABLE_COIN_ASSUMPTION") {
+                                enableCoinAssumption = String(settings[key]).trim().toUpperCase() !== "FALSE";
+                                break;
+                            }
+                        }
                         
                         if (enableCoinAssumption) {
                             if (name.includes("KESET")) { itemCoins = Math.ceil(i.qty / kesetPerBatch) * 3; } 
+                            // ... sisanya sama ...
                             else if (name.includes("BANTAL")) { itemCoins = Math.ceil(i.qty / bantalPerBatch) * 2; } 
                             else if (i.inputMode === "DECIMAL") { itemCoins = Math.ceil(i.qty / kgPerCuci) + Math.ceil(i.qty / kgPerKering); } 
                             else { let divisor = (i.hasMoq && i.moqQty > 0) ? i.moqQty : 1; let multiplier = Math.ceil(i.qty / divisor); itemCoins = (i.expectedCoins || 0) * multiplier; }
