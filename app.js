@@ -2767,48 +2767,39 @@ window.submitTicketDone = function() {
 
 
 window.openSettlement = function(orderId, remainingDue) {
-
     activeSettlementTicket = activeLaundryTickets.find(t => t.orderId === orderId);
-
     
-
     if (remainingDue <= 0) {
-
         if(confirm("Cucian ini sudah LUNAS. Tandai sudah diambil pelanggan?")) {
-
             activeSettlementTicket.orderStatus = "Completed"; 
-
             activeSettlementTicket.syncStatus = "Pending";
-
-            db.transaction(["orders"], "readwrite").objectStore("orders").put(activeSettlementTicket);
+            
+            // --> MERGE LOCAL DATA FIX FOR FAST-PATH <--
+            let tx = db.transaction(["orders"], "readwrite");
+            tx.objectStore("orders").get(activeSettlementTicket.orderId).onsuccess = (e) => {
+                let localTicket = e.target.result;
+                if (localTicket) {
+                    localTicket.orderStatus = "Completed";
+                    localTicket.syncStatus = "Pending";
+                    tx.objectStore("orders").put(localTicket);
+                } else {
+                    tx.objectStore("orders").put(activeSettlementTicket);
+                }
+            };
 
             activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
-
             window.renderActiveTickets(); 
-
             window.runBackgroundSync();
-
             activeSettlementTicket = null;
-
         }
-
         return;
-
     }
 
-
-
     let elAmt = document.getElementById("settle-amount"); if(elAmt) elAmt.innerText = `Rp ${remainingDue.toLocaleString('id-ID')}`;
-
     let elCash = document.getElementById("settle-cash"); if(elCash) elCash.value = remainingDue;
-
     let elQris = document.getElementById("settle-qris"); if(elQris) elQris.value = 0;
-
     document.getElementById("settlement-modal").classList.remove("hidden");
-
 };
-
-
 
 window.confirmSettlement = function() {
     if (!activeSettlementTicket) return;
