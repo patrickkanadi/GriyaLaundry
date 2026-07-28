@@ -2947,12 +2947,32 @@ window.saveExpense = function() {
 
 // ==========================================
 
-window.openHistoryModal = function() {
-
+window.openHistoryModal = async function() {
     document.getElementById("history-modal").classList.remove("hidden");
-
+    const container = document.getElementById("history-container"); 
+    
+    // Show loading spinner immediately
+    if(container) container.innerHTML = `<div style="padding:20px; text-align:center; font-weight:bold; color:#2980b9;">⏳ Menarik data kasir dari server...</div>`;
+    
+    // Fetch ONLY ONCE when opening the modal
+    if (navigator.onLine) {
+        try {
+            let res = await fetch(API_URL, {
+                method: 'POST',
+                mode: 'cors',
+                body: JSON.stringify({ action: "fetchHistory", cashier: currentCashier })
+            });
+            let result = await res.json();
+            if (result.status === "Success") {
+                window.serverHistoryCache = result.data; // Save it to cache!
+            }
+        } catch(err) {
+            console.log("Gagal menarik riwayat server", err);
+        }
+    }
+    
+    // Render the list instantly using the cache
     window.renderHistoryList('orders');
-
 };
 
 
@@ -2964,38 +2984,22 @@ window.renderHistoryList = function(type) {
     container.innerHTML = "";
 
     if (type === 'orders') {
-        const container = document.getElementById("history-container");
-        container.innerHTML = `<div style="padding:20px; text-align:center; font-weight:bold; color:#2980b9;">⏳ Mengambil data dari server...</div>`;
+        const container = document.getElementById("history-container"); if(!container) return;
+        
+        // INSTANT RENDER: Read directly from cache instead of fetching!
+        let serverOrders = window.serverHistoryCache || [];
+        
+        if(serverOrders.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada riwayat transaksi Anda di server.</div>`;
 
-        fetch(API_URL, {
-            method: 'POST',
-            mode: 'cors',
-            body: JSON.stringify({ action: "fetchHistory" })
-        })
-        .then(res => res.json())
-        .then(result => {
-            if (result.status === "Success") {
-                let serverOrders = result.data;
-                window.serverHistoryCache = serverOrders; // Save to cache so the eye button works
-                
-                if(serverOrders.length === 0) return container.innerHTML = `<div style="padding:20px; text-align:center;">Belum ada riwayat transaksi di server.</div>`;
-
-                container.innerHTML = serverOrders.map(o => {
-                    let badge = o.orderStatus === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : o.orderStatus === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">${o.orderStatus}</span>`;
-                    let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="window.requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;">Batalkan</button>` : '';
-                    let detailBtn = `<button onclick="window.viewOrderDetails('${o.orderId}')" style="background:#f39c12; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">👁️</button>`;
-                    
-                    return `<div class="history-row"><div style="flex:1;"><strong>${o.orderId}</strong><br><small>${o.customerName}</small><br><span style="margin-top:4px; display:inline-block;">${badge}</span></div><div style="text-align:right;"><strong>Rp ${o.grandTotal.toLocaleString('id-ID')}</strong><br><div style="margin-top:4px; display:flex; gap:4px; justify-content:flex-end;">${detailBtn} ${btn}</div></div></div>`;
-                }).join('');
-            } else {
-                container.innerHTML = `<div style="padding:20px; text-align:center; color:red;">Gagal membaca data server.</div>`;
-            }
-        })
-        .catch(err => {
-            container.innerHTML = `<div style="padding:20px; text-align:center; color:red;">Koneksi terputus. Pastikan internet Anda aktif.</div>`;
-        });
-
-    } else if (type === 'expenses') {
+        container.innerHTML = serverOrders.map(o => {
+            let badge = o.orderStatus === "Voided" ? `<span class="status-badge status-voided">Dibatalkan</span>` : o.orderStatus === "Void Pending" ? `<span class="status-badge status-pending">Menunggu Admin</span>` : `<span class="status-badge status-paid">${o.orderStatus}</span>`;
+            let btn = (o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending") ? `<button onclick="window.requestVoid('orders', '${o.orderId}')" style="background:#e74c3c; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;">Batalkan</button>` : '';
+            let detailBtn = `<button onclick="window.viewOrderDetails('${o.orderId}')" style="background:#f39c12; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">👁️</button>`;
+            
+            return `<div class="history-row"><div style="flex:1;"><strong>${o.orderId}</strong><br><small>${o.customerName}</small><br><span style="margin-top:4px; display:inline-block;">${badge}</span></div><div style="text-align:right;"><strong>Rp ${o.grandTotal.toLocaleString('id-ID')}</strong><br><div style="margin-top:4px; display:flex; gap:4px; justify-content:flex-end;">${detailBtn} ${btn}</div></div></div>`;
+        }).join('');
+    
+    }else if (type === 'expenses') {
 
         db.transaction(["expenses"], "readonly").objectStore("expenses").getAll().onsuccess = (e) => {
 
@@ -3310,6 +3314,12 @@ window.submitRemoteVoid = function() {
          }
     };
 
+    // Update local cache so screen refreshes instantly
+    if (window.serverHistoryCache && currentVoidTarget.type === 'orders') {
+        let cached = window.serverHistoryCache.find(o => o.orderId === currentVoidTarget.id);
+        if (cached) cached.orderStatus = "Void Pending";
+    }
+
     document.getElementById("admin-void-modal").classList.add("hidden");
     alert("✅ Permintaan Void berhasil dikirim ke Admin!");
     window.runBackgroundSync();
@@ -3355,6 +3365,12 @@ window.confirmAdminVoid = async function() {
              db.transaction([storeName], "readwrite").objectStore(storeName).put(item);
          }
     };
+
+    // Update local cache so screen refreshes instantly
+    if (window.serverHistoryCache && currentVoidTarget.type === 'orders') {
+        let cached = window.serverHistoryCache.find(o => o.orderId === currentVoidTarget.id);
+        if (cached) cached.orderStatus = "Voided";
+    }
 
     document.getElementById("admin-void-modal").classList.add("hidden");
     alert("✅ Void Instan Berhasil dieksekusi!");
