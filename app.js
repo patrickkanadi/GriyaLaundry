@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbxw2c2xZY5zuvt1xMCeryptZYZTEmEPkvIAchY3iWeboM488KkBpJfamPXwrOxDZBD3/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxPIq-LurQ_McYh_wG42aAasakI4kUIuUaOpceGCBEXUMSqrRFk_7QHkmyVzmhRBQ02/exec";
 const DB_NAME = "GriyaLaundry_POS";
 
 const DB_VERSION = 34; 
