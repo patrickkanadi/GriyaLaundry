@@ -445,67 +445,104 @@ window.getDynamicSettings = function() {
 
 
 function logUserActivity() {
-
     let now = Date.now();
-
-    if (currentPin && (now - window.lastActivityWrite > 5 * 60 * 1000)) {
-
-        window.lastActivityWrite = now;
-
-        let tx = db.transaction(["active_shifts"], "readwrite");
-
-        tx.objectStore("active_shifts").get(currentPin).onsuccess = (e) => {
-
-            let shift = e.target.result; if (shift) { shift.lastActiveTime = now; tx.objectStore("active_shifts").put(shift); }
-
-        };
-
+    if (currentPin) {
+        // Reset timer 10 menit setiap kali kasir menyentuh layar
+        localStorage.setItem("session_last_active", now); 
+        
+        if (now - window.lastActivityWrite > 5 * 60 * 1000) {
+            window.lastActivityWrite = now;
+            let tx = db.transaction(["active_shifts"], "readwrite");
+            tx.objectStore("active_shifts").get(currentPin).onsuccess = (e) => {
+                let shift = e.target.result; if (shift) { shift.lastActiveTime = now; tx.objectStore("active_shifts").put(shift); }
+            };
+        }
     }
-
 }
-
 ['click', 'touchstart', 'keydown'].forEach(evt => window.addEventListener(evt, logUserActivity, { passive: true }));
 
 
 
 // ==========================================
-
-// 2. PRINTER ENGINE MURNI ESC/POS
-
+// 2. PRINTER ENGINE MURNI ESC/POS (ROBUST BLE)
 // ==========================================
 
+// Helper function to handle the actual GATT connection process
+async function connectToGatt(device) {
+    const btn = document.getElementById("btn-printer"); 
+    if(btn) { btn.innerText = "🖨️ Printer: Menghubungkan..."; btn.style.background = "#f39c12"; }
+    
+    const server = await device.gatt.connect(); 
+    const service = await server.getPrimaryService(0x18F0);
+    btCharacteristic = await service.getCharacteristic(0x2AF1);
+    
+    if(btn) { btn.innerText = "🖨️ Printer: Terhubung"; btn.style.background = "#2ecc71"; }
+}
+
+// Background listener that fires when the OS drops the connection
+async function onDisconnected(event) {
+    let device = event.target;
+    const btn = document.getElementById("btn-printer"); 
+    if(btn) { btn.innerText = "🖨️ Printer: Terputus (Menghubungkan ulang...)"; btn.style.background = "#e74c3c"; }
+    
+    console.log("Bluetooth terputus. Mencoba reconnect otomatis...");
+    
+    // Wait 2 seconds, then try to reconnect automatically in the background
+    setTimeout(async () => {
+        try {
+            await connectToGatt(device);
+            console.log("Auto-reconnect berhasil!");
+        } catch (error) {
+            console.log("Auto-reconnect gagal. Akan dicoba lagi saat checkout.");
+            if(btn) { btn.innerText = "🖨️ Printer: Offline"; btn.style.background = "#bdc3c7"; }
+        }
+    }, 2000);
+}
+
 window.connectBluetoothPrinter = async function() {
-
     try {
-
-        btDevice = await navigator.bluetooth.requestDevice({ filters: [{ services: [0x18F0] }], optionalServices: [0x18F0] });
-
-        const server = await btDevice.gatt.connect(); const service = await server.getPrimaryService(0x18F0);
-
-        btCharacteristic = await service.getCharacteristic(0x2AF1);
-
-        const btn = document.getElementById("btn-printer"); if(btn) { btn.innerText = "🖨️ Printer: Terhubung"; btn.style.background = "#2ecc71"; }
-
-    } catch (err) { alert("Gagal terhubung ke printer Bluetooth."); }
-
+        // We only need to request the device ONCE via user click
+        if (!btDevice) {
+            btDevice = await navigator.bluetooth.requestDevice({ filters: [{ services: [0x18F0] }], optionalServices: [0x18F0] });
+            // Add the listener so we know if it drops
+            btDevice.addEventListener('gattserverdisconnected', onDisconnected);
+        }
+        
+        await connectToGatt(btDevice);
+    } catch (err) { 
+        alert("Gagal terhubung ke printer Bluetooth. Pastikan printer menyala."); 
+        console.error(err);
+    }
 };
 
-
-
 async function sendToPrinter(payloadUint8) {
-
-    if (!btCharacteristic) { alert("Printer belum terhubung! Pastikan modul nyala dan terkoneksi di menu atas."); return; }
-
-    const chunkSize = 20; 
-
-    for (let i = 0; i < payloadUint8.length; i += chunkSize) {
-
-        const chunk = payloadUint8.slice(i, i + chunkSize);
-
-        await btCharacteristic.writeValue(chunk); await new Promise(r => setTimeout(r, 10)); 
-
+    // 1. Check if we have ever paired a device
+    if (!btDevice) { 
+        alert("Printer belum pernah dipasangkan! Klik tombol Printer di menu atas."); 
+        return; 
     }
 
+    // 2. JUST-IN-TIME RECONNECTION: If it dropped, wake it back up BEFORE printing
+    if (!btDevice.gatt.connected) {
+        console.log("Koneksi terputus sesaat sebelum print. Membangunkan printer...");
+        try {
+            await connectToGatt(btDevice);
+        } catch (e) {
+            alert("Printer gagal dibangunkan. Pastikan mesin kasir dekat dengan printer dan modul menyala.");
+            const btn = document.getElementById("btn-printer"); 
+            if(btn) { btn.innerText = "🖨️ Printer: Offline"; btn.style.background = "#bdc3c7"; }
+            return;
+        }
+    }
+
+    // 3. Proceed with printing chunks
+    if (!btCharacteristic) return;
+    const chunkSize = 20; 
+    for (let i = 0; i < payloadUint8.length; i += chunkSize) {
+        const chunk = payloadUint8.slice(i, i + chunkSize);
+        await btCharacteristic.writeValue(chunk); 
+        await new Promise(r => setTimeout(r, 10)); 
+    }
 }
 
 
@@ -908,6 +945,11 @@ window.attemptLogin = async function() {
                 document.getElementById("login-screen").classList.add("hidden"); document.getElementById("pos-screen").classList.remove("hidden");
 
                 document.getElementById("display-cashier").innerText = currentCashier + ` (${selectedOutlet})`;
+                // SIMPAN SESI KE LOCALSTORAGE SELAMA 10 MENIT
+                localStorage.setItem("session_pin", currentPin);
+                localStorage.setItem("session_cashier", currentCashier);
+                localStorage.setItem("session_shift", currentShiftId);
+                localStorage.setItem("session_last_active", Date.now());
 
                 window.switchWorkspace('new'); window.lockMenu(); loadMenuUI();
 
@@ -969,7 +1011,10 @@ window.switchWorkspace = function(type) {
 
 
 
-window.lockScreen = function() { window.location.reload(); };
+window.lockScreen = function() { 
+    localStorage.removeItem("session_pin"); // Hapus sesi
+    window.location.reload(); 
+};
 
 
 
@@ -4270,13 +4315,10 @@ window.triggerEndShift = async function() {
     tx.objectStore("active_shifts").delete(currentPin);
 
     tx.oncomplete = async () => {
-
+        localStorage.removeItem("session_pin"); // Hapus sesi setelah tutup shift
         let mod = document.getElementById("shift-detail-modal"); if(mod) mod.classList.add("hidden");
-
         alert("Shift Berhasil Ditutup! Memproses sinkronisasi cloud akhir...");
-
         await window.runBackgroundSync(); window.location.reload(); 
-
     };
 
 };
@@ -4334,31 +4376,51 @@ function checkExpiredShifts() {
 
 
 window.onload = async () => { 
-
     await initDB(); 
+    
+    // --- AUTO-RESTORE SESSION (10 MINUTE TIMEOUT) ---
+    let savedPin = localStorage.getItem("session_pin");
+    let lastActive = Number(localStorage.getItem("session_last_active")) || 0;
+    
+    // Jika ada sesi dan belum lewat 10 menit (600.000 ms), bypass login!
+    if (savedPin && (Date.now() - lastActive < 10 * 60 * 1000)) {
+        currentPin = savedPin;
+        currentCashier = localStorage.getItem("session_cashier") || "Kasir";
+        currentShiftId = localStorage.getItem("session_shift");
+        
+        localStorage.setItem("session_last_active", Date.now()); // Reset timer
+        
+        document.getElementById("login-screen").classList.add("hidden"); 
+        document.getElementById("pos-screen").classList.remove("hidden");
+        let selectedOutlet = window.getActiveOutlet();
+        document.getElementById("display-cashier").innerText = currentCashier + ` (${selectedOutlet})`;
+        
+        window.switchWorkspace('new'); window.lockMenu(); loadMenuUI();
+    } else {
+        localStorage.removeItem("session_pin"); // Sesi expired, bersihkan memori
+    }
+    // ------------------------------------------------
 
     window.syncMasterData(); 
-
     
-
     document.addEventListener("mousedown", function(e) {
-
         let resBox = document.getElementById('autocomplete-results');
-
         if (resBox && !e.target.closest('#autocomplete-results') && e.target.id !== 'cust-phone' && e.target.id !== 'cust-name') { 
-
             resBox.classList.add('hidden'); resBox.style.display = "none"; 
-
         }
-
     });
 
-
-
     window.setInterval(window.runBackgroundSync, 5000); 
-
     window.setInterval(window.syncMasterData, 30000); 
-
     window.setInterval(checkExpiredShifts, 60000); 
-
+    
+    // LOOP: Mengunci layar otomatis jika tablet dibiarkan menyala tanpa disentuh selama 10 menit
+    window.setInterval(() => {
+        if (currentPin) {
+            let lastAct = Number(localStorage.getItem("session_last_active")) || 0;
+            if (Date.now() - lastAct > 10 * 60 * 1000) {
+                window.lockScreen();
+            }
+        }
+    }, 60000);
 };
