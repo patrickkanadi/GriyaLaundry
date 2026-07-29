@@ -3998,8 +3998,8 @@ window.openShiftReport = function(historyData = null) {
 
                 
 
-                // Memastikan 0 aktual tidak membunuh data laporan shift
-                let orderTotalCoins = (o.actualCoins && o.actualCoins > 0) ? o.actualCoins : (o.expectedCoins || orderExpectedCoins);
+                // FORCE: Strictly use Actual Coins if available. Only fallback to estimation if actual is entirely missing.
+                let orderTotalCoins = o.actualCoins !== undefined ? Number(o.actualCoins) : (o.expectedCoins || orderExpectedCoins);
 
                 tCoinsUsed += orderTotalCoins;
 
