@@ -3670,33 +3670,39 @@ window.syncMasterData = async function(isSilent = false) {
 
 
             let txOthers = db.transaction(["unsynced_members"], "readonly");
-
             txOthers.objectStore("unsynced_members").getAll().onsuccess = (e) => {
-
                 let unsynced = e.target.result;
-
                 if (unsynced.length > 0) { let txPut = db.transaction(["members"], "readwrite"); unsynced.forEach(m => txPut.objectStore("members").put(m)); }
-
                 
-
-                activeLaundryTickets = result.data.activeLaundryOrders || [];
-
-                let tCount = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
-
-                let pCount = activeLaundryTickets.filter(t => t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0).length;
-
-                
-
-                let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
-
-                let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
-
-                
-
-                if (!document.getElementById("pos-screen").classList.contains("hidden")) { window.renderActiveTickets(); window.renderPiutangTickets(); }
-
-                if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
-
+                // --- THE FIX: MERGE LOCAL PENDING TICKETS WITH STALE SERVER TICKETS ---
+                let txOrders = db.transaction(["orders"], "readonly");
+                txOrders.objectStore("orders").getAll().onsuccess = (ev) => {
+                    let localOrders = ev.target.result;
+                    
+                    // 1. Get all orders that haven't been successfully pushed to the server yet
+                    let localPending = localOrders.filter(o => o.syncStatus === "Pending");
+                    let serverTickets = result.data.activeLaundryOrders || [];
+                    
+                    // 2. Keep server tickets ONLY IF the tablet doesn't have a pending local change for them
+                    let safeServerTickets = serverTickets.filter(st => !localPending.some(lp => lp.orderId === st.orderId));
+                    
+                    // 3. Keep local pending tickets ONLY IF they still belong in the active views
+                    let activePending = localPending.filter(o => o.orderStatus === "Processing" || o.orderStatus === "Ready for Pickup" || o.hotelPiutangAmount > 0 || o.tamuPiutangAmount > 0);
+                    
+                    // Combine them! Local pending changes now successfully override stale server data.
+                    activeLaundryTickets = [...safeServerTickets, ...activePending];
+                    
+                    let tCount = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
+                    let pCount = activeLaundryTickets.filter(t => t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0).length;
+                    
+                    let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
+                    let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
+                    
+                    if (!document.getElementById("pos-screen").classList.contains("hidden")) { 
+                        window.renderActiveTickets(); window.renderPiutangTickets(); 
+                    }
+                    if (result.data.authStatuses) processVoidApprovals(result.data.authStatuses);
+                };
             };
 
         }
