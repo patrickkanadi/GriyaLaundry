@@ -265,10 +265,25 @@ window.rollbackOrderImpact = async function(order) {
             absolutePoints -= (Number(order.coinsEarned) || 0);
 
             let redeemedLoyaltyCoins = 0;
+            let refundedStaffCoins = 0;
             if (order.redeemedPromos && Array.isArray(order.redeemedPromos)) {
                 order.redeemedPromos.forEach(p => {
                     if (p.source === 'loyalty') redeemedLoyaltyCoins += Number(p.qty);
+                    if (p.source === 'staff_coin') refundedStaffCoins += Number(p.qty);
                 });
+            }
+            
+            // KEMBALIKAN KE DATABASE STAFF LOKAL JIKA ADA
+            if (refundedStaffCoins > 0) {
+                let txStaff = db.transaction(["staff"], "readwrite");
+                txStaff.objectStore("staff").getAll().onsuccess = (e) => {
+                    let allStaff = e.target.result;
+                    let s = allStaff.find(st => st.name === order.cashier);
+                    if (s) {
+                        s.freeCoins = (s.freeCoins || 0) + refundedStaffCoins;
+                        txStaff.objectStore("staff").put(s);
+                    }
+                };
             }
             absolutePoints += (redeemedLoyaltyCoins * loyaltyTarget);
             absolutePoints = Math.max(0, absolutePoints);
@@ -2041,6 +2056,22 @@ window.openReview = async function() {
 
     let promoHtml = "";
 
+    // --- CEK SALDO KOIN STAFF LOKAL ---
+    let currentStaff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(currentPin).onsuccess = e => res(e.target.result));
+    let staffFreeCoins = currentStaff ? (Number(currentStaff.freeCoins) || 0) : 0;
+    
+    if (staffFreeCoins > 0) {
+        let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
+        let staffMaxRedeemable = Math.min(staffFreeCoins, Math.floor(cartCoins));
+        
+        if (staffMaxRedeemable > 0) {
+            promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#e8f4f8; padding:8px; border-radius:6px; border:1px solid #bce8f1;">
+               <div><strong style="color:#2980b9; font-size:12px;">👔 Koin Gratis Staff (${currentCashier})</strong><br><small style="color:#2471a3; font-size:11px;">Maks klaim: ${staffMaxRedeemable}</small></div>
+               <input type="number" class="promo-input" data-type="staff_coin" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${staffMaxRedeemable}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #3498db; border-radius:4px; font-size:14px;">
+           </div>`;
+        }
+    }
+    // ----------------------------------
 
 
     if (activeCustomerProfile) {
@@ -2471,11 +2502,24 @@ window.finalizeOrder = async function(shouldPrint) {
             let item = input.getAttribute('data-item');
             redeemedList.push({ source: src, item: item, qty: val, price: Number(input.getAttribute('data-price')) });
             
-            if (src === 'loyalty') redeemedLoyaltyCoins += val;
+            if (src === 'loyalty' || src === 'staff_coin') redeemedLoyaltyCoins += val; // Cegah staf mendapat poin dari koin gratis ini
             if (src === 'stored') claimedMap[item] = (claimedMap[item] || 0) + val;
             if (src === 'buy_x_get_1') claimedPromoMap[item] = (claimedPromoMap[item] || 0) + val;
         }
     });
+
+    // POTONG SALDO LOKAL STAFF SECARA INSTAN
+    let staffCoinsUsedLocal = redeemedList.filter(r => r.source === 'staff_coin').reduce((sum, r) => sum + r.qty, 0);
+    if (staffCoinsUsedLocal > 0) {
+        let txStaff = db.transaction(["staff"], "readwrite");
+        txStaff.objectStore("staff").get(currentPin).onsuccess = (e) => {
+            let s = e.target.result;
+            if (s) {
+                s.freeCoins = Math.max(0, (s.freeCoins || 0) - staffCoinsUsedLocal);
+                txStaff.objectStore("staff").put(s);
+            }
+        };
+    }
 
     let cp = document.getElementById("cust-phone"); let custPhone = cp ? cp.value.trim() : "-"; if(!custPhone) custPhone = "-";
     let cn = document.getElementById("cust-name"); let custName = cn ? cn.value.trim() : "Walk-in"; if(!custName) custName = "Walk-in";
