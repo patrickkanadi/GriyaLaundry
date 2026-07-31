@@ -1566,7 +1566,7 @@ window.handleAutocomplete = function(e) {
             // Ubah format staff menjadi format profil pelanggan
             let staffMembers = staffs.map(s => ({
                 phone: "STF-" + s.name.toUpperCase().replace(/\s+/g, '').substring(0, 5),
-                name: s.name, spent: 0, points: 0, freeCoins: 0, storedRewards: {}, isStaffProfile: true
+                name: s.name, spent: 0, points: 0, freeCoins: (s.freeCoins || 0), storedRewards: {}, isStaffProfile: true
             }));
 
             // FIX: Hapus member dari daftar jika ia sudah masuk sebagai Staff agar tidak ganda
@@ -1602,9 +1602,13 @@ window.handleAutocomplete = function(e) {
 };
 
 // --- FUNGSI HELPER BARU UNTUK MEMILIH STAFF SEBAGAI CUSTOMER ---
-window.selectStaffOrMember = function(phone, name, isStaff) {
+window.selectStaffOrMember = async function(phone, name, isStaff) {
     if (isStaff) {
-        activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {}, isStaffProfile: true };
+        let staffs = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = e => res(e.target.result));
+        let sMatch = staffs.find(s => s.name === name);
+        let sCoins = sMatch ? (sMatch.freeCoins || 0) : 0;
+        
+        activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: sCoins, spent: 0, storedRewards: {}, isStaffProfile: true };
         let cp = document.getElementById("cust-phone"); if(cp) cp.value = activeCustomerProfile.phone;
         let cn = document.getElementById("cust-name"); if(cn) cn.value = activeCustomerProfile.name;
         let rb = document.getElementById("autocomplete-results"); if(rb) { rb.classList.add("hidden"); rb.style.display = "none"; }
@@ -1613,7 +1617,6 @@ window.selectStaffOrMember = function(phone, name, isStaff) {
         window.selectMember(phone);
     }
 };
-
 
 
 window.openEditMember = function() {
@@ -2022,10 +2025,22 @@ window.openReview = async function() {
     window.cartGrandTotal = window.cartSubtotal;
 
     let promoHtml = "";
-
+    
     // --- CEK SALDO KOIN STAFF LOKAL ---
-    let currentStaff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(currentPin).onsuccess = e => res(e.target.result));
-    let staffFreeCoins = currentStaff ? (Number(currentStaff.freeCoins) || 0) : 0;
+    // Cukup pastikan pelanggan yang dipilih adalah Staff dan punya koin
+    if (activeCustomerProfile && activeCustomerProfile.isStaffProfile && activeCustomerProfile.freeCoins > 0) {
+        let customerStaffCoins = Number(activeCustomerProfile.freeCoins) || 0;
+        let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
+        let staffMaxRedeemable = Math.min(customerStaffCoins, Math.floor(cartCoins));
+        
+        if (staffMaxRedeemable > 0) {
+            promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#e8f4f8; padding:8px; border-radius:6px; border:1px solid #bce8f1;">
+               <div><strong style="color:#2980b9; font-size:12px;">👔 Koin Gratis Staff (${activeCustomerProfile.name})</strong><br><small style="color:#2471a3; font-size:11px;">Maks klaim: ${staffMaxRedeemable}</small></div>
+               <input type="number" class="promo-input" data-type="staff_coin" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${staffMaxRedeemable}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #3498db; border-radius:4px; font-size:14px;">
+           </div>`;
+        }
+    }
+    // ----------------------------------
     
     // KUNCI PENGAMAN: Promo Koin Staff hanya muncul jika Pelanggan yang dipilih adalah DIRI MEREKA SENDIRI
     let isOwnLaundry = activeCustomerProfile && activeCustomerProfile.name.toLowerCase() === currentCashier.toLowerCase();
