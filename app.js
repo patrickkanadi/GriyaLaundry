@@ -1458,143 +1458,147 @@ function proceedToUnlock(phone, name) {
 
 
 
-window.unlockMenu = async function(isGuest) {
-    let phone = "-";
-    let name = "Walk-in";
+window.unlockMenu = function(isGuest) {
+
+    let phone = "-"; let name = "Walk-in";
+
     let cp = document.getElementById("cust-phone");
+
     let cn = document.getElementById("cust-name");
 
-    if (isGuest) {
-        if(cp) cp.value = "";
-        if(cn) cn.value = "Walk-in";
-        activeCustomerProfile = null;
+
+
+    if (isGuest) { 
+
+        if(cp) cp.value = ""; if(cn) cn.value = "Walk-in"; activeCustomerProfile = null; 
+
         proceedToUnlock(phone, name);
-    } else {
-        phone = cp ? cp.value.trim() : "";
-        name = (cn ? cn.value.trim() : "") || "Pelanggan";
+
+    } else { 
+
+        phone = cp ? cp.value.trim() : ""; name = (cn ? cn.value.trim() : "") || "Pelanggan"; 
 
         if (phone.length < 5) {
+
             if (confirm("Daftarkan pelanggan tanpa nomor WhatsApp?")) {
+
                 phone = "999" + Date.now().toString().slice(-7);
+
                 if(cp) cp.value = phone;
+
                 if (cn && !cn.value.trim()) cn.value = "Pelanggan Tanpa WA";
+
                 proceedToUnlock(phone, name);
+
             } else { return; }
+
         } else {
-            // DETEKSI JIKA INI ADALAH STAF
-            if (phone.startsWith("STF-")) {
-                let pin = phone.replace("STF-", "");
-                let staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = e => res(e.target.result));
-                if (staff) {
-                    activeCustomerProfile = { phone: phone, name: staff.name, points: 0, freeCoins: staff.freeCoins || 0, spent: 0, storedRewards: {}, isStaff: true };
-                } else {
-                    activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {}, isStaff: true };
+
+            db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
+
+                activeCustomerProfile = e.target.result;
+
+                if(!activeCustomerProfile) {
+
+                    activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
+
+                    alert(`✅ Member baru berhasil ditambahkan!\nNama: ${name}\nWA: ${phone}`);
+
                 }
+
                 proceedToUnlock(phone, name);
-            } else {
-                db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
-                    activeCustomerProfile = e.target.result;
-                    if(!activeCustomerProfile) {
-                        activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
-                        alert(`✅ Member baru berhasil ditambahkan!\nNama: ${name}\nWA: ${phone}`);
-                    }
-                    proceedToUnlock(phone, name);
-                };
-            }
+
+            };
+
         }
+
     }
+
 };
 
 
 
-window.selectMember = async function(phone) {
-    if (phone.startsWith("STF-")) {
-        let pin = phone.replace("STF-", "");
-        let staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = e => res(e.target.result));
-        if (staff) {
-            activeCustomerProfile = { phone: phone, name: staff.name, points: 0, freeCoins: staff.freeCoins || 0, spent: 0, storedRewards: {}, isStaff: true };
-        }
-    } else {
-        activeCustomerProfile = await new Promise(res => db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = e => res(e.target.result));
-    }
+window.selectMember = function(phone) {
 
-    if (activeCustomerProfile) {
-        let cp = document.getElementById("cust-phone");
-        if (cp) cp.value = activeCustomerProfile.phone;
-        let cn = document.getElementById("cust-name");
-        if (cn) cn.value = activeCustomerProfile.name;
-        
-        let rb = document.getElementById("autocomplete-results");
-        if (rb) {
-            rb.classList.add("hidden");
-            rb.style.display = "none";
+    db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
+
+        activeCustomerProfile = e.target.result;
+
+        if(activeCustomerProfile) {
+
+            let cp = document.getElementById("cust-phone"); if(cp) cp.value = activeCustomerProfile.phone;
+
+            let cn = document.getElementById("cust-name"); if(cn) cn.value = activeCustomerProfile.name;
+
+            let rb = document.getElementById("autocomplete-results"); if(rb) { rb.classList.add("hidden"); rb.style.display = "none"; }
+
+            window.updatePromoIndicator();
+
         }
-        window.updatePromoIndicator();
-    }
+
+    };
+
 };
 
 
 
-window.handleAutocomplete = async function(e) {
-    if (!db) return;
-    const val = e.target ? e.target.value.toLowerCase().trim() : "";
+window.handleAutocomplete = function(e) {
+    if(!db) return;
+    const val = e.target ? e.target.value.toLowerCase().trim() : ""; 
     const resBox = document.getElementById("autocomplete-results");
     if (!resBox) return;
-
+    
     if (activeCustomerProfile) {
         if (val !== activeCustomerProfile.phone.toLowerCase() && val !== activeCustomerProfile.name.toLowerCase()) {
-            activeCustomerProfile = null;
-            let pi = document.getElementById("promo-indicator");
-            if (pi) pi.classList.add("hidden");
+            activeCustomerProfile = null; 
+            let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
         }
     } else {
-        let pi = document.getElementById("promo-indicator");
-        if (pi) pi.classList.add("hidden");
+        let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
     }
+    
+    db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
+        let matches = ev.target.result; 
+        
+        // --- TAMBAHAN: GABUNGKAN DATA STAFF KE DALAM PENCARIAN ---
+        db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = (ev2) => {
+            let staffs = ev2.target.result;
+            // Ubah format staff menjadi format profil pelanggan
+            let staffMembers = staffs.map(s => ({
+                phone: "STF-" + s.name.toUpperCase().replace(/\s+/g, '').substring(0, 5),
+                name: s.name, spent: 0, points: 0, freeCoins: 0, storedRewards: {}, isStaffProfile: true
+            }));
 
-    if (val.length === 0) {
-        resBox.innerHTML = "";
-        resBox.classList.add("hidden");
-        return;
-    }
+            // FIX: Hapus member dari daftar jika ia sudah masuk sebagai Staff agar tidak ganda
+            let staffPhones = new Set(staffMembers.map(s => s.phone));
+            let filteredMatches = matches.filter(m => !staffPhones.has(m.phone));
 
-    try {
-        let members = await new Promise(res => db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = ev => res(ev.target.result || []));
-        let staffs = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = ev => res(ev.target.result || []));
-        
-        let formattedStaffs = staffs.map(s => ({
-            phone: "STF-" + s.pin,
-            name: s.name + " [Staff]",
-            spent: 0,
-            points: 0,
-            freeCoins: s.freeCoins || 0,
-            isStaff: true
-        }));
+            let allMatches = [...filteredMatches, ...staffMembers];
 
-        let matches = [...members, ...formattedStaffs];
-        
-        if (val.length > 0) {
-            matches = matches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
-        }
-        
-        matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
-        if (val.length === 0) matches = matches.slice(0, 15);
-        
-        if (matches.length > 0) {
-            resBox.innerHTML = matches.map(m => `<div onclick="window.selectMember('${m.phone}')" style="padding: 10px; border-bottom: 1px solid #eee; cursor: pointer;">
-                <strong>${m.name}</strong><br>
-                <small style="color: #7f8c8d;">${m.phone !== "-" && !String(m.phone).startsWith("999") ? m.phone : "No WA / Rahasia"} | ${m.isStaff ? 'Koin: ' + m.freeCoins : 'Poin: ' + m.points}</small>
-            </div>`).join('');
-            resBox.classList.remove("hidden");
-            resBox.style.display = "block";
-        } else {
-            resBox.innerHTML = `<div style="padding: 10px; color: #7f8c8d;">Tidak ditemukan</div>`;
-            resBox.classList.remove("hidden");
-            resBox.style.display = "block";
-        }
-    } catch (err) {
-        console.error(err);
-    }
+            if (val.length > 0) {
+                allMatches = allMatches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
+            }
+            
+            allMatches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
+            if (val.length === 0) { allMatches = allMatches.slice(0, 15); }
+
+            if (allMatches.length > 0) {
+                resBox.innerHTML = allMatches.map(m => {
+                    let badge = m.isStaffProfile ? `<span style="background:#3498db; color:white; font-size:10px; padding:2px 4px; border-radius:3px; margin-left:5px;">Staff</span>` : "";
+                    return `
+                    <div class="autocomplete-item" onmousedown="window.selectStaffOrMember('${m.phone}', '${m.name}', ${m.isStaffProfile ? 'true' : 'false'})" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px; z-index: 10000; position:relative;">
+                        <div style="font-weight: bold; color: #2980b9;">${m.phone} ${badge}</div>
+                        <div style="font-size: 13px; color: #555; margin-top:2px;">${m.name}</div>
+                    </div>
+                    `;
+                }).join("");
+                resBox.classList.remove("hidden");
+                resBox.style.display = "block";
+            } else { 
+                resBox.classList.add("hidden"); resBox.style.display = "none"; 
+            }
+        };
+    };
 };
 
 // --- FUNGSI HELPER BARU UNTUK MEMILIH STAFF SEBAGAI CUSTOMER ---
@@ -2020,15 +2024,19 @@ window.openReview = async function() {
     let promoHtml = "";
 
     // --- CEK SALDO KOIN STAFF LOKAL ---
-    // Cukup pastikan pelanggan yang dipilih adalah Staff (ID berawalan STF-) dan punya koin
-    if (activeCustomerProfile && activeCustomerProfile.phone && activeCustomerProfile.phone.startsWith("STF-") && activeCustomerProfile.freeCoins > 0) {
-        let customerStaffCoins = Number(activeCustomerProfile.freeCoins) || 0;
+    let currentStaff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(currentPin).onsuccess = e => res(e.target.result));
+    let staffFreeCoins = currentStaff ? (Number(currentStaff.freeCoins) || 0) : 0;
+    
+    // KUNCI PENGAMAN: Promo Koin Staff hanya muncul jika Pelanggan yang dipilih adalah DIRI MEREKA SENDIRI
+    let isOwnLaundry = activeCustomerProfile && activeCustomerProfile.name.toLowerCase() === currentCashier.toLowerCase();
+    
+    if (staffFreeCoins > 0 && isOwnLaundry) {
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
-        let staffMaxRedeemable = Math.min(customerStaffCoins, Math.floor(cartCoins));
+        let staffMaxRedeemable = Math.min(staffFreeCoins, Math.floor(cartCoins));
         
         if (staffMaxRedeemable > 0) {
             promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#e8f4f8; padding:8px; border-radius:6px; border:1px solid #bce8f1;">
-               <div><strong style="color:#2980b9; font-size:12px;">👔 Koin Gratis Staff (${activeCustomerProfile.name})</strong><br><small style="color:#2471a3; font-size:11px;">Maks klaim: ${staffMaxRedeemable}</small></div>
+               <div><strong style="color:#2980b9; font-size:12px;">👔 Koin Gratis Staff (${currentCashier})</strong><br><small style="color:#2471a3; font-size:11px;">Maks klaim: ${staffMaxRedeemable}</small></div>
                <input type="number" class="promo-input" data-type="staff_coin" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${staffMaxRedeemable}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #3498db; border-radius:4px; font-size:14px;">
            </div>`;
         }
@@ -2702,12 +2710,14 @@ window.finalizeOrder = async function(shouldPrint) {
 
 
 
-window.saveMemberToDB = function(profile) { 
-    // BLOKIR STAF AGAR TIDAK TERSIMPAN DI DATABASE MEMBER REGULER
-    if(!profile || !profile.phone || profile.phone === "-" || String(profile.phone).startsWith("STF-")) return; 
-    
+window.saveMemberToDB = function(profile) {
+
+    if(!profile.phone || profile.phone === "-") return;
+
     db.transaction(["members"], "readwrite").objectStore("members").put(profile);
+
     db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(profile);
+
 };
 
 
