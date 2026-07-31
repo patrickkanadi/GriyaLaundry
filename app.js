@@ -215,8 +215,28 @@ window.rollbackOrderImpact = async function(order) {
         order.coinsRefunded = true; 
     }
 
-    if (!order.customerPhone || order.customerPhone === "-" || order.customerPhone.startsWith("999") || order.customerPhone === "Walk-in") {
-        return; 
+    // -- REFUND LOKAL KOIN STAFF (PINDAHKAN KE PALING ATAS) --
+    let refundedStaffCoins = 0;
+    if (order.redeemedPromos && Array.isArray(order.redeemedPromos)) {
+        order.redeemedPromos.forEach(p => {
+            if (p.source === 'staff_coin') refundedStaffCoins += Number(p.qty);
+        });
+    }
+    if (refundedStaffCoins > 0) {
+        let txStaff = db.transaction(["staff"], "readwrite");
+        txStaff.objectStore("staff").getAll().onsuccess = (e) => {
+            let allStaff = e.target.result;
+            let s = allStaff.find(st => st.name === order.cashier);
+            if (s) {
+                s.freeCoins = (s.freeCoins || 0) + refundedStaffCoins;
+                txStaff.objectStore("staff").put(s);
+            }
+        };
+    }
+
+    // FIX: Blokir eksekusi poin untuk staf
+    if (!order.customerPhone || order.customerPhone === "-" || String(order.customerPhone).startsWith("STF-") || order.customerPhone === "Walk-in") {
+        return new Promise((resolve) => resolve()); 
     }
 
     // Fetch dynamic settings safely
@@ -2579,7 +2599,8 @@ window.finalizeOrder = async function(shouldPrint) {
         }
     }
 
-    if (custPhone !== "-") {
+    // FIX: Blokir profil STF- agar tidak masuk ke database member reguler
+    if (custPhone !== "-" && !String(custPhone).startsWith("STF-")) {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
         activeCustomerProfile.spent += window.cartGrandTotal;
         
