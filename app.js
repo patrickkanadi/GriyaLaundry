@@ -1961,39 +1961,22 @@ window.renderCart = function() {
 
 
 window.openReview = async function() {
-
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
-
     
-
     // TARIK PENGATURAN PROMO
-
     const settings = await window.getDynamicSettings();
-
     let promoRules = {};
-
     window.promoStampRules = {}; // Global untuk dipakai di finalizeOrder
-
     for (let key in settings) {
-
         if (String(key).toUpperCase().includes("PROMO")) {
-
             let valStr = String(settings[key] || "");
-
             if (valStr.includes(":")) {
-
                 valStr.split(",").forEach(p => {
-
                     let parts = p.split(":");
-
                     if (parts.length === 2) {
-
                         let itemName = parts[0].trim().toUpperCase();
-
                         let reqQty = Number(parts[1].trim());
-
                         if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
-
                     } else if (parts.length === 4) {
                         let minQty = Number(parts[1].trim()); 
                         let target = Number(parts[2].trim()); 
@@ -2001,31 +1984,19 @@ window.openReview = async function() {
                         let cleanKey = parts[0].trim().toUpperCase().replace(/\s+/g, '');
                         if (cleanKey && !isNaN(target)) window.promoStampRules[cleanKey] = { target, minQty, rewardQty, originalName: parts[0].trim() };
                     }
-
                 });
-
             }
-
         }
-
     }
 
-
-
     let inputs = ["pay-cash", "pay-qris", "pay-transfer", "pay-hotel-piutang", "pay-tamu-piutang"];
-
     inputs.forEach(id => { let el = document.getElementById(id); if(el && el.tagName === 'INPUT') el.value = 0; });
-
     let pf = document.getElementById("pay-free"); if(pf) { if(pf.tagName === 'INPUT') pf.value = 0; else pf.innerText = 0; }
-
     
-
     window.cartSubtotal = currentCart.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0);
-
     window.cartGrandTotal = window.cartSubtotal;
-
     let promoHtml = "";
-    
+
     // --- CEK SALDO KOIN STAFF LOKAL ---
     // Cukup pastikan pelanggan yang dipilih adalah Staff dan punya koin
     if (activeCustomerProfile && activeCustomerProfile.isStaffProfile && activeCustomerProfile.freeCoins > 0) {
@@ -2041,218 +2012,106 @@ window.openReview = async function() {
         }
     }
     // ----------------------------------
-    
-    // KUNCI PENGAMAN: Promo Koin Staff hanya muncul jika Pelanggan yang dipilih adalah DIRI MEREKA SENDIRI
-    let isOwnLaundry = activeCustomerProfile && activeCustomerProfile.name.toLowerCase() === currentCashier.toLowerCase();
-    
-    if (staffFreeCoins > 0 && isOwnLaundry) {
-        let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
-        let staffMaxRedeemable = Math.min(staffFreeCoins, Math.floor(cartCoins));
-        
-        if (staffMaxRedeemable > 0) {
-            promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#e8f4f8; padding:8px; border-radius:6px; border:1px solid #bce8f1;">
-               <div><strong style="color:#2980b9; font-size:12px;">👔 Koin Gratis Staff (${currentCashier})</strong><br><small style="color:#2471a3; font-size:11px;">Maks klaim: ${staffMaxRedeemable}</small></div>
-               <input type="number" class="promo-input" data-type="staff_coin" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${staffMaxRedeemable}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #3498db; border-radius:4px; font-size:14px;">
-           </div>`;
-        }
-    }
-    // ----------------------------------
 
 
     if (activeCustomerProfile) {
-
         let storedObj = {};
-
         if (activeCustomerProfile.storedRewards) {
-
             // MENGGUNAKAN JSON.stringify UNTUK DEEP COPY AGAR INJEKSI VIRTUAL TIDAK MERUSAK DATA ASLI
-
             try { storedObj = typeof activeCustomerProfile.storedRewards === 'string' ? JSON.parse(activeCustomerProfile.storedRewards) : JSON.parse(JSON.stringify(activeCustomerProfile.storedRewards)); } 
-
             catch(e) { storedObj = {}; }
-
         }
-
-
 
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
-
         let maxRedeemable = 0; let F = Number(activeCustomerProfile.freeCoins) || 0; let P = Number(activeCustomerProfile.points) || 0; let T = Number(window.loyaltyTarget) || 10;
 
-
-
         for (let r = Math.floor(cartCoins); r >= 0; r--) {
-
             let paidItems = cartCoins - r;
-
             let earnedFree = Math.floor((P + paidItems) / T);
-
             if (r <= F + earnedFree) { maxRedeemable = r; break; }
-
         }
-
-
 
         if (maxRedeemable > 0) {
-
             promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#fef9e7; padding:8px; border-radius:6px; border:1px solid #f9e79f;">
-
                <div><strong style="color:#856404; font-size:12px;">🎁 Koin Gratis (Loyalty)</strong><br><small style="color:#7d6608; font-size:11px;">Maks klaim: ${maxRedeemable}</small></div>
-
                <input type="number" class="promo-input" data-type="loyalty" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${maxRedeemable}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #d4ac0d; border-radius:4px; font-size:14px;">
-
            </div>`;
-
         }
 
-
-
         let cartAgg = {};
-
         currentCart.forEach(item => {
-
             let nameKey = String(item.name).trim();
-
             if (!cartAgg[nameKey]) cartAgg[nameKey] = { qty: 0, price: Number(item.originalPrice || item.price) };
-
             cartAgg[nameKey].qty += Number(item.qty);
-
         });
-
 
         let promoItemsProcessed = [];
 
-
         // 2. BOX PROMO INSTAN (BUY X GET 1)
-
         for (let itemName in cartAgg) {
-
             let cartQty = cartAgg[itemName].qty;
-
             let price = cartAgg[itemName].price;
-
             let ruleKey = itemName.toUpperCase();
-
             
-
             let ruleQty = 0;
-
             for (let pk in promoRules) {
-
                 if (ruleKey.includes(pk) || pk.includes(ruleKey)) { ruleQty = promoRules[pk]; break; }
-
             }
-
             
-
             if (ruleQty > 0) {
-
                 promoItemsProcessed.push(itemName); 
-
                 
-
                 let fItem = Number(storedObj[itemName]) || 0;
-
                 let pItem = Number(storedObj["_prog_" + itemName]) || 0;
-
                 let tItem = ruleQty;
 
-
-
                 let maxItemRedeemable = 0;
-
                 for (let r = Math.floor(cartQty); r >= 0; r--) {
-
                     let paidItems = cartQty - r;
-
                     let earnedFree = Math.floor((pItem + paidItems) / tItem);
-
                     if (r <= fItem + earnedFree) { maxItemRedeemable = r; break; }
-
                 }
-
-
 
                 if (maxItemRedeemable > 0) {
-
                     promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#e8f8f5; padding:8px; border-radius:6px; border:1px solid #a3e4d7;">
-
                        <div><strong style="color:#117a65; font-size:12px;">🎉 Promo Beli ${ruleQty} Gratis 1: ${itemName}</strong><br><small style="color:#148f77; font-size:11px;">Maks guna: ${maxItemRedeemable}</small></div>
-
                        <input type="number" class="promo-input" data-type="buy_x_get_1" data-item="${itemName}" data-price="${price}" value="0" max="${maxItemRedeemable}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #1abc9c; border-radius:4px; font-size:14px;">
-
                    </div>`;
-
                 }
-
             }
-
         }
-
-
 
         // 3. BOX HADIAH UNDIAN REGULER / STAMP
-
         for (let itemName in storedObj) {
-
             let qtyOwned = Number(storedObj[itemName]) || 0;
-
             if (qtyOwned > 0 && !itemName.startsWith("_prog_") && !itemName.startsWith("_stamp_") && !promoItemsProcessed.includes(itemName)) {
-
                 let cartItem = cartAgg[itemName];
-
                 if (cartItem) {
-
                     let possibleClaim = Math.min(qtyOwned, Math.floor(cartItem.qty));
-
                     if (possibleClaim > 0) {
-
                         promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#f9ebff; padding:8px; border-radius:6px; border:1px solid #d6b4fc;">
-
                            <div><strong style="color:#8e44ad; font-size:12px;">🎁 Hadiah Tersimpan: ${itemName}</strong><br><small style="color:#6c3483; font-size:11px;">Maks guna: ${possibleClaim}</small></div>
-
                            <input type="number" class="promo-input" data-type="stored" data-item="${itemName}" data-price="${cartItem.price}" value="0" max="${possibleClaim}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #9b59b6; border-radius:4px; font-size:14px;">
-
                        </div>`;
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
-
 
     let promoContainer = document.getElementById("review-promo-section");
-
     if (promoContainer) {
-
         promoContainer.innerHTML = promoHtml;
-
         if (promoHtml) promoContainer.classList.remove("hidden");
-
         else promoContainer.classList.add("hidden");
-
     }
-
  
-
     let rst = document.getElementById("review-subtotal"); if(rst) rst.innerText = `Rp ${window.cartSubtotal.toLocaleString('id-ID')}`;
-
     let rgt = document.getElementById("review-grandtotal"); if(rgt) rgt.innerText = `Rp ${window.cartGrandTotal.toLocaleString('id-ID')}`;
-
     window.applyPromo();
-
     
-
     let mod = document.getElementById("review-modal"); if(mod) mod.classList.remove("hidden");
-
 };
-
 
 
 window.reviewOrder = window.openReview; // KUNCI TOMBOL
