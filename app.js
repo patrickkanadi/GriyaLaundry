@@ -1458,147 +1458,143 @@ function proceedToUnlock(phone, name) {
 
 
 
-window.unlockMenu = function(isGuest) {
-
-    let phone = "-"; let name = "Walk-in";
-
+window.unlockMenu = async function(isGuest) {
+    let phone = "-";
+    let name = "Walk-in";
     let cp = document.getElementById("cust-phone");
-
     let cn = document.getElementById("cust-name");
 
-
-
-    if (isGuest) { 
-
-        if(cp) cp.value = ""; if(cn) cn.value = "Walk-in"; activeCustomerProfile = null; 
-
+    if (isGuest) {
+        if(cp) cp.value = "";
+        if(cn) cn.value = "Walk-in";
+        activeCustomerProfile = null;
         proceedToUnlock(phone, name);
-
-    } else { 
-
-        phone = cp ? cp.value.trim() : ""; name = (cn ? cn.value.trim() : "") || "Pelanggan"; 
+    } else {
+        phone = cp ? cp.value.trim() : "";
+        name = (cn ? cn.value.trim() : "") || "Pelanggan";
 
         if (phone.length < 5) {
-
             if (confirm("Daftarkan pelanggan tanpa nomor WhatsApp?")) {
-
                 phone = "999" + Date.now().toString().slice(-7);
-
                 if(cp) cp.value = phone;
-
                 if (cn && !cn.value.trim()) cn.value = "Pelanggan Tanpa WA";
-
                 proceedToUnlock(phone, name);
-
             } else { return; }
-
         } else {
-
-            db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
-
-                activeCustomerProfile = e.target.result;
-
-                if(!activeCustomerProfile) {
-
-                    activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
-
-                    alert(`✅ Member baru berhasil ditambahkan!\nNama: ${name}\nWA: ${phone}`);
-
+            // DETEKSI JIKA INI ADALAH STAF
+            if (phone.startsWith("STF-")) {
+                let pin = phone.replace("STF-", "");
+                let staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = e => res(e.target.result));
+                if (staff) {
+                    activeCustomerProfile = { phone: phone, name: staff.name, points: 0, freeCoins: staff.freeCoins || 0, spent: 0, storedRewards: {}, isStaff: true };
+                } else {
+                    activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {}, isStaff: true };
                 }
-
                 proceedToUnlock(phone, name);
-
-            };
-
+            } else {
+                db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
+                    activeCustomerProfile = e.target.result;
+                    if(!activeCustomerProfile) {
+                        activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
+                        alert(`✅ Member baru berhasil ditambahkan!\nNama: ${name}\nWA: ${phone}`);
+                    }
+                    proceedToUnlock(phone, name);
+                };
+            }
         }
-
     }
-
 };
 
 
 
-window.selectMember = function(phone) {
-
-    db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
-
-        activeCustomerProfile = e.target.result;
-
-        if(activeCustomerProfile) {
-
-            let cp = document.getElementById("cust-phone"); if(cp) cp.value = activeCustomerProfile.phone;
-
-            let cn = document.getElementById("cust-name"); if(cn) cn.value = activeCustomerProfile.name;
-
-            let rb = document.getElementById("autocomplete-results"); if(rb) { rb.classList.add("hidden"); rb.style.display = "none"; }
-
-            window.updatePromoIndicator();
-
-        }
-
-    };
-
-};
-
-
-
-window.handleAutocomplete = function(e) {
-    if(!db) return;
-    const val = e.target ? e.target.value.toLowerCase().trim() : ""; 
-    const resBox = document.getElementById("autocomplete-results");
-    if (!resBox) return;
-    
-    if (activeCustomerProfile) {
-        if (val !== activeCustomerProfile.phone.toLowerCase() && val !== activeCustomerProfile.name.toLowerCase()) {
-            activeCustomerProfile = null; 
-            let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
+window.selectMember = async function(phone) {
+    if (phone.startsWith("STF-")) {
+        let pin = phone.replace("STF-", "");
+        let staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(pin).onsuccess = e => res(e.target.result));
+        if (staff) {
+            activeCustomerProfile = { phone: phone, name: staff.name, points: 0, freeCoins: staff.freeCoins || 0, spent: 0, storedRewards: {}, isStaff: true };
         }
     } else {
-        let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
+        activeCustomerProfile = await new Promise(res => db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = e => res(e.target.result));
     }
-    
-    db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
-        let matches = ev.target.result; 
+
+    if (activeCustomerProfile) {
+        let cp = document.getElementById("cust-phone");
+        if (cp) cp.value = activeCustomerProfile.phone;
+        let cn = document.getElementById("cust-name");
+        if (cn) cn.value = activeCustomerProfile.name;
         
-        // --- TAMBAHAN: GABUNGKAN DATA STAFF KE DALAM PENCARIAN ---
-        db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = (ev2) => {
-            let staffs = ev2.target.result;
-            // Ubah format staff menjadi format profil pelanggan
-            let staffMembers = staffs.map(s => ({
-                phone: "STF-" + s.name.toUpperCase().replace(/\s+/g, '').substring(0, 5),
-                name: s.name, spent: 0, points: 0, freeCoins: 0, storedRewards: {}, isStaffProfile: true
-            }));
+        let rb = document.getElementById("autocomplete-results");
+        if (rb) {
+            rb.classList.add("hidden");
+            rb.style.display = "none";
+        }
+        window.updatePromoIndicator();
+    }
+};
 
-            // FIX: Hapus member dari daftar jika ia sudah masuk sebagai Staff agar tidak ganda
-            let staffPhones = new Set(staffMembers.map(s => s.phone));
-            let filteredMatches = matches.filter(m => !staffPhones.has(m.phone));
 
-            let allMatches = [...filteredMatches, ...staffMembers];
 
-            if (val.length > 0) {
-                allMatches = allMatches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
-            }
-            
-            allMatches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
-            if (val.length === 0) { allMatches = allMatches.slice(0, 15); }
+window.handleAutocomplete = async function(e) {
+    if (!db) return;
+    const val = e.target ? e.target.value.toLowerCase().trim() : "";
+    const resBox = document.getElementById("autocomplete-results");
+    if (!resBox) return;
 
-            if (allMatches.length > 0) {
-                resBox.innerHTML = allMatches.map(m => {
-                    let badge = m.isStaffProfile ? `<span style="background:#3498db; color:white; font-size:10px; padding:2px 4px; border-radius:3px; margin-left:5px;">Staff</span>` : "";
-                    return `
-                    <div class="autocomplete-item" onmousedown="window.selectStaffOrMember('${m.phone}', '${m.name}', ${m.isStaffProfile ? 'true' : 'false'})" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px; z-index: 10000; position:relative;">
-                        <div style="font-weight: bold; color: #2980b9;">${m.phone} ${badge}</div>
-                        <div style="font-size: 13px; color: #555; margin-top:2px;">${m.name}</div>
-                    </div>
-                    `;
-                }).join("");
-                resBox.classList.remove("hidden");
-                resBox.style.display = "block";
-            } else { 
-                resBox.classList.add("hidden"); resBox.style.display = "none"; 
-            }
-        };
-    };
+    if (activeCustomerProfile) {
+        if (val !== activeCustomerProfile.phone.toLowerCase() && val !== activeCustomerProfile.name.toLowerCase()) {
+            activeCustomerProfile = null;
+            let pi = document.getElementById("promo-indicator");
+            if (pi) pi.classList.add("hidden");
+        }
+    } else {
+        let pi = document.getElementById("promo-indicator");
+        if (pi) pi.classList.add("hidden");
+    }
+
+    if (val.length === 0) {
+        resBox.innerHTML = "";
+        resBox.classList.add("hidden");
+        return;
+    }
+
+    try {
+        let members = await new Promise(res => db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = ev => res(ev.target.result || []));
+        let staffs = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = ev => res(ev.target.result || []));
+        
+        let formattedStaffs = staffs.map(s => ({
+            phone: "STF-" + s.pin,
+            name: s.name + " [Staff]",
+            spent: 0,
+            points: 0,
+            freeCoins: s.freeCoins || 0,
+            isStaff: true
+        }));
+
+        let matches = [...members, ...formattedStaffs];
+        
+        if (val.length > 0) {
+            matches = matches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
+        }
+        
+        matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
+        if (val.length === 0) matches = matches.slice(0, 15);
+        
+        if (matches.length > 0) {
+            resBox.innerHTML = matches.map(m => `<div onclick="window.selectMember('${m.phone}')" style="padding: 10px; border-bottom: 1px solid #eee; cursor: pointer;">
+                <strong>${m.name}</strong><br>
+                <small style="color: #7f8c8d;">${m.phone !== "-" && !String(m.phone).startsWith("999") ? m.phone : "No WA / Rahasia"} | ${m.isStaff ? 'Koin: ' + m.freeCoins : 'Poin: ' + m.points}</small>
+            </div>`).join('');
+            resBox.classList.remove("hidden");
+            resBox.style.display = "block";
+        } else {
+            resBox.innerHTML = `<div style="padding: 10px; color: #7f8c8d;">Tidak ditemukan</div>`;
+            resBox.classList.remove("hidden");
+            resBox.style.display = "block";
+        }
+    } catch (err) {
+        console.error(err);
+    }
 };
 
 // --- FUNGSI HELPER BARU UNTUK MEMILIH STAFF SEBAGAI CUSTOMER ---
@@ -2706,14 +2702,12 @@ window.finalizeOrder = async function(shouldPrint) {
 
 
 
-window.saveMemberToDB = function(profile) {
-
-    if(!profile.phone || profile.phone === "-") return;
-
+window.saveMemberToDB = function(profile) { 
+    // BLOKIR STAF AGAR TIDAK TERSIMPAN DI DATABASE MEMBER REGULER
+    if(!profile || !profile.phone || profile.phone === "-" || String(profile.phone).startsWith("STF-")) return; 
+    
     db.transaction(["members"], "readwrite").objectStore("members").put(profile);
-
     db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(profile);
-
 };
 
 
