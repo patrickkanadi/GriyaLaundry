@@ -1566,85 +1566,71 @@ window.selectMember = function(phone) {
 
 
 window.handleAutocomplete = function(e) {
-
     if(!db) return;
-
     const val = e.target ? e.target.value.toLowerCase().trim() : ""; 
-
     const resBox = document.getElementById("autocomplete-results");
-
     if (!resBox) return;
-
     
-
     if (activeCustomerProfile) {
-
         if (val !== activeCustomerProfile.phone.toLowerCase() && val !== activeCustomerProfile.name.toLowerCase()) {
-
             activeCustomerProfile = null; 
-
             let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
-
         }
-
     } else {
-
         let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
-
     }
-
     
-
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
-
         let matches = ev.target.result; 
-
-        if (val.length > 0) {
-
-            matches = matches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
-
-        }
-
         
+        // --- TAMBAHAN: GABUNGKAN DATA STAFF KE DALAM PENCARIAN ---
+        db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = (ev2) => {
+            let staffs = ev2.target.result;
+            // Ubah format staff menjadi format profil pelanggan
+            let staffMembers = staffs.map(s => ({
+                phone: "STF-" + s.name.toUpperCase().replace(/\s+/g, '').substring(0, 5),
+                name: s.name, spent: 0, points: 0, freeCoins: 0, storedRewards: {}, isStaffProfile: true
+            }));
 
-        matches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
+            let allMatches = [...matches, ...staffMembers];
 
+            if (val.length > 0) {
+                allMatches = allMatches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
+            }
+            
+            allMatches.sort((a, b) => (b.spent || 0) - (a.spent || 0));
+            if (val.length === 0) { allMatches = allMatches.slice(0, 15); }
 
-
-        if (val.length === 0) {
-
-            matches = matches.slice(0, 15);
-
-        }
-
-
-
-        if (matches.length > 0) {
-
-            resBox.innerHTML = matches.map(m => `
-
-                <div class="autocomplete-item" onmousedown="window.selectMember('${m.phone}')" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px; z-index: 10000; position:relative;">
-
-                    <div style="font-weight: bold; color: #2980b9;">${m.phone}</div>
-
-                    <div style="font-size: 13px; color: #555; margin-top:2px;">${m.name}</div>
-
-                </div>
-
-            `).join("");
-
-            resBox.classList.remove("hidden");
-
-            resBox.style.display = "block";
-
-        } else { 
-
-            resBox.classList.add("hidden"); resBox.style.display = "none"; 
-
-        }
-
+            if (allMatches.length > 0) {
+                resBox.innerHTML = allMatches.map(m => {
+                    let badge = m.isStaffProfile ? `<span style="background:#3498db; color:white; font-size:10px; padding:2px 4px; border-radius:3px; margin-left:5px;">Staff</span>` : "";
+                    return `
+                    <div class="autocomplete-item" onmousedown="window.selectStaffOrMember('${m.phone}', '${m.name}', ${m.isStaffProfile ? 'true' : 'false'})" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px; z-index: 10000; position:relative;">
+                        <div style="font-weight: bold; color: #2980b9;">${m.phone} ${badge}</div>
+                        <div style="font-size: 13px; color: #555; margin-top:2px;">${m.name}</div>
+                    </div>
+                    `;
+                }).join("");
+                resBox.classList.remove("hidden");
+                resBox.style.display = "block";
+            } else { 
+                resBox.classList.add("hidden"); resBox.style.display = "none"; 
+            }
+        };
     };
+};
 
+// --- FUNGSI HELPER BARU UNTUK MEMILIH STAFF SEBAGAI CUSTOMER ---
+window.selectStaffOrMember = function(phone, name, isStaff) {
+    if (isStaff) {
+        activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {}, isStaffProfile: true };
+        let cp = document.getElementById("cust-phone"); if(cp) cp.value = activeCustomerProfile.phone;
+        let cn = document.getElementById("cust-name"); if(cn) cn.value = activeCustomerProfile.name;
+        let rb = document.getElementById("autocomplete-results"); if(rb) { rb.classList.add("hidden"); rb.style.display = "none"; }
+        window.updatePromoIndicator();
+    } else {
+        window.selectMember(phone);
+    }
 };
 
 
@@ -2060,7 +2046,10 @@ window.openReview = async function() {
     let currentStaff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(currentPin).onsuccess = e => res(e.target.result));
     let staffFreeCoins = currentStaff ? (Number(currentStaff.freeCoins) || 0) : 0;
     
-    if (staffFreeCoins > 0) {
+    // KUNCI PENGAMAN: Promo Koin Staff hanya muncul jika Pelanggan yang dipilih adalah DIRI MEREKA SENDIRI
+    let isOwnLaundry = activeCustomerProfile && activeCustomerProfile.name.toLowerCase() === currentCashier.toLowerCase();
+    
+    if (staffFreeCoins > 0 && isOwnLaundry) {
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
         let staffMaxRedeemable = Math.min(staffFreeCoins, Math.floor(cartCoins));
         
