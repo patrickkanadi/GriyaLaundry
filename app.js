@@ -2144,29 +2144,7 @@ window.openReview = async function() {
         });
 
 
-
-        // VIRTUAL INJECTION UNTUK STAMP PROMO AGAR BISA INSTANT REDEEM
-
-        // VIRTUAL INJECTION UNTUK STAMP PROMO AGAR BISA INSTANT REDEEM
-        for (let ruleKey in window.promoStampRules) {
-            let rule = window.promoStampRules[ruleKey];
-            let cartItem = null; let actualItemName = "";
-            for (let itemName in cartAgg) {
-                let cleanItem = itemName.toUpperCase().replace(/\s+/g, '');
-                if (cleanItem.includes(ruleKey) || ruleKey.includes(cleanItem)) { cartItem = cartAgg[itemName]; actualItemName = itemName; break; }
-            }
-            if (cartItem && cartItem.qty >= rule.minQty) {
-                let stampsOwned = Number(storedObj["_stamp_" + rule.originalName]) || 0;
-                if (stampsOwned + 1 >= rule.target) {
-                    storedObj[actualItemName] = (Number(storedObj[actualItemName]) || 0) + rule.rewardQty;
-                }
-            }
-        }
-
-
-
         let promoItemsProcessed = [];
-
 
 
         // 2. BOX PROMO INSTAN (BUY X GET 1)
