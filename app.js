@@ -235,7 +235,7 @@ window.rollbackOrderImpact = async function(order) {
     }
 
     // FIX: Blokir eksekusi poin untuk staf
-    if (!order.customerPhone || order.customerPhone === "-" || String(order.customerPhone).startsWith("STF-") || order.customerPhone === "Walk-in") {
+    if (!order.customerPhone || order.customerPhone === "-" || order.customerPhone === "Walk-in") {
         return new Promise((resolve) => resolve()); 
     }
 
@@ -2600,7 +2600,7 @@ window.finalizeOrder = async function(shouldPrint) {
     }
 
     // FIX: Blokir profil STF- agar tidak masuk ke database member reguler
-    if (custPhone !== "-" && !String(custPhone).startsWith("STF-")) {
+    if (custPhone !== "-") {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
         activeCustomerProfile.spent += window.cartGrandTotal;
         
