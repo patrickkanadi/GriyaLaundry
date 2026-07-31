@@ -1569,7 +1569,11 @@ window.handleAutocomplete = function(e) {
                 name: s.name, spent: 0, points: 0, freeCoins: 0, storedRewards: {}, isStaffProfile: true
             }));
 
-            let allMatches = [...matches, ...staffMembers];
+            // FIX: Hapus member dari daftar jika ia sudah masuk sebagai Staff agar tidak ganda
+            let staffPhones = new Set(staffMembers.map(s => s.phone));
+            let filteredMatches = matches.filter(m => !staffPhones.has(m.phone));
+
+            let allMatches = [...filteredMatches, ...staffMembers];
 
             if (val.length > 0) {
                 allMatches = allMatches.filter(m => String(m.phone).toLowerCase().includes(val) || String(m.name).toLowerCase().includes(val));
@@ -3211,7 +3215,18 @@ window.renderHistoryList = function(type) {
 
         };
 
-        if (window.globalRecentShifts && window.globalRecentShifts.length > 0) renderShiftsHTML(window.globalRecentShifts); else db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").getAll().onsuccess = (e) => renderShiftsHTML(e.target.result.reverse());
+        db.transaction(["local_shift_history"], "readonly").objectStore("local_shift_history").getAll().onsuccess = (e) => {
+            let localShifts = e.target.result.reverse();
+            let onlineShifts = window.globalRecentShifts || [];
+            
+            // FIX: Gabungkan data lokal & cloud. Laporan yang baru ditutup akan selalu muncul!
+            let merged = [...localShifts];
+            onlineShifts.forEach(os => {
+                if (!merged.find(m => m.shiftId === os.shiftId)) merged.push(os);
+            });
+            
+            renderShiftsHTML(merged);
+        };
 
     }
 
@@ -4386,7 +4401,7 @@ function checkExpiredShifts() {
 
             let referenceTime = shift.lastActiveTime ? new Date(shift.lastActiveTime).getTime() : new Date(shift.loginTime).getTime();
 
-            if (now - referenceTime > 4 * 60 * 60 * 1000) performAutoClose(shift);
+            if (now - referenceTime > 24 * 60 * 60 * 1000) performAutoClose(shift);
 
         });
 
