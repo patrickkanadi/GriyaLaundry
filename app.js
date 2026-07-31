@@ -49,49 +49,6 @@ let btDevice = null; let btCharacteristic = null; let printShiftOnLogout = false
 
 window.lastActivityWrite = Date.now();
 
-function updateLocalMemberWallet(cart, member, promoStampRules) {
-    // Abaikan jika bukan member
-    if (!member || !member.phone || member.phone === "Walk-in") return;
-    
-    // Pastikan objek reward ada
-    if (!member.storedRewards) member.storedRewards = {};
-    
-    for (let ruleKey in promoStampRules) {
-        let rule = promoStampRules[ruleKey];
-        
-        // Cek keranjang belanja
-        cart.forEach(item => {
-            let cleanItem = item.name.toUpperCase().replace(/\s+/g, '');
-            if (cleanItem.includes(ruleKey) || ruleKey.includes(cleanItem)) {
-                
-                // Jika syarat minimum qty terpenuhi (misal: 3kg)
-                if (item.qty >= rule.minQty) {
-                    let stampKey = "_stamp_" + rule.originalName;
-                    let currentStamps = Number(member.storedRewards[stampKey]) || 0;
-                    
-                    // Tambah 1 stempel
-                    currentStamps += 1;
-                    
-                    // Jika target tercapai (misal: 7 stempel)
-                    if (currentStamps >= rule.target) {
-                        currentStamps -= rule.target;
-                        // Tambahkan hadiah instan ke dompet lokal
-                        member.storedRewards[item.name] = (Number(member.storedRewards[item.name]) || 0) + rule.rewardQty;
-                    }
-                    
-                    // Simpan sisa stempel atau hapus jika 0
-                    if (currentStamps > 0) {
-                        member.storedRewards[stampKey] = currentStamps;
-                    } else {
-                        delete member.storedRewards[stampKey];
-                    }
-                }
-            }
-        });
-    }
-    
-    return member; // Mengembalikan profil member yang sudah diperbarui secara instan
-}
 
 // ==========================================
 
