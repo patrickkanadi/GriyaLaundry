@@ -49,7 +49,49 @@ let btDevice = null; let btCharacteristic = null; let printShiftOnLogout = false
 
 window.lastActivityWrite = Date.now();
 
-
+function updateLocalMemberWallet(cart, member, promoStampRules) {
+    // Abaikan jika bukan member
+    if (!member || !member.phone || member.phone === "Walk-in") return;
+    
+    // Pastikan objek reward ada
+    if (!member.storedRewards) member.storedRewards = {};
+    
+    for (let ruleKey in promoStampRules) {
+        let rule = promoStampRules[ruleKey];
+        
+        // Cek keranjang belanja
+        cart.forEach(item => {
+            let cleanItem = item.name.toUpperCase().replace(/\s+/g, '');
+            if (cleanItem.includes(ruleKey) || ruleKey.includes(cleanItem)) {
+                
+                // Jika syarat minimum qty terpenuhi (misal: 3kg)
+                if (item.qty >= rule.minQty) {
+                    let stampKey = "_stamp_" + rule.originalName;
+                    let currentStamps = Number(member.storedRewards[stampKey]) || 0;
+                    
+                    // Tambah 1 stempel
+                    currentStamps += 1;
+                    
+                    // Jika target tercapai (misal: 7 stempel)
+                    if (currentStamps >= rule.target) {
+                        currentStamps -= rule.target;
+                        // Tambahkan hadiah instan ke dompet lokal
+                        member.storedRewards[item.name] = (Number(member.storedRewards[item.name]) || 0) + rule.rewardQty;
+                    }
+                    
+                    // Simpan sisa stempel atau hapus jika 0
+                    if (currentStamps > 0) {
+                        member.storedRewards[stampKey] = currentStamps;
+                    } else {
+                        delete member.storedRewards[stampKey];
+                    }
+                }
+            }
+        });
+    }
+    
+    return member; // Mengembalikan profil member yang sudah diperbarui secara instan
+}
 
 // ==========================================
 
@@ -197,7 +239,7 @@ window.rollbackOrderImpact = async function(order) {
                         let minQty = Number(parts[1].trim());
                         let target = Number(parts[2].trim());
                         let rewardQty = Number(parts[3].trim());
-                        if (itemName && !isNaN(target)) stampRules[itemName] = { target, minQty, rewardQty, originalName: parts[0].trim().toUpperCase() };
+                        if (itemName && !isNaN(target)) stampRules[itemName] = { target, minQty, rewardQty, originalName: parts[0].trim() };
                     }
                 });
             }
@@ -1968,12 +2010,11 @@ window.openReview = async function() {
                         if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
 
                     } else if (parts.length === 4) {
-                        // Parser untuk promo Stamp (Buy X Times Min Y)
-                        let itemName = parts[0].trim().toUpperCase();
-                        let minQty = Number(parts[1].trim()); // Posisi 1
-                        let target = Number(parts[2].trim()); // Posisi 2
+                        let minQty = Number(parts[1].trim()); 
+                        let target = Number(parts[2].trim()); 
                         let rewardQty = Number(parts[3].trim());
-                        if (itemName && !isNaN(target)) window.promoStampRules[itemName] = { target, minQty, rewardQty };
+                        let cleanKey = parts[0].trim().toUpperCase().replace(/\s+/g, '');
+                        if (cleanKey && !isNaN(target)) window.promoStampRules[cleanKey] = { target, minQty, rewardQty, originalName: parts[0].trim() };
                     }
 
                 });
@@ -2066,30 +2107,20 @@ window.openReview = async function() {
 
         // VIRTUAL INJECTION UNTUK STAMP PROMO AGAR BISA INSTANT REDEEM
 
+        // VIRTUAL INJECTION UNTUK STAMP PROMO AGAR BISA INSTANT REDEEM
         for (let ruleKey in window.promoStampRules) {
-
             let rule = window.promoStampRules[ruleKey];
-
             let cartItem = null; let actualItemName = "";
-
             for (let itemName in cartAgg) {
-
-                if (itemName.toUpperCase() === ruleKey) { cartItem = cartAgg[itemName]; actualItemName = itemName; break; }
-
+                let cleanItem = itemName.toUpperCase().replace(/\s+/g, '');
+                if (cleanItem.includes(ruleKey) || ruleKey.includes(cleanItem)) { cartItem = cartAgg[itemName]; actualItemName = itemName; break; }
             }
-
             if (cartItem && cartItem.qty >= rule.minQty) {
-
-                let stampsOwned = Number(storedObj["_stamp_" + ruleKey]) || 0;
-
+                let stampsOwned = Number(storedObj["_stamp_" + rule.originalName]) || 0;
                 if (stampsOwned + 1 >= rule.target) {
-
                     storedObj[actualItemName] = (Number(storedObj[actualItemName]) || 0) + rule.rewardQty;
-
                 }
-
             }
-
         }
 
 
@@ -2504,12 +2535,11 @@ window.finalizeOrder = async function(shouldPrint) {
                         let reqQty = Number(parts[1].trim());
                         if (itemName && !isNaN(reqQty)) promoRules[itemName] = reqQty;
                     } else if (parts.length === 4) {
-                        // Membaca urutan Stamp dengan benar dari indeks
-                        let itemName = parts[0].trim().toUpperCase();
                         let minQty = Number(parts[1].trim());
                         let target = Number(parts[2].trim());
                         let rewardQty = Number(parts[3].trim());
-                        if (itemName && !isNaN(target)) stampRules[itemName] = { target, minQty, rewardQty };
+                        let cleanKey = parts[0].trim().toUpperCase().replace(/\s+/g, '');
+                        if (cleanKey && !isNaN(target)) stampRules[cleanKey] = { target, minQty, rewardQty, originalName: parts[0].trim() };
                     }
                 });
             }
@@ -2579,12 +2609,13 @@ window.finalizeOrder = async function(shouldPrint) {
             let rule = stampRules[ruleKey];
             let matchedItemName = null;
             for (let itemName in cartAgg) {
-                if (itemName.toUpperCase() === ruleKey) { matchedItemName = itemName; break; }
+                let cleanItem = itemName.toUpperCase().replace(/\s+/g, '');
+                if (cleanItem.includes(ruleKey) || ruleKey.includes(cleanItem)) { matchedItemName = itemName; break; }
             }
             if (matchedItemName) {
                 let paidQty = cartAgg[matchedItemName] - (claimedMap[matchedItemName] || 0);
                 if (paidQty >= rule.minQty) {
-                    let stampKey = "_stamp_" + ruleKey;
+                    let stampKey = "_stamp_" + rule.originalName;
                     let currentStamps = Number(activeCustomerProfile.storedRewards[stampKey]) || 0;
                     currentStamps += 1;
                     
@@ -2593,6 +2624,7 @@ window.finalizeOrder = async function(shouldPrint) {
                         activeCustomerProfile.storedRewards[matchedItemName] = (Number(activeCustomerProfile.storedRewards[matchedItemName]) || 0) + rule.rewardQty;
                         newEarnedRewards.push({ item: matchedItemName, qty: rule.rewardQty, code: "STAMP_REWARD" });
                     }
+                    
                     if (currentStamps > 0) activeCustomerProfile.storedRewards[stampKey] = currentStamps;
                     else delete activeCustomerProfile.storedRewards[stampKey];
                 }
