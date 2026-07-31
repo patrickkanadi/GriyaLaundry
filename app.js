@@ -1560,16 +1560,15 @@ window.handleAutocomplete = function(e) {
     db.transaction(["members"], "readonly").objectStore("members").getAll().onsuccess = (ev) => {
         let matches = ev.target.result; 
         
-        // --- TAMBAHAN: GABUNGKAN DATA STAFF KE DALAM PENCARIAN ---
         db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = (ev2) => {
             let staffs = ev2.target.result;
-            // Ubah format staff menjadi format profil pelanggan
             let staffMembers = staffs.map(s => ({
                 phone: "STF-" + s.name.toUpperCase().replace(/\s+/g, '').substring(0, 5),
-                name: s.name, spent: 0, points: 0, freeCoins: (s.freeCoins || 0), storedRewards: {}, isStaffProfile: true
+                name: s.name, spent: 0, points: 0, 
+                freeCoins: (Number(s.freeCoins) || 0), // <--- INI KUNCI UTAMANYA
+                storedRewards: {}, isStaffProfile: true
             }));
 
-            // FIX: Hapus member dari daftar jika ia sudah masuk sebagai Staff agar tidak ganda
             let staffPhones = new Set(staffMembers.map(s => s.phone));
             let filteredMatches = matches.filter(m => !staffPhones.has(m.phone));
 
@@ -1601,13 +1600,13 @@ window.handleAutocomplete = function(e) {
     };
 };
 
-// --- FUNGSI HELPER BARU UNTUK MEMILIH STAFF SEBAGAI CUSTOMER ---
 window.selectStaffOrMember = async function(phone, name, isStaff) {
     if (isStaff) {
+        // TARIK SALDO ASLI DARI DATABASE STAFF
         let staffs = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = e => res(e.target.result));
         let sMatch = staffs.find(s => s.name === name);
-        let sCoins = sMatch ? (sMatch.freeCoins || 0) : 0;
-        
+        let sCoins = sMatch ? (Number(sMatch.freeCoins) || 0) : 0;
+
         activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: sCoins, spent: 0, storedRewards: {}, isStaffProfile: true };
         let cp = document.getElementById("cust-phone"); if(cp) cp.value = activeCustomerProfile.phone;
         let cn = document.getElementById("cust-name"); if(cn) cn.value = activeCustomerProfile.name;
