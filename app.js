@@ -183,7 +183,7 @@ window.rollbackOrderImpact = async function(order) {
         let txStaff = db.transaction(["staff"], "readwrite");
         txStaff.objectStore("staff").getAll().onsuccess = (e) => {
             let allStaff = e.target.result;
-            let s = allStaff.find(st => st.name === order.cashier);
+            let s = allStaff.find(st => st.name === order.customerName);
             if (s) {
                 s.freeCoins = (s.freeCoins || 0) + refundedStaffCoins;
                 txStaff.objectStore("staff").put(s);
@@ -2475,8 +2475,9 @@ window.finalizeOrder = async function(shouldPrint) {
     let staffCoinsUsedLocal = redeemedList.filter(r => r.source === 'staff_coin').reduce((sum, r) => sum + r.qty, 0);
     if (staffCoinsUsedLocal > 0) {
         let txStaff = db.transaction(["staff"], "readwrite");
-        txStaff.objectStore("staff").get(currentPin).onsuccess = (e) => {
-            let s = e.target.result;
+        txStaff.objectStore("staff").getAll().onsuccess = (e) => {
+            // Cari dari daftar berdasarkan nama pelanggan (staf)
+            let s = e.target.result.find(st => st.name === custName);
             if (s) {
                 s.freeCoins = Math.max(0, (s.freeCoins || 0) - staffCoinsUsedLocal);
                 txStaff.objectStore("staff").put(s);
