@@ -2027,8 +2027,8 @@ window.openReview = async function() {
     let currentStaff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(currentPin).onsuccess = e => res(e.target.result));
     let staffFreeCoins = currentStaff ? (Number(currentStaff.freeCoins) || 0) : 0;
     
-    // KUNCI PENGAMAN: Promo Koin Staff hanya muncul jika Pelanggan yang dipilih adalah DIRI MEREKA SENDIRI
-    let isOwnLaundry = activeCustomerProfile && activeCustomerProfile.name.toLowerCase() === currentCashier.toLowerCase();
+    // Cukup pastikan pelanggan yang dipilih adalah Staff (ID berawalan STF-) dan punya koin
+    if (activeCustomerProfile && activeCustomerProfile.phone && activeCustomerProfile.phone.startsWith("STF-") && activeCustomerProfile.freeCoins > 0) {
     
     if (staffFreeCoins > 0 && isOwnLaundry) {
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
