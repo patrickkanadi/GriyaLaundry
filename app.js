@@ -2024,19 +2024,15 @@ window.openReview = async function() {
     let promoHtml = "";
 
     // --- CEK SALDO KOIN STAFF LOKAL ---
-    let currentStaff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(currentPin).onsuccess = e => res(e.target.result));
-    let staffFreeCoins = currentStaff ? (Number(currentStaff.freeCoins) || 0) : 0;
-    
     // Cukup pastikan pelanggan yang dipilih adalah Staff (ID berawalan STF-) dan punya koin
     if (activeCustomerProfile && activeCustomerProfile.phone && activeCustomerProfile.phone.startsWith("STF-") && activeCustomerProfile.freeCoins > 0) {
-    
-    if (staffFreeCoins > 0 && isOwnLaundry) {
+        let customerStaffCoins = Number(activeCustomerProfile.freeCoins) || 0;
         let cartCoins = currentCart.filter(i => String(i.category).toLowerCase().includes('coin') || String(i.name).toLowerCase().includes('koin')).reduce((sum, i) => sum + Number(i.qty), 0);
-        let staffMaxRedeemable = Math.min(staffFreeCoins, Math.floor(cartCoins));
+        let staffMaxRedeemable = Math.min(customerStaffCoins, Math.floor(cartCoins));
         
         if (staffMaxRedeemable > 0) {
             promoHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; background:#e8f4f8; padding:8px; border-radius:6px; border:1px solid #bce8f1;">
-               <div><strong style="color:#2980b9; font-size:12px;">👔 Koin Gratis Staff (${currentCashier})</strong><br><small style="color:#2471a3; font-size:11px;">Maks klaim: ${staffMaxRedeemable}</small></div>
+               <div><strong style="color:#2980b9; font-size:12px;">👔 Koin Gratis Staff (${activeCustomerProfile.name})</strong><br><small style="color:#2471a3; font-size:11px;">Maks klaim: ${staffMaxRedeemable}</small></div>
                <input type="number" class="promo-input" data-type="staff_coin" data-item="Koin_Fisik" data-price="${activeCoinPrice}" value="0" max="${staffMaxRedeemable}" min="0" oninput="window.applyPromo()" style="width:60px; padding:4px; font-weight:bold; text-align:center; border:1px solid #3498db; border-radius:4px; font-size:14px;">
            </div>`;
         }
