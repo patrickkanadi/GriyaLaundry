@@ -372,10 +372,11 @@ window.rollbackOrderImpact = async function(order) {
                 }
 
                 if (matchedItemName) {
-                    let paidQty = cartAgg[matchedItemName] - (claimedMap[matchedItemName] || claimedMap[ruleKey] || 0);
+                    let claimedQty = claimedMap[matchedItemName] || claimedMap[ruleKey] || 0;
+                    let paidQty = cartAgg[matchedItemName] - claimedQty;
                     
-                    // FIX: Checkout only gives 1 stamp per receipt, so rollback must only take 1 stamp
-                    let stampsEarned = (paidQty >= rule.minQty) ? 1 : 0;
+                    // FIX: Hanya rollback stamp jika waktu itu dia benar-benar DAPAT stamp (tidak ada klaim)
+                    let stampsEarned = (claimedQty === 0 && paidQty >= rule.minQty) ? 1 : 0;
                     
                     if (stampsEarned > 0) {
                         let foundStampKey = null;
@@ -388,7 +389,7 @@ window.rollbackOrderImpact = async function(order) {
                         if (!foundStampKey) foundStampKey = "_stamp_" + rule.originalName;
 
                         let currentStamps = Number(storedObj[foundStampKey]) || 0;
-                        currentStamps -= stampsEarned; // Deduct exactly what was earned
+                        currentStamps -= stampsEarned; 
                         
                         while (currentStamps < 0) {
                             currentStamps += rule.target;
@@ -2468,8 +2469,11 @@ window.finalizeOrder = async function(shouldPrint) {
                 if (cleanItem.includes(ruleKey) || ruleKey.includes(cleanItem)) { matchedItemName = itemName; break; }
             }
             if (matchedItemName) {
-                let paidQty = cartAgg[matchedItemName] - (claimedMap[matchedItemName] || 0);
-                if (paidQty >= rule.minQty) {
+                let claimedQty = claimedMap[matchedItemName] || 0;
+                let paidQty = cartAgg[matchedItemName] - claimedQty;
+                
+                // ATURAN BARU: HANYA DAPAT STAMP JIKA TIDAK ADA KLAIM SAMA SEKALI (claimedQty === 0)
+                if (claimedQty === 0 && paidQty >= rule.minQty) {
                     let stampKey = "_stamp_" + rule.originalName;
                     let currentStamps = Number(activeCustomerProfile.storedRewards[stampKey]) || 0;
                     currentStamps += 1;
