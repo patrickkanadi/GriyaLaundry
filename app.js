@@ -3240,13 +3240,15 @@ window.requestVoid = function(type, id) {
 
 // Fungsi untuk mengirim permintaan Void ke Admin
 window.submitRemoteVoid = function() {
-    if (!currentVoidTarget.id) return;
+    if (!currentVoidTarget.id || window.isVoidProcessing) return;
+    window.isVoidProcessing = true; // Lock double click
     
     const payload = { 
         id: currentVoidTarget.id, 
         type: currentVoidTarget.type, 
-        status: "Void Pending", 
-        authName: "Waiting" 
+        status: currentVoidTarget.type === 'orders' ? "Void Pending" : "Void Pending", // Sesuaikan dengan status
+        authName: "Waiting",
+        cashier: currentCashier // <-- INJEKSI NAMA KASIR DISINI
     };
     db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add(payload);
     
@@ -3272,20 +3274,23 @@ window.submitRemoteVoid = function() {
     window.runBackgroundSync();
     
     // Slight delay ensures IndexedDB saves before UI re-renders
-    setTimeout(() => { window.renderHistoryList(currentVoidTarget.type); }, 150);
+    setTimeout(() => { window.renderHistoryList(currentVoidTarget.type); window.isVoidProcessing = false; }, 150);
 };
 
 // Fungsi untuk Insta-Void (Jika Kasir memasukkan PIN Admin yang sah)
 window.confirmAdminVoid = async function() {
+    if (window.isVoidProcessing) return;
+    window.isVoidProcessing = true; // Lock double click
+
     let pinInput = document.getElementById("admin-void-pin");
     let pinVal = pinInput ? pinInput.value.trim() : "";
-    if (!pinVal) return alert("Masukkan PIN Admin!");
+    if (!pinVal) { window.isVoidProcessing = false; return alert("Masukkan PIN Admin!"); }
     
     const settings = await window.getDynamicSettings();
     const hashedInput = await hashString(pinVal);
     
-    // Validasi PIN input dengan Master PIN di Setting Spreadsheet
     if (hashedInput !== settings["Master_PIN"]) { 
+         window.isVoidProcessing = false;
          return alert("PIN Admin salah!");
     }
 
@@ -3293,7 +3298,8 @@ window.confirmAdminVoid = async function() {
         id: currentVoidTarget.id, 
         type: currentVoidTarget.type, 
         status: "Voided", 
-        authName: "Admin Insta-Void" 
+        authName: "Admin Insta-Void",
+        cashier: currentCashier // <-- INJEKSI KASIR
     };
     db.transaction(["void_requests"], "readwrite").objectStore("void_requests").add(payload);
     
@@ -3322,7 +3328,7 @@ window.confirmAdminVoid = async function() {
     document.getElementById("admin-void-modal").classList.add("hidden");
     alert("✅ Void Instan Berhasil dieksekusi!");
     window.runBackgroundSync();
-    setTimeout(() => { window.renderHistoryList(currentVoidTarget.type); }, 150);
+    setTimeout(() => { window.renderHistoryList(currentVoidTarget.type); window.isVoidProcessing = false; }, 150);
 };
 
 
@@ -3804,7 +3810,7 @@ window.runBackgroundSync = async function() {
 
             try {
 
-                const actionType = req.type === 'orders' ? "requestOrderVoid" : "requestExpenseVoid"; const payload = req.type === 'orders' ? { orderId: req.id, status: req.status, authName: req.authName } : { expenseId: req.id, status: req.status, authName: req.authName };
+                const actionType = req.type === 'orders' ? "requestOrderVoid" : "requestExpenseVoid"; const payload = req.type === 'orders' ? { orderId: req.id, status: req.status, authName: req.authName, cashier: req.cashier } : { expenseId: req.id, status: req.status, authName: req.authName, cashier: req.cashier };
 
                 let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: actionType, ...payload }) });
 
