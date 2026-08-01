@@ -2577,13 +2577,13 @@ window.finalizeOrder = async function(shouldPrint) {
 
 
 window.saveMemberToDB = function(profile) {
-
     if(!profile.phone || profile.phone === "-") return;
-
+    
+    // INJECT TIMESTAMP: Catat kapan tablet mengubah data ini
+    profile.localUpdateTime = Date.now(); 
+    
     db.transaction(["members"], "readwrite").objectStore("members").put(profile);
-
     db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").put(profile);
-
 };
 
 
@@ -3601,17 +3601,35 @@ window.syncMasterData = async function(isSilent = false) {
 
            if (result.data.members) { 
                 let txMem = db.transaction(["members"], "readwrite"); 
-                txMem.objectStore("members").clear(); // <--- INI MENCEGAH DATABASE STUCK
-                result.data.members.forEach(m => txMem.objectStore("members").put(m)); 
+                let memStore = txMem.objectStore("members");
                 
-                // Segarkan layar profil jika pelanggan sedang aktif di layar
-                if (activeCustomerProfile) {
-                    let updatedProfile = result.data.members.find(m => m.phone === activeCustomerProfile.phone);
-                    if (updatedProfile) {
-                        activeCustomerProfile = updatedProfile;
-                        window.updatePromoIndicator();
+                memStore.getAll().onsuccess = (e) => {
+                    let localMembers = e.target.result || [];
+                    let now = Date.now();
+                    
+                    result.data.members.forEach(serverMem => {
+                        let localMem = localMembers.find(m => m.phone === serverMem.phone);
+                        
+                        // YIELD LOGIC: Percaya data LOKAL untuk 30 detik pertama setelah transaksi.
+                        // Setelah 30 detik, tablet harus percaya data SERVER sepenuhnya.
+                        if (localMem && localMem.localUpdateTime && (now - localMem.localUpdateTime < 30000)) {
+                            // Waktu < 30 detik: Abaikan data server yang basi, pertahankan memori lokal
+                        } else {
+                            // Waktu > 30 detik: Waktunya percaya Server, timpa memori lokal!
+                            memStore.put(serverMem);
+                        }
+                    });
+                    
+                    // Segarkan layar profil jika pelanggan sedang aktif di layar
+                    if (activeCustomerProfile) {
+                        memStore.get(activeCustomerProfile.phone).onsuccess = (ev) => {
+                            if (ev.target.result) {
+                                activeCustomerProfile = ev.target.result;
+                                window.updatePromoIndicator();
+                            }
+                        };
                     }
-                }
+                };
             }
 
 
@@ -3620,6 +3638,18 @@ window.syncMasterData = async function(isSilent = false) {
             txOthers.objectStore("unsynced_members").getAll().onsuccess = (e) => {
                 let unsynced = e.target.result;
                 if (unsynced.length > 0) { let txPut = db.transaction(["members"], "readwrite"); unsynced.forEach(m => txPut.objectStore("members").put(m)); }
+                
+                // PERBAIKAN FLICKER: Update layar profil dari data lokal yang 100% akurat (Setelah digabung/merge)
+                if (activeCustomerProfile) {
+                    db.transaction(["members"], "readonly").objectStore("members").get(activeCustomerProfile.phone).onsuccess = (ev) => {
+                        if (ev.target.result) {
+                            activeCustomerProfile = ev.target.result;
+                            window.updatePromoIndicator();
+                        }
+                    };
+                }
+
+                // --- THE FIX: MERGE LOCAL PENDING TICKETS WITH STALE SERVER TICKETS ---
                 
                 // --- THE FIX: MERGE LOCAL PENDING TICKETS WITH STALE SERVER TICKETS ---
                 let txOrders = db.transaction(["orders"], "readonly");
@@ -3785,17 +3815,11 @@ window.runBackgroundSync = async function() {
         }
 
         let members = await new Promise(res => db.transaction(["unsynced_members"], "readonly").objectStore("unsynced_members").getAll().onsuccess = e => res(e.target.result));
-
         for (const mem of members) {
-
             try {
-
                 let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncMember", data: mem }) });
-
                 if ((await r.json()).status === "Success") db.transaction(["unsynced_members"], "readwrite").objectStore("unsynced_members").delete(mem.phone);
-
             } catch(e) {}
-
         }
 
         let coinRets = await new Promise(res => db.transaction(["coin_retrievals"], "readonly").objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result));
