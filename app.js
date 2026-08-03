@@ -4215,68 +4215,71 @@ window.printCurrentShiftReport = async function() {
 
 
 window.triggerEndShift = async function() {
-
     const data = window.currentShiftData; if (!data) return alert("Gagal mengambil data shift kasir.");
-
-    let diffMins = (new Date().getTime() - new Date(currentLoginTime).getTime()) / 60000;
-
-    if (diffMins < 5 && data.totalOrders === 0 && data.totalOmset === 0) {
-
-        if (confirm("Shift ini berjalan kurang dari 5 menit tanpa transaksi.\nApakah Anda ingin membatalkan dan menghapus shift ini tanpa dikirim ke server?")) {
-
-            let tx = db.transaction(["active_shifts"], "readwrite");
-
-            tx.objectStore("active_shifts").delete(currentPin);
-
-            tx.oncomplete = () => { window.location.reload(); }; return;
-
-        }
-
-    }
-
+    
     let mt = document.getElementById("meter-token"); let meterT = mt ? (parseFloat(mt.value) || 0) : 0;
-
     let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(mp.value) || 0) : 0;
-
     if (meterT <= 0 && meterP <= 0) return alert("⚠️ Harap isi Meteran Listrik!");
-
     if (!confirm("Apakah Anda yakin ingin MENGAKHIRI SHIFT dan mengunci data keuangan Anda sekarang?")) return;
 
-    
-
-    if (btCharacteristic && typeof window.buildShiftReportReceipt === "function") {
-
-        try { data.meterToken = meterT; data.meterPasca = meterP; await window.buildShiftReportReceipt(data); } catch (e) {}
-
+    // ATURAN BARU: Wajib Online untuk hitung shift dari Server
+    if (!navigator.onLine) {
+        return alert("⚠️ GAGAL TUTUP SHIFT: Anda sedang offline.\nTutup shift sekarang diwajibkan menggunakan internet agar data dihitung akurat dari server pusat. Harap sambungkan internet terlebih dahulu!");
     }
 
-    
+    // Tampilkan Loading
+    Swal.fire({
+        title: 'Merekap Data di Server...',
+        text: 'Harap tunggu, jangan tutup aplikasi. Sedang menyinkronkan dan menghitung laporan akhir Anda.',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
 
-    // MENGGUNAKAN OUTLET HELPER
+    try {
+        // 1. DORONG SEMUA DATA OFFLINE DULU KE SPREADSHEET
+        await window.runBackgroundSync();
 
-    const shiftPayload = {
+        // 2. MINTA SPREADSHEET MENGHITUNG SHIFT REPORT
+        const payload = {
+            shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
+            meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", 
+            tabletCoinCategories: data.coinCategorySummary || {}, 
+            outlet: window.getActiveOutlet()
+        };
 
-        shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
+        let res = await fetch(API_URL, {
+            method: 'POST', mode: 'cors',
+            body: JSON.stringify({ action: "generateShiftReport", data: payload })
+        });
+        
+        let result = await res.json();
+        
+        if (result.status === "Success" && result.data) {
+            let finalServerReport = result.data;
+            
+            // 3. CETAK HASIL PERHITUNGAN SERVER KE PRINTER
+            if (btCharacteristic && typeof window.buildShiftReportReceipt === "function") {
+                try { await window.buildShiftReportReceipt(finalServerReport); } catch (e) {}
+            }
 
-        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree, totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary, freeItemsSummary: data.freeItemsSummary, totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0, coinCategorySummary: data.coinCategorySummary || {}, meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier",
-
-        outlet: window.getActiveOutlet(), syncStatus: "Pending"
-
-    };
-
-    let tx = db.transaction(["local_shift_history", "shift_reports", "active_shifts"], "readwrite");
-
-    tx.objectStore("local_shift_history").add(shiftPayload); tx.objectStore("shift_reports").add(shiftPayload);
-
-    tx.objectStore("active_shifts").delete(currentPin);
-
-    tx.oncomplete = async () => {
-        localStorage.removeItem("session_pin"); // Hapus sesi setelah tutup shift
-        let mod = document.getElementById("shift-detail-modal"); if(mod) mod.classList.add("hidden");
-        alert("Shift Berhasil Ditutup! Memproses sinkronisasi cloud akhir...");
-        await window.runBackgroundSync(); window.location.reload(); 
-    };
-
+            // 4. BERSIHKAN TABLET
+            let txW = db.transaction(["local_shift_history", "active_shifts"], "readwrite");
+            txW.objectStore("local_shift_history").add(finalServerReport); 
+            txW.objectStore("active_shifts").delete(currentPin);
+            
+            txW.oncomplete = async () => {
+                localStorage.removeItem("session_pin");
+                let mod = document.getElementById("shift-detail-modal"); if(mod) mod.classList.add("hidden");
+                Swal.fire({ icon: 'success', title: 'Shift Ditutup', text: 'Data shift berhasil dikunci secara akurat di server pusat.' }).then(() => {
+                    window.location.reload(); 
+                });
+            };
+        } else {
+            Swal.fire('Error', 'Gagal memproses shift di server. Coba lagi.', 'error');
+        }
+    } catch (e) {
+        Swal.fire('Koneksi Terputus', 'Gagal menghubungi server. Pastikan internet stabil dan coba lagi.', 'error');
+    }
 };
 
 
