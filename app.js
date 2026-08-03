@@ -3915,8 +3915,8 @@ window.openShiftReport = function(historyData = null) {
             let hPiu = 0; let tPiu = 0; let tFree = 0; let tExpense = 0; let foodSummary = {};
 
             let tFreeItems = 0; let tDiscountNom = 0; let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
-
             let coinCategorySummary = {}; 
+            let freeItemsSummary = {}; // <--- PENAMBAHAN BARU
 
 
 
@@ -3942,7 +3942,12 @@ window.openShiftReport = function(historyData = null) {
 
                 tDiscountNom += (o.discounts || 0); 
                     if (o.redeemedPromos && o.redeemedPromos.length > 0) {
-                        o.redeemedPromos.forEach(rp => { tFreeItems += (Number(rp.qty) || 0); });
+                        o.redeemedPromos.forEach(rp => { 
+                            tFreeItems += (Number(rp.qty) || 0); 
+                            // Ubah nama seperti Koin_Fisik menjadi Koin Fisik agar cocok dengan menu
+                            let cleanItemName = String(rp.item).replace(/_/g, ' '); 
+                            freeItemsSummary[cleanItemName] = (freeItemsSummary[cleanItemName] || 0) + (Number(rp.qty) || 0);
+                        });
                     }
 
 
@@ -4021,7 +4026,7 @@ window.openShiftReport = function(historyData = null) {
                 totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, 
 
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary,
-
+                freeItemsSummary: freeItemsSummary, // <--- PENAMBAHAN BARU
                 totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom, totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
 
                 coinCategorySummary: coinCategorySummary, 
@@ -4231,10 +4236,10 @@ window.triggerEndShift = async function() {
     // MENGGUNAKAN OUTLET HELPER
 
     const shiftPayload = {
-
         shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
 
-        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalHotelPiutang: data.totalHotelPiutang, totalTamuPiutang: data.totalTamuPiutang, totalFree: data.totalFree, totalExpenses: data.totalExpenses, netCash: data.netCash, foodSummary: data.foodSummary, totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0, coinCategorySummary: data.coinCategorySummary || {}, meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", 
+        totalCustomers: data.totalCustomers, totalOrders: data.totalOrders, totalOmset: data.totalOmset, totalCash: data.totalCash, totalQris: data.totalQris, totalHotelPiutang: data.totalHotelPiutang, const shiftPayload = {
+        shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), totalCoinsUsed: data.totalCoinsUsed || 0, totalCoinsRecycled: data.totalCoinsRecycled || 0, totalCoinsJammed: data.totalCoinsJammed || 0, coinCategorySummary: data.coinCategorySummary || {}, meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", 
 
         outlet: window.getActiveOutlet(), syncStatus: "Pending"
 
