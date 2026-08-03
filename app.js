@@ -1544,10 +1544,20 @@ window.handleAutocomplete = function(e) {
         db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = (ev2) => {
             let staffs = ev2.target.result;
             // Ubah format staff menjadi format profil pelanggan
-            let staffMembers = staffs.map(s => ({
-                phone: "STF-" + s.name.toUpperCase().replace(/\s+/g, '').substring(0, 5),
-                name: s.name, spent: 0, points: 0, freeCoins: 0, storedRewards: {}, isStaffProfile: true
-            }));
+            let staffMembers = staffs.map(s => {
+                let stfPhone = "STF-" + s.name.toUpperCase().replace(/\s+/g, '').substring(0, 5);
+                let existingMem = matches.find(m => m.phone === stfPhone);
+                
+                // Jika staf sudah pernah belanja dan punya poin, tarik poin aslinya!
+                if (existingMem) {
+                    return { ...existingMem, isStaffProfile: true };
+                } else {
+                    return {
+                        phone: stfPhone,
+                        name: s.name, spent: 0, points: 0, freeCoins: 0, storedRewards: {}, isStaffProfile: true
+                    };
+                }
+            });
 
             // FIX: Hapus member dari daftar jika ia sudah masuk sebagai Staff agar tidak ganda
             let staffPhones = new Set(staffMembers.map(s => s.phone));
@@ -1584,16 +1594,26 @@ window.handleAutocomplete = function(e) {
 // --- FUNGSI HELPER BARU UNTUK MEMILIH STAFF SEBAGAI CUSTOMER ---
 window.selectStaffOrMember = function(phone, name, isStaff) {
     if (isStaff) {
-        activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {}, isStaffProfile: true };
-        let cp = document.getElementById("cust-phone"); if(cp) cp.value = activeCustomerProfile.phone;
-        let cn = document.getElementById("cust-name"); if(cn) cn.value = activeCustomerProfile.name;
-        let rb = document.getElementById("autocomplete-results"); if(rb) { rb.classList.add("hidden"); rb.style.display = "none"; }
-        window.updatePromoIndicator();
+        // Jangan paksa poin jadi 0! Cari dulu di database lokal apakah staff ini punya poin loyalty
+        db.transaction(["members"], "readonly").objectStore("members").get(phone).onsuccess = (e) => {
+            let existingMem = e.target.result;
+            if (existingMem) {
+                // Jika sudah ada data loyalty, gunakan itu dan tambahkan tag isStaffProfile
+                activeCustomerProfile = { ...existingMem, isStaffProfile: true };
+            } else {
+                // Jika member baru, mulai dari 0
+                activeCustomerProfile = { phone: phone, name: name, points: 0, freeCoins: 0, spent: 0, storedRewards: {}, isStaffProfile: true };
+            }
+            
+            let cp = document.getElementById("cust-phone"); if(cp) cp.value = activeCustomerProfile.phone;
+            let cn = document.getElementById("cust-name"); if(cn) cn.value = activeCustomerProfile.name;
+            let rb = document.getElementById("autocomplete-results"); if(rb) { rb.classList.add("hidden"); rb.style.display = "none"; }
+            window.updatePromoIndicator();
+        };
     } else {
         window.selectMember(phone);
     }
 };
-
 
 
 window.openEditMember = function() {
