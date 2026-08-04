@@ -2273,21 +2273,10 @@ window.finalizeOrder = async function(shouldPrint) {
     if ((window.cartGrandTotal - (cash + qris + transfer + totalPiutang)) > 0) { return alert("⚠️ Nominal Pembayaran masih kurang! Harap periksa kembali."); }
     if ((cash + qris + transfer + totalPiutang) > window.cartGrandTotal) { return alert("⚠️ Nominal Pembayaran melebihi Total Akhir! Harap koreksi angka yang dimasukkan."); }
 
-    // --- RE-VERIFICATION CHECK (IF CASHIER IS UNKNOWN) ---
+   // --- RE-VERIFICATION CHECK (IF CASHIER IS UNKNOWN) ---
     if (!currentCashier || currentCashier.trim() === "Unknown" || currentCashier.trim() === "") {
-        const { value: enteredPin } = await Swal.fire({
-            title: 'Sesi Kasir Terputus',
-            text: 'Sistem lupa siapa Anda! Harap masukkan PIN Kasir Anda kembali untuk menyimpan order ini.',
-            input: 'password',
-            inputAttributes: {
-                autocapitalize: 'off',
-                autocorrect: 'off'
-            },
-            showCancelButton: true,
-            confirmButtonText: 'Verifikasi',
-            cancelButtonText: 'Batal'
-        });
-
+        let enteredPin = prompt("⚠️ Sesi Kasir Terputus!\nSistem lupa siapa Anda! Harap masukkan PIN Kasir Anda kembali untuk menyimpan order ini:");
+        
         if (enteredPin) {
             const hashedPin = await hashString(enteredPin);
             let staffList = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = e => res(e.target.result));
@@ -2296,10 +2285,9 @@ window.finalizeOrder = async function(shouldPrint) {
             if (staffMatch) {
                 currentCashier = staffMatch.name;
                 currentPin = hashedPin;
-                // Optional: Show success toast
-                Swal.fire({ icon: 'success', title: 'Terverifikasi', text: 'Kasir: ' + currentCashier, timer: 1500, showConfirmButton: false });
+                alert("Verifikasi Berhasil! Kasir: " + currentCashier);
             } else {
-                Swal.fire('Gagal', 'PIN Salah atau tidak terdaftar!', 'error');
+                alert("❌ Gagal: PIN Salah atau tidak terdaftar!");
                 return; // Stop execution
             }
         } else {
@@ -4227,13 +4215,13 @@ window.triggerEndShift = async function() {
         return alert("⚠️ GAGAL TUTUP SHIFT: Anda sedang offline.\nTutup shift sekarang diwajibkan menggunakan internet agar data dihitung akurat dari server pusat. Harap sambungkan internet terlebih dahulu!");
     }
 
-    // Tampilkan Loading
-    Swal.fire({
-        title: 'Merekap Data di Server...',
-        text: 'Harap tunggu, jangan tutup aplikasi. Sedang menyinkronkan dan menghitung laporan akhir Anda.',
-        allowOutsideClick: false,
-        didOpen: () => { Swal.showLoading(); }
-    });
+    // Tampilkan Loading Native (Ubah teks tombol)
+    let endBtn = document.getElementById("btn-end-shift-modal");
+    let originalBtnText = endBtn ? endBtn.innerText : "Akhiri Shift";
+    if (endBtn) { 
+        endBtn.innerText = "⏳ Sedang Merekap di Server..."; 
+        endBtn.disabled = true; 
+    }
 
     try {
         // 1. DORONG SEMUA DATA OFFLINE DULU KE SPREADSHEET
@@ -4258,7 +4246,7 @@ window.triggerEndShift = async function() {
             let finalServerReport = result.data;
             
             // 3. CETAK HASIL PERHITUNGAN SERVER KE PRINTER
-            if (btCharacteristic && typeof window.buildShiftReportReceipt === "function") {
+            if (typeof btCharacteristic !== 'undefined' && btCharacteristic && typeof window.buildShiftReportReceipt === "function") {
                 try { await window.buildShiftReportReceipt(finalServerReport); } catch (e) {}
             }
 
@@ -4270,15 +4258,16 @@ window.triggerEndShift = async function() {
             txW.oncomplete = async () => {
                 localStorage.removeItem("session_pin");
                 let mod = document.getElementById("shift-detail-modal"); if(mod) mod.classList.add("hidden");
-                Swal.fire({ icon: 'success', title: 'Shift Ditutup', text: 'Data shift berhasil dikunci secara akurat di server pusat.' }).then(() => {
-                    window.location.reload(); 
-                });
+                alert("✅ Shift Ditutup!\nData shift berhasil dikunci secara akurat di server pusat.");
+                window.location.reload(); 
             };
         } else {
-            Swal.fire('Error', 'Gagal memproses shift di server. Coba lagi.', 'error');
+            alert("❌ Error: Gagal memproses shift di server. Coba lagi.");
+            if (endBtn) { endBtn.innerText = originalBtnText; endBtn.disabled = false; }
         }
     } catch (e) {
-        Swal.fire('Koneksi Terputus', 'Gagal menghubungi server. Pastikan internet stabil dan coba lagi.', 'error');
+        alert("⚠️ Koneksi Terputus: Gagal menghubungi server. Pastikan internet stabil dan coba lagi.");
+        if (endBtn) { endBtn.innerText = originalBtnText; endBtn.disabled = false; }
     }
 };
 
