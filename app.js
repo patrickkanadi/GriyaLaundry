@@ -4074,10 +4074,7 @@ function populateShiftModal(data, isActive) {
     
 
     let catHtml = "";
-    // TAMPILKAN KOIN AWAL DAN AKHIR DI LAYAR
-    catHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:2px 0;"><span>Koin Awal (Laci)</span> <strong style="color:#2980b9;">${data.initialCoins || 0} Koin</strong></div>`;
-    catHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:2px 0;"><span>Koin Akhir (Laci)</span> <strong style="color:#c0392b;">${data.endCoins || 0} Koin</strong></div>`;
-
+    
     if (data.coinCategorySummary) {
 
         for (const [cat, val] of Object.entries(data.coinCategorySummary)) {
@@ -4119,23 +4116,20 @@ function populateShiftModal(data, isActive) {
     
 
     if (document.getElementById("sd-net")) {
-
         document.getElementById("sd-net").innerText = "Rp " + (data.netCash || 0).toLocaleString('id-ID');
-
         document.getElementById("sd-net").parentElement.style.display = "flex"; 
-
     }
-
     
-
     if (document.getElementById("sd-free-items")) document.getElementById("sd-free-items").innerText = (data.totalFreeItems || 0) + " Item";
-
     if (document.getElementById("sd-discount-nom")) document.getElementById("sd-discount-nom").innerText = "Rp " + (data.totalDiscountNominal || 0).toLocaleString('id-ID');
-
+    
+    // ✅ TAMBAHKAN DUA BARIS INI DI SINI:
+    if (document.getElementById("sd-initial-coins")) document.getElementById("sd-initial-coins").innerText = (data.initialCoins || 0) + " Koin";
+    if (document.getElementById("sd-end-coins")) document.getElementById("sd-end-coins").innerText = (data.endCoins || 0) + " Koin";
+    
+    // (Ini adalah kode asli Anda di bawahnya)
     if (document.getElementById("sd-coins-used")) document.getElementById("sd-coins-used").innerText = (data.totalCoinsUsed || 0) + " Koin";
-
     if (document.getElementById("sd-coins-recycled")) document.getElementById("sd-coins-recycled").innerText = (data.totalCoinsRecycled || 0) + " Koin";
-
     if (document.getElementById("sd-coins-jammed")) document.getElementById("sd-coins-jammed").innerText = (data.totalCoinsJammed || 0) + " Koin";
 
     if (document.getElementById("sd-food")) document.getElementById("sd-food").innerHTML = foodHtml || "Belum ada item terjual";
