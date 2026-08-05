@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbxPIq-LurQ_McYh_wG42aAasakI4kUIuUaOpceGCBEXUMSqrRFk_7QHkmyVzmhRBQ02/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxlnwV3YcT6yxvH-tsi-EmhKx0Uofkek18xgyamYollFdrALjePua4WcLfwrQfy0bYm/exec";
 const DB_NAME = "GriyaLaundry_POS";
 
 const DB_VERSION = 34; 
@@ -799,6 +799,8 @@ window.buildShiftReportReceipt = async function(data) {
 
 
     r += CMD_BOLD_ON + "STATISTIK KOIN FISIK:" + CMD_BOLD_OFF + "\n";
+    r += formatEscPosLine("Koin Awal (Laci)", (data.initialCoins || 0) + " Koin", false) + "\n";
+    r += formatEscPosLine("Koin Akhir (Laci)", (data.endCoins || 0) + " Koin", false) + "\n";
     r += formatEscPosLine("Total Terpakai", (data.totalCoinsUsed || 0) + " Koin", false) + "\n";
     if (data.coinCategorySummary) {
         for (const [cat, val] of Object.entries(data.coinCategorySummary)) {
@@ -954,24 +956,23 @@ window.attemptLogin = async function() {
 
 
             db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(hashedPin).onsuccess = (shiftReq) => {
-
-                const activeShift = shiftReq.target.result; currentCashier = staff.name; currentPin = hashedPin;
-
-                if (activeShift) { 
-
-                    currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime;
-
-                } else { 
-
-                    currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString();
-
-                    db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({pin: hashedPin, shiftId: currentShiftId, loginTime: currentLoginTime, lastActiveTime: Date.now(), cashierName: currentCashier});
-
-                }
-
-                
-
-                let btnKoin = document.getElementById("btn-koin-top");
+                    const activeShift = shiftReq.target.result; currentCashier = staff.name; currentPin = hashedPin;
+                    if (activeShift) { 
+                        currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime;
+                        // TARIK MEMORI KOIN AWAL JIKA MELANJUTKAN SHIFT
+                        localStorage.setItem("session_initial_coins", activeShift.initialCoins || 0);
+                    } else { 
+                        currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString();
+                        // REKAM KOIN AWAL SAAT BUKA SHIFT BARU
+                        let initCoin = window.laciStocks ? (window.laciStocks[selectedOutlet] || 0) : 0;
+                        db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({
+                            pin: hashedPin, shiftId: currentShiftId, loginTime: currentLoginTime, 
+                            lastActiveTime: Date.now(), cashierName: currentCashier, initialCoins: initCoin
+                        });
+                        localStorage.setItem("session_initial_coins", initCoin);
+                    }
+                    
+                    let btnKoin = document.getElementById("btn-koin-top");
 
                 if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks ? (window.laciStocks[selectedOutlet] || 0) : 0} | Mesin: ${window.coinsInMachines ? (window.coinsInMachines[selectedOutlet] || 0) : 0}`;
 
@@ -4073,6 +4074,9 @@ function populateShiftModal(data, isActive) {
     
 
     let catHtml = "";
+    // TAMPILKAN KOIN AWAL DAN AKHIR DI LAYAR
+    catHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:2px 0;"><span>Koin Awal (Laci)</span> <strong style="color:#2980b9;">${data.initialCoins || 0} Koin</strong></div>`;
+    catHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px dashed #eee; padding:2px 0;"><span>Koin Akhir (Laci)</span> <strong style="color:#c0392b;">${data.endCoins || 0} Koin</strong></div>`;
 
     if (data.coinCategorySummary) {
 
@@ -4228,11 +4232,16 @@ window.triggerEndShift = async function() {
         await window.runBackgroundSync();
 
         // 2. MINTA SPREADSHEET MENGHITUNG SHIFT REPORT
+        let initialC = Number(localStorage.getItem("session_initial_coins")) || 0;
+        let endC = window.laciStocks ? (window.laciStocks[window.getActiveOutlet()] || 0) : 0;
+
         const payload = {
             shiftId: currentShiftId, cashier: currentCashier, loginTime: currentLoginTime, logoutTime: new Date().toISOString(),
             meterToken: meterT, meterPasca: meterP, closeNote: "Manual Shift Closure by Cashier", 
             tabletCoinCategories: data.coinCategorySummary || {}, 
-            outlet: window.getActiveOutlet()
+            outlet: window.getActiveOutlet(),
+            initialCoins: initialC, // INJEKSI KOIN AWAL
+            endCoins: endC          // INJEKSI KOIN AKHIR
         };
 
         let res = await fetch(API_URL, {
@@ -4283,9 +4292,20 @@ function performAutoClose(shift) {
 
         let tOmset = vOrders.reduce((s, o) => s + o.grandTotal, 0);
 
-        const report = { shiftId: shift.shiftId, cashier: shift.cashierName, loginTime: shift.loginTime, logoutTime: new Date().toISOString(), totalCustomers: vOrders.length, totalOrders: vOrders.length, totalOmset: tOmset, totalCash: tOmset, totalQris: 0, totalHotelPiutang: 0, totalTamuPiutang: 0, totalFree: 0, totalExpenses: 0, netCash: tOmset, foodSummary: {}, closeNote: "System Auto-Closed (>4h Idle Expired)", 
+        // Di atas const report =, tambahkan ini:
+        let initialC = Number(localStorage.getItem("session_initial_coins")) || 0;
+        let endC = window.laciStocks ? (window.laciStocks[window.getActiveOutlet()] || 0) : 0;
 
-        outlet: window.getActiveOutlet(), syncStatus: "Pending" };
+        // 3. Buat Laporan Super Lengkap
+        const report = { 
+            shiftId: shift.shiftId, cashier: shift.cashierName, loginTime: shift.loginTime, logoutTime: new Date().toISOString(), 
+            totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer, 
+            totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, 
+            foodSummary: foodSummary, freeItemsSummary: freeItemsSummary, totalFreeItems: tFreeItems,
+            closeNote: "System Auto-Closed (Kasir Lupa Tutup Shift)", 
+            outlet: window.getActiveOutlet(), syncStatus: "Pending",
+            initialCoins: initialC, endCoins: endC // INJEKSI KOIN
+        };
 
         let txW = db.transaction(["local_shift_history", "shift_reports", "active_shifts"], "readwrite");
 
