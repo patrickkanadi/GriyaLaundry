@@ -3077,15 +3077,15 @@ window.renderHistoryList = function(type) {
             filtered.forEach(s => {
 
                 let detailBtn = `<button onclick="window.viewShiftDetails('${s.shiftId}')" style="background:#f39c12; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">👁️ Detail</button>`;
-
                 let printBtn = `<button onclick="window.printShiftReportFromHistory('${s.shiftId}')" style="background:#3498db; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px;">🖨️ Cetak</button>`;
-
                 let itemsStr = "Tidak ada item"; if (s.foodSummary && Object.keys(s.foodSummary).length > 0) itemsStr = Object.entries(s.foodSummary).map(([k,v]) => `${v}x ${k}`).join(', ');
-
                 let outletStr = s.outlet ? ` (${s.outlet})` : "";
-
-                container.innerHTML += `<div class="history-row" style="align-items:flex-start; display:flex; gap:10px;"><div style="flex:2;"><strong>Shift: ${s.shiftId}${outletStr}</strong><br><small style="color:#7f8c8d;">Keluar: ${formatWIB(s.logoutTime)}</small><br><small style="color:#2980b9; display:block; margin-top:4px; line-height:1.4;">📦 <strong>Item:</strong> ${itemsStr}</small></div><div style="flex:1; text-align:right;"><strong style="color:#27ae60; display:block; margin-bottom:6px; font-size:14px;">Rp ${(s.totalOmset || 0).toLocaleString('id-ID')}</strong><div style="display:flex; justify-content:flex-end; gap:5px;">${detailBtn} ${printBtn}</div></div></div>`;
-
+                
+                // BARU: Buat string Koin
+                let coinsStr = `<span style="color:#e67e22; font-weight:bold; font-size:11px; margin-top:4px; display:block;">🪙 Koin Laci: ${s.initialCoins || 0} → ${s.endCoins || 0}</span>`;
+                
+                container.innerHTML += `<div class="history-row" style="align-items:flex-start; display:flex; gap:10px;"><div style="flex:2;"><strong>Shift: ${s.shiftId}${outletStr}</strong><br><small style="color:#7f8c8d;">Keluar: ${formatWIB(s.logoutTime)}</small>${coinsStr}<small style="color:#2980b9; display:block; margin-top:4px; line-height:1.4;">📦 <strong>Item:</strong> ${itemsStr}</small></div><div style="flex:1; text-align:right;"><strong style="color:#27ae60; display:block; margin-bottom:6px; font-size:14px;">Rp ${(s.totalOmset || 0).toLocaleString('id-ID')}</strong><div style="display:flex; justify-content:flex-end; gap:5px;">${detailBtn} ${printBtn}</div></div></div>`;
+                
             });
 
         };
