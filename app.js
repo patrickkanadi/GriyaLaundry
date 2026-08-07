@@ -715,14 +715,42 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
 
 
     if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in" && !order.customerPhone.startsWith("999")) {
+    receipt += "--------------------------------\n" + CMD_CENTER + "-- INFO LOYALTY --\n" + CMD_LEFT;
+    receipt += formatEscPosLine("Sisa Poin", newPoints + " / " + window.loyaltyTarget, false) + "\n";
+    receipt += formatEscPosLine("Koin Gratis", newFree, false) + "\n";
 
-        receipt += "--------------------------------\n" + CMD_CENTER + "-- INFO LOYALTY --\n" + CMD_LEFT;
-
-        receipt += formatEscPosLine("Sisa Poin", newPoints + " / " + window.loyaltyTarget, false) + "\n";
-
-        receipt += formatEscPosLine("Koin Gratis", newFree, false) + "\n";
-
+    // --- TAMBAHAN BARU: CETAK HADIAH & STAMP TERSIMPAN ---
+    let storedObj = {};
+    if (order.finalStoredRewards) {
+        try { 
+            storedObj = typeof order.finalStoredRewards === 'string' ? JSON.parse(order.finalStoredRewards) : order.finalStoredRewards; 
+        } catch(e) { 
+            storedObj = {}; 
+        }
     }
+    
+    let rewardItems = [];
+    let stampItems = [];
+    
+    for (let k in storedObj) {
+        if (k.startsWith(" *stamp* ")) {
+            let cleanName = k.replace(" *stamp* ", "");
+            stampItems.push(cleanName + ": " + storedObj[k] + "x");
+        } else if (!k.startsWith(" *prog* ")) {
+            rewardItems.push(k + ": " + storedObj[k] + "x");
+        }
+    }
+    
+    if (rewardItems.length > 0) {
+        receipt += CMD_CENTER + "- Hadiah Tersimpan -\n" + CMD_LEFT;
+        rewardItems.forEach(ri => { receipt += "  " + ri + "\n"; });
+    }
+    
+    if (stampItems.length > 0) {
+        receipt += CMD_CENTER + "- Progress Stamp -\n" + CMD_LEFT;
+        stampItems.forEach(si => { receipt += "  " + si + "\n"; });
+    }
+}
 
 
 
