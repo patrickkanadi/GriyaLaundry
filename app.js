@@ -4344,23 +4344,21 @@ function performAutoClose(shift) {
 
 
 function checkExpiredShifts() {
-
     if (!db) return;
-
     db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").getAll().onsuccess = (e) => {
-
-        let activeShifts = e.target.result; let now = Date.now();
-
+        let activeShifts = e.target.result; 
+        let now = Date.now();
+        
         activeShifts.forEach(shift => {
-
-            let referenceTime = shift.lastActiveTime ? new Date(shift.lastActiveTime).getTime() : new Date(shift.loginTime).getTime();
-
-            if (now - referenceTime > 24 * 60 * 60 * 1000) performAutoClose(shift);
-
+            // PERBAIKAN: Gunakan waktu login asli, bukan waktu sentuhan terakhir
+            let referenceTime = new Date(shift.loginTime).getTime();
+            
+            // PERBAIKAN: Batas auto-close ketat 12 Jam (12 jam * 60 menit * 60 detik * 1000 ms)
+            if (now - referenceTime > 12 * 60 * 60 * 1000) {
+                performAutoClose(shift);
+            }
         });
-
     };
-
 }
 
 
