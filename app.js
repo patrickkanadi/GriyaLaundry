@@ -4053,26 +4053,21 @@ window.openShiftReport = function(historyData = null) {
 
             let netCash = Math.max(0, tCash - tExpense);
 
-
+            // --- TARIK KOIN AWAL & AKHIR DARI MEMORI LOKAL ---
+            let initialC = Number(localStorage.getItem("session_initial_coins")) || 0;
+            let endC = window.laciStocks ? (window.laciStocks[window.getActiveOutlet()] || 0) : 0;
 
             window.currentShiftData = { 
-
                 shiftId: currentShiftId, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), cashier: currentCashier, 
-
                 totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, 
-
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary, freeItemsSummary: freeItemsSummary,
-
                 totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom, totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
-
                 coinCategorySummary: coinCategorySummary, 
-
-                outlet: localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat" 
-
+                outlet: localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat",
+                initialCoins: initialC, // <--- INJEKSI KE DATA SHIFT
+                endCoins: endC          // <--- INJEKSI KE DATA SHIFT
             };
-
             
-
             populateShiftModal(window.currentShiftData, true);
 
         };
