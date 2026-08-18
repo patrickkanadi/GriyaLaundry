@@ -4226,6 +4226,23 @@ window.printCurrentShiftReport = async function() {
 window.triggerEndShift = async function() {
     const data = window.currentShiftData; if (!data) return alert("Gagal mengambil data shift kasir.");
     
+    // --- FITUR BARU: ABAIKAN SHIFT KOSONG DI BAWAH 30 MENIT ---
+    let loginMs = new Date(currentLoginTime).getTime();
+    let shiftDurationMins = (Date.now() - loginMs) / (1000 * 60);
+    
+    if (shiftDurationMins <= 30 && data.totalOrders === 0 && data.totalExpenses === 0) {
+        // Hapus sesi lokal tanpa mem-push laporan ke server
+        let txW = db.transaction(["active_shifts"], "readwrite");
+        txW.objectStore("active_shifts").delete(currentPin);
+        txW.oncomplete = () => {
+            localStorage.removeItem("session_pin");
+            let mod = document.getElementById("shift-detail-modal"); if(mod) mod.classList.add("hidden");
+            alert("✅ Sesi Berakhir!\n(Shift berdurasi di bawah 30 menit tanpa transaksi, laporan tidak dikirim ke server).");
+            window.location.reload();
+        };
+        return; // Hentikan eksekusi disini
+    }
+    
     let mt = document.getElementById("meter-token"); let meterT = mt ? (parseFloat(mt.value) || 0) : 0;
     let mp = document.getElementById("meter-pasca"); let meterP = mp ? (parseFloat(mp.value) || 0) : 0;
     if (meterT <= 0 && meterP <= 0) return alert("⚠️ Harap isi Meteran Listrik!");
