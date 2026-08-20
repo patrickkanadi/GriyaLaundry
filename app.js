@@ -4362,11 +4362,14 @@ function checkExpiredShifts() {
         let now = Date.now();
         
         activeShifts.forEach(shift => {
-            // PERBAIKAN: Gunakan waktu login asli, bukan waktu sentuhan terakhir
-            let referenceTime = new Date(shift.loginTime).getTime();
+            let loginTime = new Date(shift.loginTime).getTime();
+            let lastActive = shift.lastActiveTime || loginTime;
             
-            // PERBAIKAN: Batas auto-close ketat 12 Jam (12 jam * 60 menit * 60 detik * 1000 ms)
-            if (now - referenceTime > 12 * 60 * 60 * 1000) {
+            let hoursSinceLogin = (now - loginTime) / (1000 * 60 * 60);
+            let hoursSinceActive = (now - lastActive) / (1000 * 60 * 60);
+            
+            // Auto-close HANYA JIKA: Sudah login >= 8 jam DAN tidak ada aktivitas (idle) >= 1 jam
+            if (hoursSinceLogin >= 8 && hoursSinceActive >= 1) {
                 performAutoClose(shift);
             }
         });
