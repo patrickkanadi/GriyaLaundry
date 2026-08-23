@@ -3873,7 +3873,7 @@ window.runBackgroundSync = async function() {
 
                 try {
 
-                    let actionCode = cr.notes && cr.notes.includes("Macet") ? "syncCoinJammed" : "syncCoinRetrieval";
+                    let actionCode = String(cr.retrievalId).startsWith("JAM-") ? "syncCoinJammed" : "syncCoinRetrieval";
 
                     let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: actionCode, data: cr }) });
 
