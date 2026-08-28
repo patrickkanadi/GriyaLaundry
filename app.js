@@ -4369,7 +4369,7 @@ function checkExpiredShifts() {
             let hoursSinceActive = (now - lastActive) / (1000 * 60 * 60);
             
             // Auto-close HANYA JIKA: Sudah login >= 8 jam DAN tidak ada aktivitas (idle) >= 1 jam
-            if (hoursSinceLogin >= 8 && hoursSinceActive >= 1) {
+            if (hoursSinceLogin >= 8 && hoursSinceActive >= 4) {
                 performAutoClose(shift);
             }
         });
