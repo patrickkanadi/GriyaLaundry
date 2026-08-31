@@ -4360,6 +4360,7 @@ function checkExpiredShifts() {
     db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").getAll().onsuccess = (e) => {
         let activeShifts = e.target.result; 
         let now = Date.now();
+        let todayMidnight = new Date().setHours(0, 0, 0, 0); // Titik potong jam 00:00 hari ini
         
         activeShifts.forEach(shift => {
             let loginTime = new Date(shift.loginTime).getTime();
@@ -4368,8 +4369,13 @@ function checkExpiredShifts() {
             let hoursSinceLogin = (now - loginTime) / (1000 * 60 * 60);
             let hoursSinceActive = (now - lastActive) / (1000 * 60 * 60);
             
-            // Auto-close HANYA JIKA: Sudah login >= 8 jam DAN tidak ada aktivitas (idle) >= 1 jam
-            if (hoursSinceLogin >= 8 && hoursSinceActive >= 4) {
+            // Cek apakah shift ini dimulai sebelum jam 00:00 hari ini
+            let crossedMidnight = loginTime < todayMidnight;
+            
+            // Auto-close HANYA JIKA: 
+            // 1. Melewati jam 00:00 (Beda hari)
+            // 2. ATAU Sudah login >= 8 jam DAN tidak ada aktivitas (idle) >= 1 jam
+            if (crossedMidnight || (hoursSinceLogin >= 8 && hoursSinceActive >= 1)) {
                 performAutoClose(shift);
             }
         });
