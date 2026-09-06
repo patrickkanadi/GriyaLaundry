@@ -597,35 +597,28 @@ function formatEscPosLine(left, right, isBig) {
 
 
 window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, payMethod, newPoints, newFree) {
-
     const settings = await window.getDynamicSettings();
+    let currentOutlet = order.outlet || localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
 
-    const h1 = settings["Header_1"] || "GRIYA LAUNDRY"; const h2 = settings["Header_2"] || ""; const h3 = settings["Header_3"] || ""; 
-
-    const f1 = settings["Footer_1"] || "TERIMA KASIH"; const f2 = settings["Footer_2"] || ""; const f3 = settings["Footer_3"] || ""; const f4 = settings["Footer_4"] || ""; 
-
+    // MENGAMBIL HEADER/FOOTER SPESIFIK OUTLET (Atau gunakan yang default jika kosong)
+    const h1 = settings[`Header_1_${currentOutlet}`] || settings["Header_1"] || "GRIYA LAUNDRY"; 
+    const h2 = settings[`Header_2_${currentOutlet}`] || settings["Header_2"] || ""; 
+    const h3 = settings[`Header_3_${currentOutlet}`] || settings["Header_3"] || ""; 
+    const f1 = settings[`Footer_1_${currentOutlet}`] || settings["Footer_1"] || "TERIMA KASIH"; 
+    const f2 = settings[`Footer_2_${currentOutlet}`] || settings["Footer_2"] || ""; 
+    const f3 = settings[`Footer_3_${currentOutlet}`] || settings["Footer_3"] || ""; 
+    const f4 = settings[`Footer_4_${currentOutlet}`] || settings["Footer_4"] || ""; 
     
-
     const CMD_INIT = "\x1B\x40"; const CMD_CENTER = "\x1B\x61\x01"; const CMD_LEFT = "\x1B\x61\x00";
-
     const CMD_BOLD_ON = "\x1B\x45\x01"; const CMD_BOLD_OFF = "\x1B\x45\x00";
-
     const CMD_BIG = "\x1B!\x11"; const CMD_NORMAL = "\x1B!\x00"; const CMD_CUT = "\x1D\x56\x41\x10";
 
-
-
     let receipt = CMD_INIT;
-
     receipt += CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
-
     if(h2) receipt += h2 + "\n";
-
     if(h3) receipt += h3 + "\n";
-
     
-
     receipt += "--------------------------------\n" + CMD_LEFT;
-
     receipt += "Nota: " + orderId + "\n";
 
     receipt += "Tgl : " + formatWIB(order.timestamp || new Date().toISOString()) + "\n";
@@ -777,17 +770,14 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
 
 
 window.buildShiftReportReceipt = async function(data) {
-
     const settings = await window.getDynamicSettings();
-
-    const h1 = settings["Header_1"] || "GRIYA LAUNDRY";
-
+    let currentOutlet = data.outlet || "Pusat";
+    
+    const h1 = settings[`Header_1_${currentOutlet}`] || settings["Header_1"] || "GRIYA LAUNDRY";
+    
     const CMD_INIT = "\x1B\x40"; const CMD_CENTER = "\x1B\x61\x01"; const CMD_LEFT = "\x1B\x61\x00"; const CMD_BOLD_ON = "\x1B\x45\x01"; const CMD_BOLD_OFF = "\x1B\x45\x00"; const CMD_BIG = "\x1B!\x11"; const CMD_NORMAL = "\x1B!\x00"; const CMD_CUT = "\x1D\x56\x41\x10";
 
-
-
     let r = CMD_INIT + CMD_CENTER + CMD_BOLD_ON + CMD_BIG + h1 + "\n" + CMD_NORMAL + CMD_BOLD_OFF;
-
     r += "LAPORAN TUTUP SHIFT\n--------------------------------\n" + CMD_LEFT;
 
     
