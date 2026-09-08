@@ -3725,33 +3725,27 @@ window.syncMasterData = async function(isSilent = false) {
 
 window.manualPushSync = async function() {
     if (!navigator.onLine) return alert("Anda sedang offline!");
-    let nTxt = document.getElementById("network-text"); let nDot = document.getElementById("network-dot");
-    if(nTxt) nTxt.innerText = "Mengirim Data..."; if(nDot) nDot.style.backgroundColor = "#f39c12";
-    let lTxt = document.getElementById("login-network-text"); let lDot = document.getElementById("login-network-dot");
-    if(lTxt) lTxt.innerText = "Mendorong Data Lokal..."; if(lDot) lDot.style.backgroundColor = "#f39c12";
+    
+    let nTxt = document.getElementById("network-text"); 
+    let nDot = document.getElementById("network-dot");
+    if(nTxt) nTxt.innerText = "Mengirim Data..."; 
+    if(nDot) nDot.style.backgroundColor = "#f39c12";
+    
+    let lTxt = document.getElementById("login-network-text"); 
+    let lDot = document.getElementById("login-network-dot");
+    if(lTxt) lTxt.innerText = "Mendorong Data Lokal..."; 
+    if(lDot) lDot.style.backgroundColor = "#f39c12";
 
-    // --- TEMPORARY FORCE RESYNC (DATABASE-SAFE) ---
-    await new Promise((resolve) => {
-        let txRead = db.transaction(["orders"], "readonly");
-        txRead.objectStore("orders").getAll().onsuccess = (e) => {
-            let allOrders = e.target.result || [];
-            if (allOrders.length === 0) return resolve();
-            
-            let txWrite = db.transaction(["orders"], "readwrite");
-            let store = txWrite.objectStore("orders");
-            for (let o of allOrders) {
-                o.syncStatus = "Pending";
-                store.put(o);
-            }
-            txWrite.oncomplete = () => resolve();
-        };
-    });
-    // ----------------------------------------------
-
+    // 1. Dorong transaksi yang benar-benar baru/pending saja
     await window.runBackgroundSync();
-    if(nTxt) nTxt.innerText = "Menarik Data..."; if(lTxt) lTxt.innerText = "Sinkronisasi Server...";
+    
+    if(nTxt) nTxt.innerText = "Menarik Data..."; 
+    if(lTxt) lTxt.innerText = "Sinkronisasi Server...";
+    
+    // 2. Tarik update terbaru dari Google Sheets
     await window.syncMasterData(); 
-    alert("Sinkronisasi Paksa Berhasil! Semua transaksi lama telah didorong ulang ke server.");
+    
+    alert("Sinkronisasi Manual Berhasil!");
 };
 
 window.runBackgroundSync = async function() {
