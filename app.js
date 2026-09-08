@@ -3730,21 +3730,29 @@ window.manualPushSync = async function() {
     let lTxt = document.getElementById("login-network-text"); let lDot = document.getElementById("login-network-dot");
     if(lTxt) lTxt.innerText = "Mendorong Data Lokal..."; if(lDot) lDot.style.backgroundColor = "#f39c12";
 
-    // --- TEMPORARY FORCE RESYNC: Ubah semua status lokal kembali ke "Pending" ---
-    let tx = db.transaction(["orders"], "readwrite");
-    let allOrders = await new Promise(res => tx.objectStore("orders").getAll().onsuccess = e => res(e.target.result));
-    for (let o of allOrders) {
-        o.syncStatus = "Pending";
-        tx.objectStore("orders").put(o);
-    }
-    // -----------------------------------------------------------------------------
+    // --- TEMPORARY FORCE RESYNC (DATABASE-SAFE) ---
+    await new Promise((resolve) => {
+        let txRead = db.transaction(["orders"], "readonly");
+        txRead.objectStore("orders").getAll().onsuccess = (e) => {
+            let allOrders = e.target.result || [];
+            if (allOrders.length === 0) return resolve();
+            
+            let txWrite = db.transaction(["orders"], "readwrite");
+            let store = txWrite.objectStore("orders");
+            for (let o of allOrders) {
+                o.syncStatus = "Pending";
+                store.put(o);
+            }
+            txWrite.oncomplete = () => resolve();
+        };
+    });
+    // ----------------------------------------------
 
     await window.runBackgroundSync();
     if(nTxt) nTxt.innerText = "Menarik Data..."; if(lTxt) lTxt.innerText = "Sinkronisasi Server...";
     await window.syncMasterData(); 
     alert("Sinkronisasi Paksa Berhasil! Semua transaksi lama telah didorong ulang ke server.");
 };
-
 
 window.runBackgroundSync = async function() {
 
