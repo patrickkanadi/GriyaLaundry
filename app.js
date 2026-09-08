@@ -3724,27 +3724,26 @@ window.syncMasterData = async function(isSilent = false) {
 
 
 window.manualPushSync = async function() {
-
     if (!navigator.onLine) return alert("Anda sedang offline!");
-
     let nTxt = document.getElementById("network-text"); let nDot = document.getElementById("network-dot");
-
     if(nTxt) nTxt.innerText = "Mengirim Data..."; if(nDot) nDot.style.backgroundColor = "#f39c12";
-
     let lTxt = document.getElementById("login-network-text"); let lDot = document.getElementById("login-network-dot");
-
     if(lTxt) lTxt.innerText = "Mendorong Data Lokal..."; if(lDot) lDot.style.backgroundColor = "#f39c12";
 
-
+    // --- TEMPORARY FORCE RESYNC: Ubah semua status lokal kembali ke "Pending" ---
+    let tx = db.transaction(["orders"], "readwrite");
+    let allOrders = await new Promise(res => tx.objectStore("orders").getAll().onsuccess = e => res(e.target.result));
+    for (let o of allOrders) {
+        o.syncStatus = "Pending";
+        tx.objectStore("orders").put(o);
+    }
+    // -----------------------------------------------------------------------------
 
     await window.runBackgroundSync();
-
     if(nTxt) nTxt.innerText = "Menarik Data..."; if(lTxt) lTxt.innerText = "Sinkronisasi Server...";
-
-    await window.syncMasterData(); alert("Sinkronisasi Database Berhasil!");
-
+    await window.syncMasterData(); 
+    alert("Sinkronisasi Paksa Berhasil! Semua transaksi lama telah didorong ulang ke server.");
 };
-
 
 
 window.runBackgroundSync = async function() {
