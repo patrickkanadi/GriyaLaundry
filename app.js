@@ -3610,7 +3610,11 @@ window.syncMasterData = async function(isSilent = false) {
             if (result.data.menu) { 
                 window.globalMenuDataRaw = result.data.menu; 
                 let txMenu = db.transaction(["menu"], "readwrite"); 
-                result.data.menu.forEach(m => txMenu.objectStore("menu").put(m)); 
+                
+                // --- FIX: HAPUS MEMORI MENU LAMA SEBELUM MENYIMPAN YANG BARU ---
+                txMenu.objectStore("menu").clear(); 
+                
+                result.data.menu.forEach(m => txMenu.objectStore("menu").put(m));
                 
                 // Live update ke menu yang sedang tampil agar stok laci otomatis menyesuaikan
                 if (!document.getElementById("pos-screen").classList.contains("hidden")) {
