@@ -196,29 +196,69 @@
 
  
 
-        /* 1. KHUSUS MODE VERTIKAL / PORTRAIT (HP / Tablet Berdiri) */
-        @media screen and (max-width: 1100px) and (orientation: portrait) {
-            #top-bar { flex-direction: column; align-items: stretch; gap: 8px; padding: 8px; }
-            .status-indicator { flex-wrap: wrap; justify-content: center; gap: 4px; }
-            .btn-top { flex: 1 1 calc(20% - 4px); margin: 2px; font-size: 11px; padding: 6px 8px; text-align: center; }
+        /* ========================================================= */
+        /* 1. KHUSUS HP & LAYAR KECIL (PORTRAIT ATAU HP LANDSCAPE)   */
+        /* ========================================================= */
+        @media screen and (max-width: 767px), screen and (max-height: 500px) and (orientation: landscape) {
+            #top-bar { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; }
+            
+            /* PERBAIKAN: Tombol atas dibuat 1 baris (Bisa digeser/di-scroll ke kanan) */
+            .status-indicator { flex-wrap: nowrap !important; overflow-x: auto !important; justify-content: flex-start; gap: 6px; padding-bottom: 6px; }
+            .btn-top { flex: 0 0 auto !important; font-size: 11px; padding: 6px 12px; white-space: nowrap; margin: 0; }
+            
             #workspace-tabs { padding: 8px 8px 0 8px; }
             .ws-tab { padding: 8px 12px; font-size: 13px; }
             
-            #main-workspace { flex-direction: column; }
-            #menu-section { flex: 1; border-right: none; border-bottom: 3px solid #bdc3c7; min-height: 0; }
-            #cart-section { flex: none; height: 35vh; } 
+            /* TAMPILAN STACK: Atas Menu, Bawah Keranjang */
+            #main-workspace { flex-direction: column !important; height: auto !important; overflow: auto !important;}
+            #menu-section { flex: 1 !important; border-right: none !important; border-bottom: 3px solid #bdc3c7 !important; min-height: 50vh !important; }
+            #cart-section { flex: none !important; height: 50vh !important; display: flex !important; flex-direction: column !important; }
             
-            #command-bar { padding: 8px; }
-            #customer-input-section { flex-direction: column; align-items: stretch; }
-            .input-group { flex-direction: column; width: 100%; gap: 8px; }
-            .input-group input { padding: 8px; font-size: 13px; }
-            .btn-action-group { width: 100%; }
-            .btn-action-group button { padding: 8px; font-size: 12px; }
-            #active-customer-banner { flex-direction: column; gap: 8px; align-items: stretch; text-align: center; padding: 8px 12px; }
+            #command-bar { padding: 8px !important; }
+            #customer-input-section { flex-direction: column !important; align-items: stretch !important; gap: 6px !important; }
+            .input-group { flex-direction: column !important; width: 100% !important; gap: 6px !important; }
+            .input-group input { padding: 8px !important; font-size: 13px !important; }
+            .btn-action-group { flex-direction: row !important; width: 100% !important; gap: 6px !important;}
+            .btn-action-group button { flex: 1 !important; padding: 8px !important; font-size: 12px !important; }
+            #active-customer-banner { flex-direction: column !important; gap: 8px !important; align-items: stretch !important; text-align: center !important; padding: 8px 12px !important; }
+
+            .category-tabs { padding: 8px !important; }
+            .cat-btn { padding: 8px 12px !important; font-size: 12px !important; }
+            #product-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important; padding: 10px !important; gap: 8px !important; }
+            .product-card { padding: 8px !important; border-radius: 6px !important; }
+            .product-card h4 { font-size: 12px !important; margin-bottom: 2px !important; }
+            .price-badge { font-size: 11px !important; padding: 4px 6px !important; margin-top: 4px !important; }
+            
+            #cart-header { padding: 8px !important; font-size: 13px !important; }
+            #cart-items { padding: 5px 8px !important; flex: 1 !important; overflow-y: auto !important;}
+            .cart-item { padding: 6px 0 !important; font-size: 12px !important; }
+            .cart-qty { padding: 2px 6px !important; }
+            
+            #checkout-panel { padding: 8px !important; flex-shrink: 0 !important; }
+            .grand-total { font-size: 15px !important; }
+            .btn-pay { padding: 8px !important; font-size: 13px !important; margin-top: 6px !important; }
+
+            .modal-content { width: 100% !important; padding: 15px !important; }
+            .numpad-grid { gap: 4px !important; margin-bottom: 10px !important; }
+            .num-btn { padding: 10px !important; font-size: 16px !important; }
+            .split-pay-grid { grid-template-columns: 1fr !important; gap: 6px !important; padding: 8px !important; }
+            .form-box { margin-bottom: 10px !important; }
+            .form-box label { font-size: 11px !important; margin-bottom: 3px !important; }
+            .form-box input, .form-box select { padding: 8px !important; font-size: 13px !important; }
+            .ticket-grid { grid-template-columns: 1fr !important; }
+            .ticket-card { padding: 10px !important; font-size: 12px !important; }
+            .ticket-btn { padding: 6px !important; font-size: 12px !important; margin-top: 6px !important; }
+            .history-row { padding: 8px !important; font-size: 12px !important; }
+            .history-row button { padding: 4px 8px !important; font-size: 11px !important; }
+            #glass-overlay h1 { font-size: 32px !important; }
+            #glass-overlay h2 { font-size: 20px !important; }
+            #glass-overlay p { font-size: 14px !important; }
         }
 
-        /* 2. KHUSUS MODE HORIZONTAL / LANDSCAPE (TABLET KASIR: KIRI MENU, KANAN KERANJANG) */
-        @media screen and (orientation: landscape) {
+        /* ========================================================= */
+        /* 2. KHUSUS TABLET KASIR (LANDSCAPE SPLIT VIEW: KIRI & KANAN) */
+        /* ========================================================= */
+        @media screen and (min-width: 768px) and (min-height: 501px) and (orientation: landscape) {
             #top-bar { flex-direction: row !important; padding: 6px 15px !important; align-items: center !important; }
             .status-indicator { flex-wrap: nowrap !important; overflow-x: auto !important; }
             .btn-top { flex: none !important; padding: 5px 8px !important; font-size: 11px !important; margin: 0 0 0 4px !important; }
@@ -263,6 +303,8 @@
             #glass-overlay h2 { font-size: 18px !important; margin: 4px 0 !important; }
             #glass-overlay p { font-size: 12px !important; }
         }
+    </style>
+</head>
     </style>
 
 </head>
