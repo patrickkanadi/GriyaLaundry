@@ -196,137 +196,73 @@
 
  
 
-        @media screen and (max-width: 1100px) {
-
+        /* 1. KHUSUS MODE VERTIKAL / PORTRAIT (HP / Tablet Berdiri) */
+        @media screen and (max-width: 1100px) and (orientation: portrait) {
             #top-bar { flex-direction: column; align-items: stretch; gap: 8px; padding: 8px; }
-
             .status-indicator { flex-wrap: wrap; justify-content: center; gap: 4px; }
-
             .btn-top { flex: 1 1 calc(20% - 4px); margin: 2px; font-size: 11px; padding: 6px 8px; text-align: center; }
-
             #workspace-tabs { padding: 8px 8px 0 8px; }
-
             .ws-tab { padding: 8px 12px; font-size: 13px; }
-
             
-
             #main-workspace { flex-direction: column; }
-
             #menu-section { flex: 1; border-right: none; border-bottom: 3px solid #bdc3c7; min-height: 0; }
-
             #cart-section { flex: none; height: 35vh; } 
-
             
-
             #command-bar { padding: 8px; }
-
             #customer-input-section { flex-direction: column; align-items: stretch; }
-
             .input-group { flex-direction: column; width: 100%; gap: 8px; }
-
             .input-group input { padding: 8px; font-size: 13px; }
-
             .btn-action-group { width: 100%; }
-
             .btn-action-group button { padding: 8px; font-size: 12px; }
-
             #active-customer-banner { flex-direction: column; gap: 8px; align-items: stretch; text-align: center; padding: 8px 12px; }
-
-            .category-tabs { padding: 8px; }
-
-            .cat-btn { padding: 8px 12px; font-size: 12px; }
-
-            #product-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); padding: 10px; gap: 8px; }
-
-            .product-card { padding: 8px; border-radius: 6px; }
-
-            .product-card h4 { font-size: 12px; margin-bottom: 2px; }
-
-            .price-badge { font-size: 11px; padding: 4px 6px; margin-top: 4px; }
-
-            
-
-            #cart-header { padding: 8px; font-size: 13px; }
-
-            #cart-items { padding: 5px 8px; }
-
-            .cart-item { padding: 6px 0; font-size: 12px; }
-
-            .cart-qty { padding: 2px 6px; }
-
-            
-
-            #checkout-panel { padding: 8px; }
-
-            .grand-total { font-size: 15px; }
-
-            .btn-pay { padding: 8px; font-size: 13px; margin-top: 6px; }
-
-
-
-            .modal-content { width: 100%; padding: 15px; }
-
-            .numpad-grid { gap: 4px; margin-bottom: 10px; }
-
-            .num-btn { padding: 10px; font-size: 16px; }
-
-            .split-pay-grid { grid-template-columns: 1fr; gap: 6px; padding: 8px; }
-
-            .form-box { margin-bottom: 10px; }
-
-            .form-box label { font-size: 11px; margin-bottom: 3px; }
-
-            .form-box input, .form-box select { padding: 8px; font-size: 13px; }
-
-            .ticket-grid { grid-template-columns: 1fr; }
-
-            .ticket-card { padding: 10px; font-size: 12px; }
-
-            .ticket-btn { padding: 6px; font-size: 12px; margin-top: 6px; }
-
-            .history-row { padding: 8px; font-size: 12px; }
-
-            .history-row button { padding: 4px 8px; font-size: 11px; }
-
-            #glass-overlay h1 { font-size: 32px; }
-
-            #glass-overlay h2 { font-size: 20px; }
-
-            #glass-overlay p { font-size: 14px; }
-
         }
 
-        /* --- OPTIMIZATION FOR 8-INCH TABLET LANDSCAPE (A7 LITE & SM-T295) --- */
-        @media screen and (min-width: 700px) and (max-height: 850px) and (orientation: landscape) {
-            #top-bar { padding: 5px 15px !important; }
-            .status-indicator { flex-wrap: nowrap !important; overflow-x: auto; padding-bottom: 2px; }
-            .btn-top { padding: 4px 8px !important; font-size: 11px !important; white-space: nowrap; margin-left: 4px !important; }
+        /* 2. KHUSUS MODE HORIZONTAL / LANDSCAPE (TABLET KASIR: KIRI MENU, KANAN KERANJANG) */
+        @media screen and (orientation: landscape) {
+            #top-bar { flex-direction: row !important; padding: 6px 15px !important; align-items: center !important; }
+            .status-indicator { flex-wrap: nowrap !important; overflow-x: auto !important; }
+            .btn-top { flex: none !important; padding: 5px 8px !important; font-size: 11px !important; margin: 0 0 0 4px !important; }
             
-            #workspace-tabs { padding: 5px 15px 0 15px !important; }
-            .ws-tab { padding: 8px 15px !important; font-size: 13px !important; }
-            
-            #command-bar { padding: 8px 15px !important; border-bottom: 1px solid #ecf0f1 !important; }
-            .input-group input { padding: 6px 10px !important; font-size: 13px !important; }
-            .btn-action-group button { padding: 6px 10px !important; font-size: 12px !important; }
-            
-            #active-customer-banner { padding: 6px 15px !important; }
-            .category-tabs { padding: 5px 10px !important; }
-            .cat-btn { padding: 8px 15px !important; font-size: 13px !important; }
-            
-            #product-grid { padding: 10px 15px !important; gap: 10px !important; }
-            .product-card { padding: 10px !important; }
-            .product-card h4 { font-size: 13px !important; margin: 0 0 5px 0 !important; }
-            .price-badge { padding: 4px 8px !important; font-size: 12px !important; margin-top: 5px !important; }
-            
-            .antrean-btn { padding: 8px 5px !important; font-size: 12px !important; }
-            #cart-header { padding: 8px 15px !important; }
-            .cart-item { padding: 8px 0 !important; }
-            
-            #checkout-panel { padding: 10px 15px !important; }
-            .btn-pay { padding: 10px !important; font-size: 14px !important; margin-top: 8px !important; }
-            .grand-total { font-size: 18px !important; margin-bottom: 5px !important; }
-        }
+            #workspace-tabs { padding: 4px 15px 0 15px !important; }
+            .ws-tab { padding: 6px 16px !important; font-size: 13px !important; }
 
+            /* SPLIT WORKSPACE: KIRI (MENU) & KANAN (KERANJANG) */
+            #main-workspace { flex-direction: row !important; height: 100% !important; overflow: hidden !important; }
+            #menu-section { flex: 6.2 !important; border-right: 2px solid #ddd !important; border-bottom: none !important; height: 100% !important; }
+            #cart-section { flex: 3.8 !important; height: 100% !important; display: flex !important; flex-direction: column !important; }
+
+            /* COMMAND BAR / INPUT PELANGGAN DALAM 1 BARIS */
+            #command-bar { padding: 6px 12px !important; border-bottom: 1px solid #ecf0f1 !important; }
+            #customer-input-section { flex-direction: row !important; align-items: center !important; gap: 8px !important; }
+            .input-group { flex-direction: row !important; gap: 6px !important; flex: 1 !important; }
+            .input-group input { padding: 6px 10px !important; font-size: 13px !important; height: 34px !important; }
+            .btn-action-group { flex-direction: row !important; gap: 6px !important; flex: none !important; }
+            .btn-action-group button { padding: 6px 10px !important; font-size: 12px !important; height: 34px !important; white-space: nowrap !important; }
+            #active-customer-banner { flex-direction: row !important; padding: 6px 12px !important; }
+
+            /* MENU PRODUK & TOMBOL KATEGORI */
+            .category-tabs { padding: 5px 10px !important; gap: 6px !important; }
+            .cat-btn { padding: 7px 14px !important; font-size: 12px !important; }
+            #product-grid { padding: 8px 12px !important; gap: 8px !important; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important; }
+            .product-card { padding: 8px !important; }
+            .product-card h4 { font-size: 12px !important; margin: 0 0 4px 0 !important; }
+            .price-badge { font-size: 11px !important; padding: 3px 6px !important; margin-top: 4px !important; }
+
+            /* KERANJANG DI SISI KANAN (FULL TINGGI LAYAR) */
+            .antrean-btn { padding: 6px 4px !important; font-size: 11px !important; }
+            #cart-header { padding: 6px 12px !important; font-size: 13px !important; }
+            #cart-items { padding: 6px 10px !important; flex: 1 !important; overflow-y: auto !important; }
+            .cart-item { padding: 6px 0 !important; font-size: 12px !important; }
+            
+            /* PANEL CHECKOUT TETAP MELEKAT DI BAWAH KERANJANG */
+            #checkout-panel { padding: 8px 12px !important; flex-shrink: 0 !important; }
+            .grand-total { font-size: 16px !important; }
+            .btn-pay { padding: 9px !important; font-size: 13px !important; margin-top: 6px !important; }
+            
+            #glass-overlay h1 { font-size: 32px !important; }
+            #glass-overlay h2 { font-size: 18px !important; margin: 4px 0 !important; }
+            #glass-overlay p { font-size: 12px !important; }
+        }
     </style>
 
 </head>
