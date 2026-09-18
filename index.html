@@ -197,40 +197,46 @@
  
 
         /* ========================================================= */
-        /* 1. KHUSUS HP & LAYAR KECIL (PORTRAIT ATAU HP LANDSCAPE)   */
+        /* 1. KHUSUS MODE VERTIKAL / PORTRAIT (HP & TABLET BERDIRI)  */
         /* ========================================================= */
-        @media screen and (max-width: 767px), screen and (max-height: 500px) and (orientation: landscape) {
+        @media screen and (orientation: portrait) {
             #top-bar { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; }
-            
-            /* PERBAIKAN: Tombol atas dibuat 1 baris (Bisa digeser/di-scroll ke kanan) */
             .status-indicator { flex-wrap: nowrap !important; overflow-x: auto !important; justify-content: flex-start; gap: 6px; padding-bottom: 6px; }
             .btn-top { flex: 0 0 auto !important; font-size: 11px; padding: 6px 12px; white-space: nowrap; margin: 0; }
             
             #workspace-tabs { padding: 8px 8px 0 8px; }
             .ws-tab { padding: 8px 12px; font-size: 13px; }
             
-            /* TAMPILAN STACK: Atas Menu, Bawah Keranjang */
-            #main-workspace { flex-direction: column !important; height: auto !important; overflow: auto !important;}
-            #menu-section { flex: 1 !important; border-right: none !important; border-bottom: 3px solid #bdc3c7 !important; min-height: 50vh !important; }
-            #cart-section { flex: none !important; height: 50vh !important; display: flex !important; flex-direction: column !important; }
+            /* --- KUNCI COMPACT VIEW ---
+               Bagi layar jadi 2 kotak (Atas: Menu 55%, Bawah: Keranjang 45%)
+               Keduanya scroll masing-masing agar tombol Bayar selalu terlihat! */
+            #main-workspace { flex-direction: column !important; height: 100% !important; overflow: hidden !important; }
+            
+            #menu-section { flex: 5.5 !important; border-right: none !important; border-bottom: 3px solid #bdc3c7 !important; height: 100% !important; display: flex !important; flex-direction: column !important; }
+            #product-grid { flex: 1 !important; overflow-y: auto !important; align-content: start !important; }
+            
+            #cart-section { flex: 4.5 !important; height: 100% !important; display: flex !important; flex-direction: column !important; }
+            #cart-items { flex: 1 !important; overflow-y: auto !important; }
             
             #command-bar { padding: 8px !important; }
-            #customer-input-section { flex-direction: column !important; align-items: stretch !important; gap: 6px !important; }
-            .input-group { flex-direction: column !important; width: 100% !important; gap: 6px !important; }
-            .input-group input { padding: 8px !important; font-size: 13px !important; }
-            .btn-action-group { flex-direction: row !important; width: 100% !important; gap: 6px !important;}
-            .btn-action-group button { flex: 1 !important; padding: 8px !important; font-size: 12px !important; }
-            #active-customer-banner { flex-direction: column !important; gap: 8px !important; align-items: stretch !important; text-align: center !important; padding: 8px 12px !important; }
+            
+            /* Bikin form input compact & flexibel untuk Tablet & HP */
+            #customer-input-section { flex-direction: row !important; flex-wrap: wrap !important; gap: 6px !important; }
+            .input-group { flex: 1 !important; min-width: 200px !important; flex-direction: row !important; gap: 6px !important; }
+            .input-group input { padding: 6px 8px !important; font-size: 13px !important; }
+            .btn-action-group { flex: 1 !important; min-width: 200px !important; flex-direction: row !important; gap: 6px !important; }
+            .btn-action-group button { flex: 1 !important; padding: 6px 8px !important; font-size: 12px !important; }
+            
+            #active-customer-banner { flex-direction: row !important; justify-content: space-between !important; padding: 8px 12px !important; }
 
-            .category-tabs { padding: 8px !important; }
+            .category-tabs { padding: 6px 8px !important; }
             .cat-btn { padding: 8px 12px !important; font-size: 12px !important; }
-            #product-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important; padding: 10px !important; gap: 8px !important; }
+            #product-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important; padding: 8px !important; gap: 8px !important; }
             .product-card { padding: 8px !important; border-radius: 6px !important; }
             .product-card h4 { font-size: 12px !important; margin-bottom: 2px !important; }
             .price-badge { font-size: 11px !important; padding: 4px 6px !important; margin-top: 4px !important; }
             
             #cart-header { padding: 8px !important; font-size: 13px !important; }
-            #cart-items { padding: 5px 8px !important; flex: 1 !important; overflow-y: auto !important;}
             .cart-item { padding: 6px 0 !important; font-size: 12px !important; }
             .cart-qty { padding: 2px 6px !important; }
             
@@ -241,7 +247,7 @@
             .modal-content { width: 100% !important; padding: 15px !important; }
             .numpad-grid { gap: 4px !important; margin-bottom: 10px !important; }
             .num-btn { padding: 10px !important; font-size: 16px !important; }
-            .split-pay-grid { grid-template-columns: 1fr !important; gap: 6px !important; padding: 8px !important; }
+            .split-pay-grid { grid-template-columns: 1fr 1fr !important; gap: 6px !important; padding: 8px !important; }
             .form-box { margin-bottom: 10px !important; }
             .form-box label { font-size: 11px !important; margin-bottom: 3px !important; }
             .form-box input, .form-box select { padding: 8px !important; font-size: 13px !important; }
@@ -256,57 +262,74 @@
         }
 
         /* ========================================================= */
-        /* 2. KHUSUS TABLET KASIR (LANDSCAPE SPLIT VIEW: KIRI & KANAN) */
+        /* 2. KHUSUS HP LANDSCAPE (LAYAR PENDEK, MAX HEIGHT 500px)   */
         /* ========================================================= */
-        @media screen and (min-width: 768px) and (min-height: 501px) and (orientation: landscape) {
-            #top-bar { flex-direction: row !important; padding: 6px 15px !important; align-items: center !important; }
+        @media screen and (max-height: 500px) and (orientation: landscape) {
+            #top-bar { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; }
+            .status-indicator { flex-wrap: nowrap !important; overflow-x: auto !important; justify-content: flex-start; gap: 6px; padding-bottom: 6px; }
+            .btn-top { flex: 0 0 auto !important; font-size: 11px; padding: 6px 12px; margin: 0; }
+            
+            #main-workspace { flex-direction: column !important; height: auto !important; overflow-y: auto !important; }
+            #menu-section { flex: none !important; border-right: none !important; border-bottom: 3px solid #bdc3c7 !important; height: auto !important; overflow: visible !important; }
+            #product-grid { overflow: visible !important; }
+            #cart-section { flex: none !important; height: auto !important; display: flex !important; flex-direction: column !important; }
+            #cart-items { min-height: 250px; overflow: visible !important; }
+            
+            #customer-input-section { flex-direction: row !important; align-items: center !important; }
+        }
+
+        /* ========================================================= */
+        /* 3. KHUSUS TABLET LANDSCAPE (KIRI MENU, KANAN KERANJANG)   */
+        /* ========================================================= */
+        @media screen and (min-width: 500px) and (min-height: 501px) and (orientation: landscape) {
+            #top-bar { flex-direction: row !important; padding: 4px 15px !important; align-items: center !important; }
             .status-indicator { flex-wrap: nowrap !important; overflow-x: auto !important; }
             .btn-top { flex: none !important; padding: 5px 8px !important; font-size: 11px !important; margin: 0 0 0 4px !important; }
             
             #workspace-tabs { padding: 4px 15px 0 15px !important; }
             .ws-tab { padding: 6px 16px !important; font-size: 13px !important; }
 
-            /* SPLIT WORKSPACE: KIRI (MENU) & KANAN (KERANJANG) */
+            /* SPLIT WORKSPACE: KIRI (MENU 60%) & KANAN (KERANJANG 40%) */
             #main-workspace { flex-direction: row !important; height: 100% !important; overflow: hidden !important; }
-            #menu-section { flex: 6.2 !important; border-right: 2px solid #ddd !important; border-bottom: none !important; height: 100% !important; }
-            #cart-section { flex: 3.8 !important; height: 100% !important; display: flex !important; flex-direction: column !important; }
+            
+            #menu-section { flex: 6 !important; border-right: 2px solid #ddd !important; border-bottom: none !important; height: 100% !important; display: flex !important; flex-direction: column !important; }
+            #product-grid { flex: 1 !important; overflow-y: auto !important; align-content: start !important; }
 
-            /* COMMAND BAR / INPUT PELANGGAN DALAM 1 BARIS */
+            #cart-section { flex: 4 !important; height: 100% !important; display: flex !important; flex-direction: column !important; }
+            #cart-items { flex: 1 !important; overflow-y: auto !important; }
+
+            /* COMMAND BAR DALAM 1 BARIS */
             #command-bar { padding: 6px 12px !important; border-bottom: 1px solid #ecf0f1 !important; }
             #customer-input-section { flex-direction: row !important; align-items: center !important; gap: 8px !important; }
             .input-group { flex-direction: row !important; gap: 6px !important; flex: 1 !important; }
-            .input-group input { padding: 6px 10px !important; font-size: 13px !important; height: 34px !important; }
+            .input-group input { padding: 6px 10px !important; font-size: 12px !important; height: 32px !important; }
             .btn-action-group { flex-direction: row !important; gap: 6px !important; flex: none !important; }
-            .btn-action-group button { padding: 6px 10px !important; font-size: 12px !important; height: 34px !important; white-space: nowrap !important; }
+            .btn-action-group button { padding: 6px 10px !important; font-size: 11px !important; height: 32px !important; white-space: nowrap !important; }
             #active-customer-banner { flex-direction: row !important; padding: 6px 12px !important; }
 
-            /* MENU PRODUK & TOMBOL KATEGORI */
+            /* MENU PRODUK */
             .category-tabs { padding: 5px 10px !important; gap: 6px !important; }
-            .cat-btn { padding: 7px 14px !important; font-size: 12px !important; }
+            .cat-btn { padding: 6px 12px !important; font-size: 12px !important; }
             #product-grid { padding: 8px 12px !important; gap: 8px !important; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important; }
             .product-card { padding: 8px !important; }
             .product-card h4 { font-size: 12px !important; margin: 0 0 4px 0 !important; }
             .price-badge { font-size: 11px !important; padding: 3px 6px !important; margin-top: 4px !important; }
 
-            /* KERANJANG DI SISI KANAN (FULL TINGGI LAYAR) */
+            /* KERANJANG DI SISI KANAN */
             .antrean-btn { padding: 6px 4px !important; font-size: 11px !important; }
             #cart-header { padding: 6px 12px !important; font-size: 13px !important; }
-            #cart-items { padding: 6px 10px !important; flex: 1 !important; overflow-y: auto !important; }
             .cart-item { padding: 6px 0 !important; font-size: 12px !important; }
             
-            /* PANEL CHECKOUT TETAP MELEKAT DI BAWAH KERANJANG */
+            /* PANEL CHECKOUT */
             #checkout-panel { padding: 8px 12px !important; flex-shrink: 0 !important; }
             .grand-total { font-size: 16px !important; }
-            .btn-pay { padding: 9px !important; font-size: 13px !important; margin-top: 6px !important; }
+            .btn-pay { padding: 8px !important; font-size: 13px !important; margin-top: 6px !important; }
             
             #glass-overlay h1 { font-size: 32px !important; }
             #glass-overlay h2 { font-size: 18px !important; margin: 4px 0 !important; }
             #glass-overlay p { font-size: 12px !important; }
         }
     </style>
-</head>
-    </style>
-
 </head>
 
 <body>
