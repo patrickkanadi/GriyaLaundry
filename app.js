@@ -2622,18 +2622,14 @@ window.saveMemberToDB = function(profile) {
 // ==========================================
 
 window.renderActiveTickets = function() {
-
     const grid = document.getElementById("ticket-grid-container"); if(!grid) return;
-
     grid.innerHTML = "";
-
-    let tickets = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup");
-
+    let currentOutlet = window.getActiveOutlet();
+    let tickets = activeLaundryTickets.filter(t => (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && t.outlet === currentOutlet);
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada cucian aktif.</p>";
-
     
-
     tickets.forEach((ticket) => {
+        // ... (keep the rest of the loop the same)
 
         const isReady = ticket.orderStatus === "Ready for Pickup";
 
@@ -2654,20 +2650,14 @@ window.renderActiveTickets = function() {
 
 
 window.renderPiutangTickets = function() {
-
     const grid = document.getElementById("piutang-grid-container"); if(!grid) return;
-
     grid.innerHTML = "";
-
-    
-
-    let tickets = activeLaundryTickets.filter(t => (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0));
-
+    let currentOutlet = window.getActiveOutlet();
+    let tickets = activeLaundryTickets.filter(t => (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0) && t.outlet === currentOutlet);
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada tagihan piutang aktif.</p>";
-
     
-
     tickets.forEach((ticket) => {
+        // ... (keep the rest of the loop the same)
 
         const remaining = (ticket.hotelPiutangAmount || 0) + (ticket.tamuPiutangAmount || 0);
 
@@ -3581,7 +3571,21 @@ window.syncMasterData = async function(isSilent = false) {
 
                 });
 
-                outletSel.onchange = (e) => localStorage.setItem("selectedOutlet", e.target.value);
+                outletSel.onchange = (e) => { 
+                    let newOutlet = e.target.value;
+                    localStorage.setItem("selectedOutlet", newOutlet);
+                    window.currentOutlet = newOutlet;
+                    
+                    let tCount = activeLaundryTickets.filter(t => (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && t.outlet === newOutlet).length;
+                    let pCount = activeLaundryTickets.filter(t => (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0) && t.outlet === newOutlet).length;
+                    
+                    let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
+                    let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
+                    
+                    if (!document.getElementById("pos-screen").classList.contains("hidden")) { 
+                        window.renderActiveTickets(); window.renderPiutangTickets(); 
+                    }
+                };
 
             }
 
@@ -3706,11 +3710,12 @@ window.syncMasterData = async function(isSilent = false) {
                     // Combine them! Local pending changes now successfully override stale server data.
                     activeLaundryTickets = [...safeServerTickets, ...activePending];
                     
-                    let tCount = activeLaundryTickets.filter(t => t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup").length;
-                    let pCount = activeLaundryTickets.filter(t => t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0).length;
+                    let activeOutlet = window.getActiveOutlet();
+                    let tCount = activeLaundryTickets.filter(t => (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && t.outlet === activeOutlet).length;
+                    let pCount = activeLaundryTickets.filter(t => (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0) && t.outlet === activeOutlet).length;
                     
-                    let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
-                    let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
+                    let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = activeLaundryTickets.filter(t => (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && t.outlet === currentOutlet).length;
+                    let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = activeLaundryTickets.filter(t => (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0) && t.outlet === currentOutlet).length;
                     
                     if (!document.getElementById("pos-screen").classList.contains("hidden")) { 
                         window.renderActiveTickets(); window.renderPiutangTickets(); 
