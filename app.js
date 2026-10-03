@@ -2624,49 +2624,52 @@ window.saveMemberToDB = function(profile) {
 window.renderActiveTickets = function() {
     const grid = document.getElementById("ticket-grid-container"); if(!grid) return;
     grid.innerHTML = "";
-    let currentOutlet = window.getActiveOutlet();
-    let tickets = activeLaundryTickets.filter(t => (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && t.outlet === currentOutlet);
+    
+    // Use .trim() to strip any invisible spaces from Google Sheets
+    let currentOutlet = String(window.getActiveOutlet()).trim();
+    let tickets = activeLaundryTickets.filter(t => 
+        (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && 
+        String(t.outlet || "Pusat").trim() === currentOutlet
+    );
+    
+    // BULLETPROOF FIX: Force the tab badge to exactly match the rendered cards
+    let tc = document.getElementById("ticket-count"); 
+    if(tc) tc.innerText = tickets.length;
+
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada cucian aktif.</p>";
     
     tickets.forEach((ticket) => {
-        // ... (keep the rest of the loop the same)
-
         const isReady = ticket.orderStatus === "Ready for Pickup";
-
         let receiptText = ticket.readableReceipt || (ticket.items ? ticket.items.map(i => `${i.qty % 1 !== 0 ? i.qty.toFixed(2) : i.qty}x ${i.name}`).join('\n') : "");
-
-        let expectedWashing = ticket.washingCoins || 0; // Hanya ambil asumsi cuci
-
+        let expectedWashing = ticket.washingCoins || 0; 
         
-
         let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${expectedWashing})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil & Selesai</button>`;
-
         grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:13px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>${buttonsHtml}</div>`;
-
     });
-
 };
-
-
 
 window.renderPiutangTickets = function() {
     const grid = document.getElementById("piutang-grid-container"); if(!grid) return;
     grid.innerHTML = "";
-    let currentOutlet = window.getActiveOutlet();
-    let tickets = activeLaundryTickets.filter(t => (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0) && t.outlet === currentOutlet);
+    
+    // Use .trim() to strip any invisible spaces from Google Sheets
+    let currentOutlet = String(window.getActiveOutlet()).trim();
+    let tickets = activeLaundryTickets.filter(t => 
+        (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0) && 
+        String(t.outlet || "Pusat").trim() === currentOutlet
+    );
+    
+    // BULLETPROOF FIX: Force the tab badge to exactly match the rendered cards
+    let pc = document.getElementById("piutang-count"); 
+    if(pc) pc.innerText = tickets.length;
+
     if(tickets.length === 0) return grid.innerHTML = "<p>Tidak ada tagihan piutang aktif.</p>";
     
     tickets.forEach((ticket) => {
-        // ... (keep the rest of the loop the same)
-
         const remaining = (ticket.hotelPiutangAmount || 0) + (ticket.tamuPiutangAmount || 0);
-
         let btn = `<button class="ticket-btn" style="background:#e74c3c;" onclick="window.openPiutangPayment('${ticket.orderId}', ${remaining})">Bayar Piutang</button>`;
-
         grid.innerHTML += `<div class="ticket-card"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:16px; font-weight:bold; margin-top:5px; color:#c0392b;">Sisa: Rp ${remaining.toLocaleString('id-ID')}</div>${btn}</div>`;
-
     });
-
 };
 
 
