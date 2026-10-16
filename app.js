@@ -1979,6 +1979,22 @@ window.renderCart = function() {
 window.openReview = async function() {
     if (currentCart.length === 0) return alert("Keranjang masih kosong!");
     
+    // --- THE NEW CODE: FETCH SALES STAFF DYNAMICALLY ---
+    db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = (e) => {
+        let allStaff = e.target.result || [];
+        // Filter only staff whose role contains the word "sales" (case-insensitive)
+        let salesStaff = allStaff.filter(s => String(s.role).toLowerCase().includes("sales"));
+        let sel = document.getElementById("salesperson-select");
+        if (sel) {
+            sel.innerHTML = '<option value="-">-- Tidak Ada / Walk-in --</option>';
+            salesStaff.forEach(s => {
+                sel.innerHTML += `<option value="${s.name}">${s.name}</option>`;
+            });
+            sel.value = "-"; // Reset to default
+        }
+    };
+    // ---------------------------------------------------
+
     // TARIK PENGATURAN PROMO
     const settings = await window.getDynamicSettings();
     let promoRules = {};
@@ -2544,9 +2560,14 @@ window.finalizeOrder = async function(shouldPrint) {
 
     let isLaundry = currentCart.some(i => String(i.workflow).toUpperCase() === "TICKET");
     let finalStatus = isLaundry ? "Processing" : (totalPiutang > 0 ? "Pending Debt" : "Completed");
+    
+    // Capture the selected salesperson
+    let spDropdown = document.getElementById("salesperson-select");
+    let selectedSalesperson = spDropdown ? spDropdown.value : "-";
 
     const orderPayload = {
         orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
+        salesperson: selectedSalesperson, // <--- INJECT IT INTO THE PAYLOAD
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, actualCoins: isLaundry ? 0 : expectedCoinsTotal, 
