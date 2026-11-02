@@ -726,10 +726,10 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
     let stampItems = [];
     
     for (let k in storedObj) {
-        if (k.startsWith(" *stamp* ")) {
-            let cleanName = k.replace(" *stamp* ", "");
+        if (k.startsWith("_stamp_")) {
+            let cleanName = k.replace("_stamp_", "");
             stampItems.push(cleanName + ": " + storedObj[k] + "x");
-        } else if (!k.startsWith(" *prog* ")) {
+        } else if (!k.startsWith("_prog_")) {
             rewardItems.push(k + ": " + storedObj[k] + "x");
         }
     }
@@ -3734,12 +3734,12 @@ window.syncMasterData = async function(isSilent = false) {
                     // Combine them! Local pending changes now successfully override stale server data.
                     activeLaundryTickets = [...safeServerTickets, ...activePending];
                     
-                    let activeOutlet = window.getActiveOutlet();
-                    let tCount = activeLaundryTickets.filter(t => (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && t.outlet === activeOutlet).length;
-                    let pCount = activeLaundryTickets.filter(t => (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0) && t.outlet === activeOutlet).length;
+                    let activeOutlet = String(window.getActiveOutlet()).trim();
+                    let tCount = activeLaundryTickets.filter(t => (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && String(t.outlet || "Pusat").trim() === activeOutlet).length;
+                    let pCount = activeLaundryTickets.filter(t => (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0) && String(t.outlet || "Pusat").trim() === activeOutlet).length;
                     
-                    let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = activeLaundryTickets.filter(t => (t.orderStatus === "Processing" || t.orderStatus === "Ready for Pickup") && t.outlet === currentOutlet).length;
-                    let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = activeLaundryTickets.filter(t => (t.hotelPiutangAmount > 0 || t.tamuPiutangAmount > 0) && t.outlet === currentOutlet).length;
+                    let tc = document.getElementById("ticket-count"); if(tc) tc.innerText = tCount;
+                    let pc = document.getElementById("piutang-count"); if(pc) pc.innerText = pCount;
                     
                     if (!document.getElementById("pos-screen").classList.contains("hidden")) { 
                         window.renderActiveTickets(); window.renderPiutangTickets(); 
@@ -4341,20 +4341,49 @@ window.triggerEndShift = async function() {
 
 
 function performAutoClose(shift) {
-
     let tx = db.transaction(["orders", "expenses"], "readonly");
+    let allOrders = [];
+    let allExpenses = [];
 
-    tx.objectStore("orders").getAll().onsuccess = (e) => {
+    tx.objectStore("orders").getAll().onsuccess = (e) => { allOrders = e.target.result || []; };
+    tx.objectStore("expenses").getAll().onsuccess = (e) => { allExpenses = e.target.result || []; };
 
-        let vOrders = e.target.result.filter(o => o.shiftId === shift.shiftId && o.orderStatus !== "Voided");
+    tx.oncomplete = () => {
+        let vOrders = allOrders.filter(o => o.shiftId === shift.shiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
+        let vExpenses = allExpenses.filter(ex => ex.shiftId === shift.shiftId && ex.status === "Active");
 
-        let tOmset = vOrders.reduce((s, o) => s + o.grandTotal, 0);
+        let tCust = 0, tOrders = vOrders.length, tOmset = 0, tCash = 0, tQris = 0, tTransfer = 0;
+        let hPiu = 0, tPiu = 0, tFree = 0, tExpense = 0, tFreeItems = 0;
+        let foodSummary = {}, freeItemsSummary = {};
 
-        // Di atas const report =, tambahkan ini:
-        let initialC = Number(localStorage.getItem("session_initial_coins")) || 0;
+        vOrders.forEach(o => {
+            if (o.customerPhone && o.customerPhone !== "-" && o.customerPhone !== "Walk-in") tCust++;
+            tOmset += (Number(o.grandTotal) || 0);
+            tCash += (Number(o.cashAmount) || 0);
+            tQris += (Number(o.qrisAmount) || 0);
+            tTransfer += (Number(o.transferAmount) || 0);
+            hPiu += (Number(o.hotelPiutangAmount) || 0);
+            tPiu += (Number(o.tamuPiutangAmount) || 0);
+            tFree += (Number(o.freeAmount) || 0);
+
+            if (o.items) {
+                o.items.forEach(i => { foodSummary[i.name] = (foodSummary[i.name] || 0) + Number(i.qty); });
+            }
+            if (o.redeemedPromos) {
+                o.redeemedPromos.forEach(rp => {
+                    tFreeItems += (Number(rp.qty) || 0);
+                    let cleanName = String(rp.item).replace(/_/g, ' ');
+                    freeItemsSummary[cleanName] = (freeItemsSummary[cleanName] || 0) + (Number(rp.qty) || 0);
+                });
+            }
+        });
+
+        vExpenses.forEach(ex => { tExpense += (Number(ex.amount) || 0); });
+
+        let netCash = Math.max(0, tCash - tExpense);
+        let initialC = Number(shift.initialCoins || localStorage.getItem("session_initial_coins")) || 0;
         let endC = window.laciStocks ? (window.laciStocks[window.getActiveOutlet()] || 0) : 0;
 
-        // 3. Buat Laporan Super Lengkap
         const report = { 
             shiftId: shift.shiftId, cashier: shift.cashierName, loginTime: shift.loginTime, logoutTime: new Date().toISOString(), 
             totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer, 
@@ -4362,19 +4391,22 @@ function performAutoClose(shift) {
             foodSummary: foodSummary, freeItemsSummary: freeItemsSummary, totalFreeItems: tFreeItems,
             closeNote: "System Auto-Closed (Kasir Lupa Tutup Shift)", 
             outlet: window.getActiveOutlet(), syncStatus: "Pending",
-            initialCoins: initialC, endCoins: endC // INJEKSI KOIN
+            initialCoins: initialC, endCoins: endC
         };
 
         let txW = db.transaction(["local_shift_history", "shift_reports", "active_shifts"], "readwrite");
-
-        txW.objectStore("local_shift_history").add(report); txW.objectStore("shift_reports").add(report);
-
+        txW.objectStore("local_shift_history").put(report); 
+        txW.objectStore("shift_reports").put(report);
         txW.objectStore("active_shifts").delete(shift.pin);
 
-        if (shift.shiftId === currentShiftId) { alert("Shift kadaluarsa!"); window.location.reload(); }
-
+        txW.oncomplete = () => {
+            if (shift.shiftId === currentShiftId) { 
+                localStorage.removeItem("session_pin");
+                alert("Shift kadaluarsa dan telah ditutup otomatis!"); 
+                window.location.reload(); 
+            }
+        };
     };
-
 }
 
 
