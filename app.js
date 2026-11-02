@@ -173,7 +173,7 @@ window.rollbackOrderImpact = async function(order) {
     }
 
     // -- REFUND LOKAL KOIN STAFF (PINDAHKAN KE PALING ATAS) --
-    let refundedStaffCoins = 0;
+    
     if (order.redeemedPromos && Array.isArray(order.redeemedPromos)) {
         order.redeemedPromos.forEach(p => {
             if (p.source === 'staff_coin') refundedStaffCoins += Number(p.qty);
@@ -242,7 +242,7 @@ window.rollbackOrderImpact = async function(order) {
             absolutePoints -= (Number(order.coinsEarned) || 0);
 
             let redeemedLoyaltyCoins = 0;
-            let refundedStaffCoins = 0;
+            
             if (order.redeemedPromos && Array.isArray(order.redeemedPromos)) {
                 order.redeemedPromos.forEach(p => {
                     if (p.source === 'loyalty') redeemedLoyaltyCoins += Number(p.qty);
@@ -250,18 +250,6 @@ window.rollbackOrderImpact = async function(order) {
                 });
             }
             
-            // KEMBALIKAN KE DATABASE STAFF LOKAL JIKA ADA
-            if (refundedStaffCoins > 0) {
-                let txStaff = db.transaction(["staff"], "readwrite");
-                txStaff.objectStore("staff").getAll().onsuccess = (e) => {
-                    let allStaff = e.target.result;
-                    let s = allStaff.find(st => st.name === order.customerName);
-                    if (s) {
-                        s.freeCoins = (s.freeCoins || 0) + refundedStaffCoins;
-                        txStaff.objectStore("staff").put(s);
-                    }
-                };
-            }
             absolutePoints += (redeemedLoyaltyCoins * loyaltyTarget);
             absolutePoints = Math.max(0, absolutePoints);
 
@@ -904,19 +892,13 @@ window.attemptLogin = async function() {
         
 
         if (!staff) { 
-
             if (navigator.onLine) { 
-
                 if(loginBtn) loginBtn.innerText = "Menarik Data Baru...";
-
-                await window.syncInitData(); 
-
+                await window.syncMasterData(); 
+                await new Promise(r => setTimeout(r, 400)); // Tunggu IndexedDB selesai menyimpan
                 let staffList = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = e => res(e.target.result));
-
                 staff = staffList.find(s => s.pin === hashedPin);
-
             } 
-
         }
 
 
@@ -1003,8 +985,9 @@ window.attemptLogin = async function() {
                 localStorage.setItem("session_pin", currentPin);
                 localStorage.setItem("session_cashier", currentCashier);
                 localStorage.setItem("session_shift", currentShiftId);
+                localStorage.setItem("session_login_time", currentLoginTime);
                 localStorage.setItem("session_last_active", Date.now());
-
+                
                 window.switchWorkspace('new'); window.lockMenu(); loadMenuUI();
 
             };
@@ -4319,7 +4302,7 @@ window.triggerEndShift = async function() {
 
             // 4. BERSIHKAN TABLET
             let txW = db.transaction(["local_shift_history", "active_shifts"], "readwrite");
-            txW.objectStore("local_shift_history").add(finalServerReport); 
+            txW.objectStore("local_shift_history").put(finalServerReport);
             txW.objectStore("active_shifts").delete(currentPin);
             
             txW.oncomplete = async () => {
@@ -4452,6 +4435,7 @@ window.onload = async () => {
         currentPin = savedPin;
         currentCashier = localStorage.getItem("session_cashier") || "Kasir";
         currentShiftId = localStorage.getItem("session_shift");
+        currentLoginTime = localStorage.getItem("session_login_time") || new Date().toISOString();
         
         localStorage.setItem("session_last_active", Date.now()); // Reset timer
         
