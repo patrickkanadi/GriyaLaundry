@@ -2193,32 +2193,20 @@ window.applyPromo = function() {
 window.calculateRemaining = function(isCashManual = false) {
 
     let elQ = document.getElementById("pay-qris"); let q = elQ ? Number(elQ.value) : 0;
-
+    let elT = document.getElementById("pay-transfer"); let t = elT ? Number(elT.value) : 0;
     let elHP = document.getElementById("pay-hotel-piutang"); let hp = elHP ? Number(elHP.value) : 0;
-
     let elTP = document.getElementById("pay-tamu-piutang"); let tp = elTP ? Number(elTP.value) : 0;
-
     
-
     let pc = document.getElementById("pay-cash"); 
-
     let c = pc ? Number(pc.value) : 0;
 
-
-
     if (!isCashManual) {
-
-        let autoCash = window.cartGrandTotal - (q + hp + tp);
-
+        let autoCash = window.cartGrandTotal - (q + t + hp + tp);
         c = Math.max(0, autoCash);
-
         if (pc) pc.value = c;
-
     }
 
-
-
-    const totalAccounted = c + q + hp + tp; 
+    const totalAccounted = c + q + t + hp + tp;
 
     const remaining = Math.max(0, window.cartGrandTotal - totalAccounted);
 
@@ -2602,7 +2590,7 @@ window.finalizeOrder = async function(shouldPrint) {
 
 
 window.saveMemberToDB = function(profile) {
-    if(!profile.phone || profile.phone === "-") return;
+    if(!profile.phone || profile.phone === "-" || String(profile.phone).toUpperCase().startsWith("STF")) return;
     
     // INJECT TIMESTAMP: Catat kapan tablet mengubah data ini
     profile.localUpdateTime = Date.now(); 
