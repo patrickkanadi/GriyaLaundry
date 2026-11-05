@@ -678,11 +678,9 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
     
 
     // --- BREAKDOWN PEMBAYARAN ---
-
     if (order.cashAmount > 0) receipt += formatEscPosLine(" - Tunai/Cash", order.cashAmount.toLocaleString('id-ID'), false) + "\n";
-
     if (order.qrisAmount > 0) receipt += formatEscPosLine(" - QRIS", order.qrisAmount.toLocaleString('id-ID'), false) + "\n";
-
+    if (order.transferAmount > 0) receipt += formatEscPosLine(" - Transfer", order.transferAmount.toLocaleString('id-ID'), false) + "\n";
     if (order.freeAmount > 0) receipt += formatEscPosLine(" - Diskon/Promo", order.freeAmount.toLocaleString('id-ID'), false) + "\n";
 
 
