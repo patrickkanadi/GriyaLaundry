@@ -173,7 +173,7 @@ window.rollbackOrderImpact = async function(order) {
     }
 
     // -- REFUND LOKAL KOIN STAFF (PINDAHKAN KE PALING ATAS) --
-    
+    let refundedStaffCoins = 0;
     if (order.redeemedPromos && Array.isArray(order.redeemedPromos)) {
         order.redeemedPromos.forEach(p => {
             if (p.source === 'staff_coin') refundedStaffCoins += Number(p.qty);
@@ -3919,101 +3919,74 @@ window.runBackgroundSync = async function() {
 // ==========================================
 
 window.openShiftReport = function(historyData = null) {
-
     if (historyData) {
-
         populateShiftModal(historyData, false);
+        return;
+    }
 
-    } else {
+    if (!currentCashier) return alert("Anda belum membuka shift kasir.");
 
-        if (!db || !currentShiftId) return alert("Anda belum membuka shift kasir.");
+    // Tampilkan modal langsung dengan indikator loading
+    let modal = document.getElementById("shift-detail-modal");
+    if (modal) modal.classList.remove("hidden");
+    if (document.getElementById("sd-food")) document.getElementById("sd-food").innerHTML = "<div style='text-align:center; padding:15px; color:#2980b9;'>⏳ Mengambil & mengalkulasi data shift dari server...</div>";
 
+    let runLocalCalculation = () => {
         let tx = db.transaction(["orders", "expenses", "coin_retrievals"], "readonly");
-
         let activeOrders = []; let activeExpenses = []; let activeCoinRets = [];
 
-        
-
-        tx.objectStore("orders").getAll().onsuccess = (ev) => { activeOrders = ev.target.result; };
-
-        tx.objectStore("expenses").getAll().onsuccess = (ev) => { activeExpenses = ev.target.result; };
-
-        tx.objectStore("coin_retrievals").getAll().onsuccess = (ev) => { activeCoinRets = ev.target.result; };
-
-
+        tx.objectStore("orders").getAll().onsuccess = (ev) => { activeOrders = ev.target.result || []; };
+        tx.objectStore("expenses").getAll().onsuccess = (ev) => { activeExpenses = ev.target.result || []; };
+        tx.objectStore("coin_retrievals").getAll().onsuccess = (ev) => { activeCoinRets = ev.target.result || []; };
 
         tx.oncomplete = async () => {
-
             let shiftOrders = activeOrders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
-
             let shiftExpenses = activeExpenses.filter(e => e.shiftId === currentShiftId && e.status === "Active");
-
-            let loginTimeMs = new Date(currentLoginTime).getTime();
-
+            let loginTimeMs = new Date(currentLoginTime || Date.now()).getTime();
             let shiftCoinRets = activeCoinRets.filter(cr => cr.cashier === currentCashier && new Date(cr.timestamp).getTime() >= loginTimeMs);
 
-
-
-            let tCust = 0; let tOrders = 0; let tOmset = 0; let tCash = 0; let tQris = 0;
-
-            let hPiu = 0; let tPiu = 0; let tFree = 0; let tExpense = 0; let foodSummary = {};
-
-            let tFreeItems = 0; let tDiscountNom = 0; let tCoinsUsed = 0; let tCoinsRecycled = 0; let tCoinsJammed = 0;
-            let coinCategorySummary = {}; 
-            let freeItemsSummary = {}; // <--- TAMBAHKAN INI
-
-
+            let tCust = 0, tOrders = 0, tOmset = 0, tCash = 0, tQris = 0, tTransfer = 0;
+            let hPiu = 0, tPiu = 0, tFree = 0, tExpense = 0, foodSummary = {}, freeItemsSummary = {};
+            let tFreeItems = 0, tDiscountNom = 0, tCoinsUsed = 0, tCoinsRecycled = 0, tCoinsJammed = 0;
+            let coinCategorySummary = {};
 
             const settings = await window.getDynamicSettings();
-
             let kesetPerBatch = Number(settings["Keset_Per_Batch"]) || 5; 
-
             let bantalPerBatch = Number(settings["Sarung_Bantal_Per_Batch"]) || 10;
-
             let kgPerCuci = Number(settings["Kilo_Per_Koin_Cuci"]) || 5;
-
             let kgPerKering = Number(settings["Kilo_Per_Koin_Kering"]) || 5;
-
-
+            let enableCoinAssumption = String(settings["Enable_Coin_Assumption"]).toUpperCase() !== "FALSE";
 
             shiftOrders.forEach(o => {
+                tOrders++;
+                if (o.customerPhone && o.customerPhone !== "-") tCust++;
+                tOmset += (Number(o.grandTotal) || 0);
+                tCash += (Number(o.cashAmount) || 0);
+                tQris += (Number(o.qrisAmount) || 0);
+                tTransfer += (Number(o.transferAmount) || 0);
+                hPiu += (Number(o.hotelPiutangAmount) || 0);
+                tPiu += (Number(o.tamuPiutangAmount) || 0);
+                tFree += (Number(o.freeAmount) || 0);
+                tDiscountNom += (Number(o.discounts) || 0);
 
-                tOrders++; if (o.customerPhone && o.customerPhone !== "-") tCust++;
+                if (o.redeemedPromos && o.redeemedPromos.length > 0) {
+                    o.redeemedPromos.forEach(rp => { 
+                        tFreeItems += (Number(rp.qty) || 0); 
+                        let cleanItemName = String(rp.item).replace(/_/g, ' '); 
+                        freeItemsSummary[cleanItemName] = (freeItemsSummary[cleanItemName] || 0) + (Number(rp.qty) || 0);
+                    });
+                }
 
-                tOmset += o.grandTotal; tCash += (o.cashAmount || 0); tQris += (o.qrisAmount || 0);
-
-                hPiu += (o.hotelPiutangAmount || 0); tPiu += (o.tamuPiutangAmount || 0); tFree += (o.freeAmount || 0);
-
-                tDiscountNom += (o.discounts || 0); 
-                    if (o.redeemedPromos && o.redeemedPromos.length > 0) {
-                        o.redeemedPromos.forEach(rp => { 
-                            tFreeItems += (Number(rp.qty) || 0); 
-                            let cleanItemName = String(rp.item).replace(/_/g, ' '); 
-                            freeItemsSummary[cleanItemName] = (freeItemsSummary[cleanItemName] || 0) + (Number(rp.qty) || 0);
-                        });
-                    }
-
-
-
-                let orderExpectedCoins = 0; let orderCoinBreakdown = {};
-
-
+                let orderExpectedCoins = 0;
+                let orderCoinBreakdown = {};
 
                 if (o.items) {
-
                     o.items.forEach(i => { 
-
                         foodSummary[i.name] = (foodSummary[i.name] || 0) + i.qty; 
-
                         let cat = i.category || "Lainnya"; 
+                        let name = String(i.name).toUpperCase();
+                        let itemCoins = 0;
 
-                        let name = String(i.name).toUpperCase(); let itemCoins = 0;
-
-
-
-                       // --- HANYA HITUNG ASUMSI JIKA DIAKTIFKAN DI SETTINGS ---
-                        let enableCoinAssumption = String(settings["Enable_Coin_Assumption"]).toUpperCase() !== "FALSE";
-                        
                         if (enableCoinAssumption) {
                             if (name.includes("KESET")) { itemCoins = Math.ceil(i.qty / kesetPerBatch) * 3; } 
                             else if (name.includes("BANTAL")) { itemCoins = Math.ceil(i.qty / bantalPerBatch) * 2; } 
@@ -4022,65 +3995,77 @@ window.openShiftReport = function(historyData = null) {
                         }
 
                         if (itemCoins > 0) { orderExpectedCoins += itemCoins; orderCoinBreakdown[cat] = (orderCoinBreakdown[cat] || 0) + itemCoins; }
-
                     });
-
                 }
 
-                
-
-                // FORCE: Strictly use Actual Coins if available. Only fallback to estimation if actual is entirely missing.
                 let orderTotalCoins = o.actualCoins !== undefined ? Number(o.actualCoins) : (o.expectedCoins || orderExpectedCoins);
-
                 tCoinsUsed += orderTotalCoins;
-
                 for (let cat in orderCoinBreakdown) { coinCategorySummary[cat] = (coinCategorySummary[cat] || 0) + orderCoinBreakdown[cat]; }
 
-                
-
                 let diff = orderTotalCoins - orderExpectedCoins;
-
                 if (diff !== 0) { coinCategorySummary["Penyesuaian Manual"] = (coinCategorySummary["Penyesuaian Manual"] || 0) + diff; }
-
             });
 
-            
-
-            shiftExpenses.forEach(exp => { tExpense += (exp.amount || 0); });
-
+            shiftExpenses.forEach(exp => { tExpense += (Number(exp.amount) || 0); });
             shiftCoinRets.forEach(cr => {
-
                 if (cr.notes && cr.notes.includes("Macet")) tCoinsJammed += cr.qty;
-
                 else tCoinsRecycled += cr.qty;
-
             });
-
-
 
             let netCash = Math.max(0, tCash - tExpense);
-
-            // --- TARIK KOIN AWAL & AKHIR DARI MEMORI LOKAL ---
             let initialC = Number(localStorage.getItem("session_initial_coins")) || 0;
             let endC = window.laciStocks ? (window.laciStocks[window.getActiveOutlet()] || 0) : 0;
 
             window.currentShiftData = { 
-                shiftId: currentShiftId, loginTime: currentLoginTime, logoutTime: new Date().toISOString(), cashier: currentCashier, 
-                totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, 
+                shiftId: currentShiftId, loginTime: currentLoginTime || new Date().toISOString(), logoutTime: new Date().toISOString(), cashier: currentCashier, 
+                totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer,
                 totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, foodSummary: foodSummary, freeItemsSummary: freeItemsSummary,
                 totalFreeItems: tFreeItems, totalDiscountNominal: tDiscountNom, totalCoinsUsed: tCoinsUsed, totalCoinsRecycled: tCoinsRecycled, totalCoinsJammed: tCoinsJammed,
                 coinCategorySummary: coinCategorySummary, 
-                outlet: localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat",
-                initialCoins: initialC, // <--- INJEKSI KE DATA SHIFT
-                endCoins: endC          // <--- INJEKSI KE DATA SHIFT
+                outlet: window.getActiveOutlet(),
+                initialCoins: initialC,
+                endCoins: endC
             };
             
             populateShiftModal(window.currentShiftData, true);
-
         };
+    };
 
+    // JIKA ONLINE: Dorong data pending dan ambil kalkulasi riil dari Spreadsheet
+    if (navigator.onLine) {
+        (async () => {
+            try {
+                await window.runBackgroundSync();
+
+                let res = await fetch(API_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    body: JSON.stringify({
+                        action: "getShiftReportFromSheet",
+                        data: {
+                            cashier: currentCashier,
+                            outlet: window.getActiveOutlet(),
+                            shiftId: currentShiftId || ("SHF-" + Date.now()),
+                            fallbackLoginTime: currentLoginTime || localStorage.getItem("session_login_time")
+                        }
+                    })
+                });
+                let result = await res.json();
+                if (result.status === "Success" && result.data) {
+                    window.currentShiftData = result.data;
+                    currentLoginTime = result.data.loginTime;
+                    localStorage.setItem("session_login_time", currentLoginTime);
+                    populateShiftModal(window.currentShiftData, true);
+                    return;
+                }
+            } catch (err) {
+                console.warn("Gagal mengambil data dari server, beralih ke kalkulasi lokal.", err);
+            }
+            runLocalCalculation();
+        })();
+    } else {
+        runLocalCalculation();
     }
-
 };
 
 
