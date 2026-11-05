@@ -192,7 +192,7 @@ window.rollbackOrderImpact = async function(order) {
     }
 
     // FIX: Blokir eksekusi poin untuk staf
-    if (!order.customerPhone || order.customerPhone === "-" || order.customerPhone === "Walk-in") {
+    if (!order.customerPhone || order.customerPhone === "-" || order.customerPhone === "Walk-in" || String(order.customerPhone).toUpperCase().startsWith("STF")) {
         return new Promise((resolve) => resolve()); 
     }
 
@@ -695,7 +695,7 @@ window.buildEscPosReceipt = async function(orderId, order, deposit, remaining, p
 
 
 
-    if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in" && !order.customerPhone.startsWith("999")) {
+    if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in" && !order.customerPhone.startsWith("999") && !order.customerPhone.toUpperCase().startsWith("STF")) {
     receipt += "--------------------------------\n" + CMD_CENTER + "-- INFO LOYALTY --\n" + CMD_LEFT;
     receipt += formatEscPosLine("Sisa Poin", newPoints + " / " + window.loyaltyTarget, false) + "\n";
     receipt += formatEscPosLine("Koin Gratis", newFree, false) + "\n";
@@ -783,15 +783,11 @@ window.buildShiftReportReceipt = async function(data) {
     
 
     r += CMD_BOLD_ON + "PENERIMAAN KASIR & PIUTANG:" + CMD_BOLD_OFF + "\n";
-
     r += formatEscPosLine("Tunai / Cash", data.totalCash.toLocaleString('id-ID'), false) + "\n";
-
     r += formatEscPosLine("QRIS", data.totalQris.toLocaleString('id-ID'), false) + "\n";
-
+    if (data.totalTransfer > 0) r += formatEscPosLine("Transfer Bank", data.totalTransfer.toLocaleString('id-ID'), false) + "\n";
     r += formatEscPosLine("Piutang Hotel", data.totalHotelPiutang.toLocaleString('id-ID'), false) + "\n";
-
     r += formatEscPosLine("Piutang Tamu", data.totalTamuPiutang.toLocaleString('id-ID'), false) + "\n";
-
     r += "--------------------------------\n";
 
 
@@ -2428,7 +2424,7 @@ window.finalizeOrder = async function(shouldPrint) {
     }
 
     // FIX: Blokir profil STF- agar tidak masuk ke database member reguler
-    if (custPhone !== "-") {
+    if (custPhone !== "-" && !custPhone.toUpperCase().startsWith("STF")) {
         if (!activeCustomerProfile) activeCustomerProfile = { phone: custPhone, name: custName, points: 0, freeCoins: 0, spent: 0, storedRewards: {} };
         activeCustomerProfile.spent += window.cartGrandTotal;
         
