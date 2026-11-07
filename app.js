@@ -2261,6 +2261,20 @@ window.clearCart = function(force = false) {
 
 
 window.finalizeOrder = async function(shouldPrint) {
+    // 1. KUNCI ANTI-SPAM: Cegah klik berulang saat transaksi sedang diproses
+    if (window.isOrderFinalizing) return;
+    window.isOrderFinalizing = true;
+
+    // Nonaktifkan tombol bayar di modal agar tidak bisa ditekan berulang
+    const payBtns = document.querySelectorAll("#review-modal button");
+    payBtns.forEach(b => { b.disabled = true; });
+
+    // Helper untuk melepas kunci jika ada validasi yang gagal
+    const unlockOrder = () => {
+        window.isOrderFinalizing = false;
+        payBtns.forEach(b => { b.disabled = false; });
+    };
+
     let pc = document.getElementById("pay-cash"); let cash = pc ? Number(pc.value) : 0;
     let elQ = document.getElementById("pay-qris"); let qris = elQ ? Number(elQ.value) : 0;
     let elT = document.getElementById("pay-transfer"); let transfer = elT ? Number(elT.value) : 0;
@@ -2270,10 +2284,16 @@ window.finalizeOrder = async function(shouldPrint) {
     
     const totalPiutang = hotelPiutang + tamuPiutang; 
     
-    if ((window.cartGrandTotal - (cash + qris + transfer + totalPiutang)) > 0) { return alert("⚠️ Nominal Pembayaran masih kurang! Harap periksa kembali."); }
-    if ((cash + qris + transfer + totalPiutang) > window.cartGrandTotal) { return alert("⚠️ Nominal Pembayaran melebihi Total Akhir! Harap koreksi angka yang dimasukkan."); }
+    if ((window.cartGrandTotal - (cash + qris + transfer + totalPiutang)) > 0) { 
+        unlockOrder();
+        return alert("⚠️ Nominal Pembayaran masih kurang! Harap periksa kembali."); 
+    }
+    if ((cash + qris + transfer + totalPiutang) > window.cartGrandTotal) { 
+        unlockOrder();
+        return alert("⚠️ Nominal Pembayaran melebihi Total Akhir! Harap koreksi angka yang dimasukkan."); 
+    }
 
-   // --- RE-VERIFICATION CHECK (IF CASHIER IS UNKNOWN) ---
+    // --- RE-VERIFICATION CHECK (IF CASHIER IS UNKNOWN) ---
     if (!currentCashier || currentCashier.trim() === "Unknown" || currentCashier.trim() === "") {
         let enteredPin = prompt("⚠️ Sesi Kasir Terputus!\nSistem lupa siapa Anda! Harap masukkan PIN Kasir Anda kembali untuk menyimpan order ini:");
         
@@ -2287,11 +2307,13 @@ window.finalizeOrder = async function(shouldPrint) {
                 currentPin = hashedPin;
                 alert("Verifikasi Berhasil! Kasir: " + currentCashier);
             } else {
+                unlockOrder();
                 alert("❌ Gagal: PIN Salah atau tidak terdaftar!");
-                return; // Stop execution
+                return;
             }
         } else {
-            return; // Cashier clicked cancel
+            unlockOrder();
+            return;
         }
     }
     // -----------------------------------------------------
@@ -2320,7 +2342,7 @@ window.finalizeOrder = async function(shouldPrint) {
             let item = input.getAttribute('data-item');
             redeemedList.push({ source: src, item: item, qty: val, price: Number(input.getAttribute('data-price')) });
             
-            if (src === 'loyalty' || src === 'staff_coin') redeemedLoyaltyCoins += val; // Cegah staf mendapat poin dari koin gratis ini
+            if (src === 'loyalty' || src === 'staff_coin') redeemedLoyaltyCoins += val;
             if (src === 'stored') claimedMap[item] = (claimedMap[item] || 0) + val;
             if (src === 'buy_x_get_1') claimedPromoMap[item] = (claimedPromoMap[item] || 0) + val;
         }
@@ -2372,18 +2394,21 @@ window.finalizeOrder = async function(shouldPrint) {
         assumedWashingCoins = (regularWeight > 0 ? (Math.ceil(regularWeight / kgPerCuci) + Math.ceil(regularWeight / kgPerKering)) : 0) + (kesetQty > 0 ? Math.ceil(kesetQty / kesetPerBatch) * 3 : 0) + (bantalQty > 0 ? Math.ceil(bantalQty / bantalPerBatch) * 2 : 0) + otherCoins;
     }
     
-    // Koin yang dibeli secara fisik (koinSoldQty) tetap dihitung, namun asumsi cuci bisa 0
     let expectedCoinsTotal = assumedWashingCoins + koinSoldQty;
 
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
     // VALIDASI KUNCI 2: Cegah transaksi jika koin di laci tidak cukup
     let availableCoinsInDrawer = window.laciStocks ? (window.laciStocks[currentOutlet] || 0) : 0;
     if (expectedCoinsTotal > availableCoinsInDrawer) {
+        unlockOrder();
         return alert(`⚠️ TRANSAKSI GAGAL: Koin di Laci Tidak Cukup!\n\nKebutuhan koin untuk order ini: ${expectedCoinsTotal} koin.\nSisa koin di Laci: ${availableCoinsInDrawer} koin.\n\nSilakan lakukan "Daur Ulang" (Tarik koin dari mesin) di menu atas terlebih dahulu.`);
     }
 
-    let newEarnedRewards = [];
+    // SEMUA VALIDASI LOLOS -> TUTUP MODAL SEKARANG
+    let mod = document.getElementById("review-modal"); 
+    if (mod) mod.classList.add("hidden");
 
+    let newEarnedRewards = [];
     let promoRules = {};
     let stampRules = {};
     for (let key in settings) {
@@ -2464,7 +2489,7 @@ window.finalizeOrder = async function(shouldPrint) {
                 else delete activeCustomerProfile.storedRewards["_prog_" + itemName];
                 
                 if (newlyEarnedFItem > 0) newEarnedRewards.push({ item: itemName, qty: newlyEarnedFItem, code: "BUY_X_GET_1" });
-                delete claimedMap[itemName]; // Hindari potong ganda
+                delete claimedMap[itemName];
             }
         }
 
@@ -2480,7 +2505,6 @@ window.finalizeOrder = async function(shouldPrint) {
                 let claimedQty = claimedMap[matchedItemName] || 0;
                 let paidQty = cartAgg[matchedItemName] - claimedQty;
                 
-                // ATURAN BARU: HANYA DAPAT STAMP JIKA TIDAK ADA KLAIM SAMA SEKALI (claimedQty === 0)
                 if (claimedQty === 0 && paidQty >= rule.minQty) {
                     let stampKey = "_stamp_" + rule.originalName;
                     let currentStamps = Number(activeCustomerProfile.storedRewards[stampKey]) || 0;
@@ -2526,20 +2550,16 @@ window.finalizeOrder = async function(shouldPrint) {
     let isLaundry = currentCart.some(i => String(i.workflow).toUpperCase() === "TICKET");
     let finalStatus = isLaundry ? "Processing" : (totalPiutang > 0 ? "Pending Debt" : "Completed");
     
-    // Capture the selected salesperson
     let spDropdown = document.getElementById("salesperson-select");
     let selectedSalesperson = spDropdown ? spDropdown.value : "-";
 
     const orderPayload = {
         orderId: targetOrderId, timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId,
-        salesperson: selectedSalesperson, // <--- INJECT IT INTO THE PAYLOAD
+        salesperson: selectedSalesperson,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
         coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, actualCoins: isLaundry ? 0 : expectedCoinsTotal, 
-        
-        // PENTING: MENGIRIM JSON FINAL KE CODE.GS
         finalStoredRewards: activeCustomerProfile ? JSON.stringify(activeCustomerProfile.storedRewards) : null,
-        
         outlet: currentOutlet, syncStatus: "Pending" 
     };
 
@@ -2547,8 +2567,6 @@ window.finalizeOrder = async function(shouldPrint) {
     tx.objectStore("orders").add(orderPayload);
     
     tx.oncomplete = async () => {
-        
-        // UPDATE INSTAN SAAT CHECKOUT (Koin pindah dari Laci ke Mesin di layar)
         if (expectedCoinsTotal > 0) {
             if (!window.laciStocks) window.laciStocks = {};
             if (!window.coinsInMachines) window.coinsInMachines = {};
@@ -2582,8 +2600,14 @@ window.finalizeOrder = async function(shouldPrint) {
         } else { alert("✅ Order berhasil direkam!"); }
 
         window.clearCart(true); 
-        let mod = document.getElementById("review-modal"); if(mod) mod.classList.add("hidden");
-        window.renderActiveTickets(); window.renderPiutangTickets(); window.switchWorkspace('new'); window.lockMenu(); window.runBackgroundSync();
+        window.renderActiveTickets(); 
+        window.renderPiutangTickets(); 
+        window.switchWorkspace('new'); 
+        window.lockMenu(); 
+        window.runBackgroundSync();
+
+        // Buka kembali gembok setelah transaksi sukses tersimpan
+        unlockOrder();
     };
 };
 
