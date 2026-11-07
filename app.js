@@ -2606,11 +2606,11 @@ window.finalizeOrder = async function(shouldPrint) {
         window.lockMenu(); 
         window.runBackgroundSync();
 
-        // Buka kembali gembok setelah transaksi sukses tersimpan
-        unlockOrder();
+        // Buka kembali gembok setelah seluruh proses selesai
+        window.isOrderFinalizing = false;
+        payBtns.forEach(b => { b.disabled = false; });
     };
-};
-
+}; // <-- KURUNG PENUTUP FUNGSI finalizeOrder HARUS ADA DI SINI
 
 
 window.saveMemberToDB = function(profile) {
