@@ -3001,7 +3001,7 @@ window.renderHistoryList = function(type) {
 
             let combined = [];
 
-            shiftOrders.forEach(o => { let totalIn = (o.cashAmount || 0) + (o.qrisAmount || 0); if (totalIn > 0) combined.push({ type: 'in', time: new Date(o.timestamp), desc: `Nota: ${o.orderId}`, amount: totalIn }); });
+            shiftOrders.forEach(o => { let totalIn = (o.cashAmount || 0) + (o.qrisAmount || 0) + (o.transferAmount || 0); if (totalIn > 0) combined.push({ type: 'in', time: new Date(o.timestamp), desc: `Nota: ${o.orderId}`, amount: totalIn }); });
 
             shiftExpenses.forEach(e => { combined.push({ type: 'out', time: new Date(e.timestamp), desc: `Pengeluaran: ${e.category}`, amount: e.amount }); });
 
@@ -3177,7 +3177,7 @@ window.reprintOrder = async function(orderId) {
 
         if (!order) return alert("Data order tidak ditemukan di memori lokal.");
 
-        const deposit = (order.cashAmount || 0) + (order.qrisAmount || 0) + (order.freeAmount || 0) + (order.hotelPiutangAmount || 0) + (order.tamuPiutangAmount || 0);
+        const deposit = (order.cashAmount || 0) + (order.qrisAmount || 0) + (order.transferAmount || 0) + (order.freeAmount || 0) + (order.hotelPiutangAmount || 0) + (order.tamuPiutangAmount || 0);
 
         if (order.customerPhone && order.customerPhone !== "-" && order.customerPhone !== "Walk-in" && !order.customerPhone.startsWith("999")) {
 
