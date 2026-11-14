@@ -3989,6 +3989,8 @@ window.openShiftReport = function(historyData = null) {
     // Tampilkan modal langsung dengan indikator loading
     let modal = document.getElementById("shift-detail-modal");
     if (modal) modal.classList.remove("hidden");
+    let shiftScroll = document.getElementById("mob-shift-scroll-body");
+    if (shiftScroll) shiftScroll.scrollTop = 0;
     if (document.getElementById("sd-food")) document.getElementById("sd-food").innerHTML = "<div style='text-align:center; padding:15px; color:#2980b9;'>⏳ Mengambil & mengalkulasi data shift dari server...</div>";
 
     let runLocalCalculation = () => {
@@ -4973,15 +4975,56 @@ window.initMobilePosWizard = function() {
             }
             #numpad-modal button { min-height: 48px !important; font-size: 18px !important; }
 
-            /* Shift Report Modal Spacious Single-Scroll Layout */
+            /* Shift Report Modal: Pinned Header + Scrollable Middle + Pinned Footer */
             #${CFG.shiftModalId} {
-                padding: 10px 10px calc(120px + env(safe-area-inset-bottom, 0px)) 10px !important;
+                position: fixed !important;
+                inset: 0 !important;
+                width: 100vw !important;
+                height: 100dvh !important;
+                max-height: 100dvh !important;
+                padding: 8px !important;
+                align-items: stretch !important;
+                justify-content: center !important;
+                overflow: hidden !important;
+                box-sizing: border-box !important;
             }
-            #${CFG.shiftModalId} .modal-content {
-                padding: 16px 14px 22px 14px !important;
+            #${CFG.shiftModalId}.hidden {
+                display: none !important;
+            }
+            #${CFG.shiftModalId} > .modal-content,
+            #${CFG.shiftModalId} > div {
+                display: flex !important;
+                flex-direction: column !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                height: 100% !important;
+                max-height: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+                border-radius: 12px !important;
+                box-sizing: border-box !important;
+            }
+            #${CFG.shiftModalId} .mob-shift-header {
+                flex: 0 0 auto !important;
+                padding: 12px 14px !important;
+                margin: 0 !important;
+                background: #2c3e50 !important;
+                color: #ffffff !important;
+                font-size: 16px !important;
+                border-bottom: 1px solid #1a252f !important;
+            }
+            #${CFG.shiftModalId} #mob-shift-scroll-body {
+                flex: 1 1 auto !important;
+                min-height: 0 !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                overscroll-behavior: contain !important;
+                touch-action: pan-y !important;
+                padding: 10px 12px 24px 12px !important;
             }
             #${CFG.shiftModalId} .stats-grid {
-                display: grid !important; grid-template-columns: 1fr !important; gap: 8px !important;
+                display: grid !important; grid-template-columns: 1fr !important; gap: 6px !important;
                 background: #f8f9fa !important; padding: 10px 12px !important;
                 border-radius: 8px !important; border: 1px solid #e2e8f0 !important; margin-bottom: 10px !important;
             }
@@ -4991,15 +5034,15 @@ window.initMobilePosWizard = function() {
             }
             #${CFG.shiftModalId} .stat-box:last-child { border-bottom: none !important; }
             #${CFG.shiftModalId} .stat-label { font-size: 12px !important; margin: 0 !important; }
-            #${CFG.shiftModalId} .stat-value { font-size: 14px !important; font-weight: bold !important; }
+            #${CFG.shiftModalId} .stat-value { font-size: 13.5px !important; font-weight: bold !important; }
             #${CFG.shiftModalId} div[style*="grid-template-columns"]:not(.stats-grid) {
                 display: grid !important; grid-template-columns: 1fr !important; gap: 10px !important; margin-bottom: 10px !important;
             }
             #${CFG.shiftModalId} .revenue-breakdown {
-                padding: 12px !important; margin-bottom: 10px !important; border-radius: 8px !important;
+                padding: 11px 12px !important; margin-bottom: 10px !important; border-radius: 8px !important;
             }
             #${CFG.shiftModalId} .revenue-row {
-                font-size: 13.5px !important; padding: 7px 0 !important; gap: 10px !important;
+                font-size: 13px !important; padding: 6px 0 !important; gap: 10px !important;
                 display: flex !important; justify-content: space-between !important; align-items: center !important;
             }
             #${CFG.shiftModalId} .revenue-row span:last-child,
@@ -5008,16 +5051,24 @@ window.initMobilePosWizard = function() {
             #${CFG.shiftModalId} #sd-categories {
                 max-height: none !important; overflow: visible !important; font-size: 13px !important; line-height: 1.45 !important;
             }
-            #${CFG.shiftModalId} .modal-content > div:last-child {
-                display: flex !important; flex-wrap: wrap !important; gap: 8px !important;
-                margin-top: 14px !important; padding-top: 10px !important; border-top: 1px solid #e2e8f0 !important;
+            #${CFG.shiftModalId} .mob-shift-footer {
+                flex: 0 0 auto !important;
+                position: static !important;
+                display: flex !important;
+                flex-wrap: wrap !important;
+                gap: 8px !important;
+                margin: 0 !important;
+                padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)) 12px !important;
+                background: #ffffff !important;
+                border-top: 1px solid #dcdde1 !important;
+                box-shadow: 0 -3px 10px rgba(0,0,0,0.06) !important;
             }
-            #${CFG.shiftModalId} .modal-content > div:last-child button {
-                flex: 1 1 46% !important; white-space: nowrap !important; padding: 12px 10px !important; min-height: 44px !important;
+            #${CFG.shiftModalId} .mob-shift-footer button {
+                flex: 1 1 46% !important; white-space: nowrap !important; padding: 11px 10px !important; min-height: 42px !important;
             }
             #${CFG.shiftModalId} #${CFG.endShiftBtnId} {
-                flex: 1 1 100% !important; width: 100% !important; font-size: 14.5px !important;
-                font-weight: bold !important; min-height: 48px !important; margin-top: 2px !important;
+                flex: 1 1 100% !important; width: 100% !important; font-size: 14px !important;
+                font-weight: bold !important; min-height: 46px !important; margin-top: 2px !important;
             }
 
             /* History Lists */
@@ -5283,6 +5334,29 @@ window.initMobilePosWizard = function() {
         <div id="mob-s3-cust" style="font-size:13px; font-weight:bold; color:#2c3e50; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">👤 Pelanggan</div>
     `;
     rightPanel.insertBefore(step3Header, rightPanel.firstChild);
+
+    // 6. Wrap Shift Report Middle Sections into a Dedicated Scrollable Container
+    const shiftModal = document.getElementById(CFG.shiftModalId);
+    if (shiftModal) {
+        const modalCard = shiftModal.querySelector(".modal-content") || shiftModal.firstElementChild;
+        if (modalCard && !document.getElementById("mob-shift-scroll-body")) {
+            const children = Array.from(modalCard.children);
+            if (children.length >= 3) {
+                const headerEl = children[0];
+                const footerEl = children[children.length - 1];
+                const middleEls = children.slice(1, children.length - 1);
+
+                headerEl.classList.add("mob-shift-header");
+                footerEl.classList.add("mob-shift-footer");
+
+                const scrollBody = document.createElement("div");
+                scrollBody.id = "mob-shift-scroll-body";
+                middleEls.forEach(el => scrollBody.appendChild(el));
+
+                modalCard.insertBefore(scrollBody, footerEl);
+            }
+        }
+    }
 
     window.setMobilePosStep(1);
 };
