@@ -4616,8 +4616,14 @@ window.initMobilePosWizard = function() {
             body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId}:not(.hidden) {
                 padding-bottom: 45vh !important;
             }
-            #main-workspace-wrapper, #${CFG.productGridId}, #${CFG.cartItemsId}, ${secondarySelectors},
-            .mob-main-workspace, .mob-left-panel, .mob-right-panel, .mob-scroll-unlock {
+            #${CFG.posScreenId} #main-workspace-wrapper,
+            #${CFG.posScreenId} #${CFG.productGridId},
+            #${CFG.posScreenId} #${CFG.cartItemsId},
+            ${secondarySelectors},
+            #${CFG.posScreenId} .mob-main-workspace,
+            #${CFG.posScreenId} .mob-left-panel,
+            #${CFG.posScreenId} .mob-right-panel,
+            #${CFG.posScreenId} .mob-scroll-unlock {
                 height: auto !important;
                 min-height: 0 !important;
                 max-height: none !important;
@@ -4627,14 +4633,14 @@ window.initMobilePosWizard = function() {
             ${secondarySelectors} { padding: 12px !important; }
 
             /* 2. Compact 2-Row Mobile Top Bar */
-            .mob-top-bar {
+            #${CFG.posScreenId} .mob-top-bar {
                 display: flex !important;
                 flex-direction: column !important;
                 align-items: stretch !important;
                 gap: 6px !important;
                 padding: 7px 10px !important;
             }
-            .mob-top-bar > div:first-child {
+            #${CFG.posScreenId} .mob-top-bar > div:first-child {
                 display: flex !important;
                 flex-direction: row !important;
                 align-items: center !important;
@@ -4642,14 +4648,14 @@ window.initMobilePosWizard = function() {
                 width: 100% !important;
                 gap: 5px !important;
             }
-            .mob-top-bar > div:first-child > div {
+            #${CFG.posScreenId} .mob-top-bar > div:first-child > div {
                 display: flex !important;
                 flex-wrap: wrap !important;
                 align-items: center !important;
                 gap: 2px 4px !important;
                 flex: 1 1 auto !important;
                 min-width: 0 !important;
-                font-size: 11.5px !important;
+                font-size: 12px !important;
                 line-height: 1.2 !important;
             }
             #mob-menu-toggle-btn {
@@ -4659,8 +4665,8 @@ window.initMobilePosWizard = function() {
                 flex: 0 0 auto !important;
                 width: auto !important;
                 margin-left: auto !important;
-                padding: 4px 8px !important;
-                font-size: 11px !important;
+                padding: 5px 10px !important;
+                font-size: 11.5px !important;
                 line-height: 1.15 !important;
                 font-weight: bold !important;
                 border-radius: 5px !important;
@@ -4674,20 +4680,20 @@ window.initMobilePosWizard = function() {
                 background: #34495e !important;
                 border-color: #95a5a6 !important;
             }
-            .mob-top-bar > div:first-child button:not(#mob-menu-toggle-btn) {
+            #${CFG.posScreenId} .mob-top-bar > div:first-child button:not(#mob-menu-toggle-btn) {
                 display: inline-flex !important;
                 align-items: center !important;
                 justify-content: center !important;
                 flex: 0 0 auto !important;
                 width: auto !important;
                 margin-left: 0 !important;
-                padding: 4px 8px !important;
-                font-size: 11px !important;
+                padding: 5px 9px !important;
+                font-size: 11.5px !important;
                 line-height: 1.15 !important;
                 border-radius: 5px !important;
                 white-space: nowrap !important;
             }
-            .mob-top-bar .mob-top-row2 {
+            #${CFG.posScreenId} .mob-top-bar .mob-top-row2 {
                 display: flex !important;
                 flex-wrap: wrap !important;
                 align-items: center !important;
@@ -4697,20 +4703,20 @@ window.initMobilePosWizard = function() {
                 padding-top: 6px !important;
                 border-top: 1px solid rgba(255,255,255,0.16) !important;
             }
-            .mob-top-bar .mob-top-row2 > div:first-child {
+            #${CFG.posScreenId} .mob-top-bar .mob-top-row2 .status-indicator {
                 width: 100% !important;
                 display: flex !important;
                 align-items: center !important;
-                flex-wrap: wrap !important;
                 gap: 5px !important;
                 margin-bottom: 2px !important;
+                font-size: 11.5px !important;
             }
-            body.mob-header-collapsed .mob-top-bar .mob-top-row2 button.mob-collapsible-btn,
-            .mob-top-bar button.hidden,
-            .mob-top-bar button[style*="display: none"] {
+            body.mob-header-collapsed #${CFG.posScreenId} .mob-top-bar button.mob-collapsible-btn,
+            #${CFG.posScreenId} .mob-top-bar button.hidden,
+            #${CFG.posScreenId} .mob-top-bar button[style*="display: none"] {
                 display: none !important;
             }
-            .mob-top-bar .mob-top-row2 button {
+            #${CFG.posScreenId} .mob-top-bar .mob-top-row2 button {
                 flex: 1 1 30% !important;
                 min-width: 0 !important;
                 padding: 6px 6px !important;
@@ -4724,7 +4730,7 @@ window.initMobilePosWizard = function() {
             }
 
             /* 3. Main Tabs, Queue Tabs & 4-Step Wizard Stepper */
-            .mob-main-tabs-bar { display: flex !important; flex-wrap: nowrap !important; gap: 0 !important; }
+            #${CFG.posScreenId} .mob-main-tabs-bar { display: flex !important; flex-wrap: nowrap !important; gap: 0 !important; }
             ${mainTabSelectors} {
                 min-width: 0 !important;
                 flex: 1 1 0 !important;
@@ -4733,13 +4739,13 @@ window.initMobilePosWizard = function() {
                 white-space: normal !important;
                 line-height: 1.2 !important;
             }
-            .mob-cart-tab-bar {
+            #${CFG.posScreenId} .mob-cart-tab-bar {
                 display: flex !important;
                 width: 100% !important;
                 background: #34495e !important;
                 border-bottom: 1px solid #1e272e !important;
             }
-            .antrean-btn { min-width: 0 !important; flex: 1 !important; font-size: 11.5px !important; padding: 8px 4px !important; }
+            #${CFG.posScreenId} .antrean-btn { min-width: 0 !important; flex: 1 !important; font-size: 11.5px !important; padding: 8px 4px !important; }
 
             #mobile-wizard-stepper {
                 display: flex !important;
@@ -4754,7 +4760,7 @@ window.initMobilePosWizard = function() {
                 border-bottom: 2px solid #3498db;
             }
             body.mob-other-tab #mobile-wizard-stepper,
-            body.mob-other-tab .mob-cart-tab-bar { display: none !important; }
+            body.mob-other-tab #${CFG.posScreenId} .mob-cart-tab-bar { display: none !important; }
 
             .mob-step-pill {
                 flex: 1; min-width: 0; text-align: center;
@@ -4767,61 +4773,82 @@ window.initMobilePosWizard = function() {
             .mob-step-pill.active { background: #3498db; color: #ffffff; border-color: #74b9ff; }
             .mob-step-pill.done { background: #1e8449; color: #eafaf1; }
 
-            .mob-main-workspace { display: block !important; width: 100% !important; }
-            .mob-left-panel, .mob-right-panel { width: 100% !important; max-width: 100% !important; min-width: 0 !important; border: none !important; margin: 0 !important; }
+            #${CFG.posScreenId} .mob-main-workspace { display: block !important; width: 100% !important; }
+            #${CFG.posScreenId} .mob-left-panel,
+            #${CFG.posScreenId} .mob-right-panel {
+                width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+                border: none !important; margin: 0 !important;
+            }
+            #${CFG.posScreenId} .mob-hidden-panel { display: none !important; }
 
-            /* LAYER 1: Customer / Member / Walk-in (Menu & Keranjang Hidden) */
-            body.mob-step-1:not(.mob-other-tab) .mob-right-panel,
-            body.mob-step-1:not(.mob-other-tab) #${CFG.categoryContainerId},
-            body.mob-step-1:not(.mob-other-tab) #${CFG.productGridId},
-            body.mob-step-1:not(.mob-other-tab) #${CFG.glassOverlayId},
-            body.mob-step-1:not(.mob-other-tab) .mob-menu-wrapper { display: none !important; }
-            body.mob-step-1:not(.mob-other-tab) .mob-command-bar { display: block !important; padding: 10px !important; width: 100% !important; box-sizing: border-box !important; }
-            body.mob-step-1:not(.mob-other-tab) #customer-input-section:not(.hidden) { display: flex !important; flex-direction: column !important; gap: 8px !important; width: 100% !important; }
-            body.mob-step-1:not(.mob-other-tab) #customer-input-section input,
-            body.mob-step-1:not(.mob-other-tab) #customer-input-section button { width: 100% !important; min-height: 44px !important; font-size: 16px !important; margin: 0 !important; box-sizing: border-box !important; border-radius: 8px !important; }
-            body.mob-step-1:not(.mob-other-tab) #${CFG.autocompleteId}:not(.hidden) {
+            /* LAYER 1: Customer / Member / Walk-in (Keranjang & Menu Completely Hidden) */
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} .mob-right-panel,
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.categoryContainerId},
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.productGridId},
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.glassOverlayId},
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} .mob-menu-wrapper { display: none !important; }
+
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} .mob-command-bar {
+                display: block !important; padding: 10px !important; width: 100% !important; box-sizing: border-box !important;
+            }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #customer-input-section:not(.hidden),
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #customer-input-section:not(.hidden) > div {
+                display: flex !important; flex-direction: column !important; gap: 8px !important; width: 100% !important;
+            }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #customer-input-section input,
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #customer-input-section button {
+                width: 100% !important; min-height: 44px !important; font-size: 16px !important;
+                margin: 0 !important; box-sizing: border-box !important; border-radius: 8px !important;
+            }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.autocompleteId}:not(.hidden) {
                 position: static !important; width: 100% !important; max-width: 100% !important;
                 max-height: none !important; overflow: visible !important;
                 border: 2px solid #3498db !important; border-radius: 8px !important; margin-top: 6px !important;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
             }
-            body.mob-step-1:not(.mob-other-tab) #${CFG.activeBannerId}:not(.hidden) {
-                display: flex !important;
-                flex-direction: column !important;
-                gap: 8px !important;
-                padding: 12px !important;
-                border-radius: 8px !important;
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.activeBannerId}:not(.hidden) {
+                display: flex !important; flex-direction: column !important; gap: 8px !important;
+                padding: 12px !important; border-radius: 8px !important;
             }
-            body.mob-step-1:not(.mob-other-tab) #${CFG.activeBannerId}:not(.hidden) #mobile-step1-nextbar { display: block !important; margin-top: 6px; width: 100%; }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.activeBannerId}:not(.hidden) #mobile-step1-nextbar {
+                display: block !important; margin-top: 6px; width: 100%;
+            }
 
-            /* LAYER 2: Choosing Menu (Keranjang & Search Inputs Hidden, Full Scroll) */
-            body.mob-step-2:not(.mob-other-tab) .mob-right-panel,
-            body.mob-step-2:not(.mob-other-tab) #customer-input-section,
-            body.mob-step-2:not(.mob-other-tab) #${CFG.activeBannerId},
-            body.mob-step-2:not(.mob-other-tab) #${CFG.glassOverlayId} { display: none !important; }
-            body.mob-step-2:not(.mob-other-tab) .mob-command-bar { display: block !important; padding: 6px 8px !important; }
+            /* LAYER 2: Choosing Menu (Keranjang & Search Inputs Completely Hidden, Full Scroll) */
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} .mob-right-panel,
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} #customer-input-section,
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.activeBannerId},
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.glassOverlayId} { display: none !important; }
+
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} .mob-left-panel {
+                display: block !important;
+            }
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} .mob-command-bar {
+                display: block !important; padding: 6px 8px !important;
+            }
             body.mob-step-2:not(.mob-other-tab) #mobile-step2-custbar {
                 display: flex !important; justify-content: space-between; align-items: center; gap: 8px;
                 background: #eafaf1; border: 1px solid #a9dfbf; padding: 7px 10px;
                 border-radius: 7px; font-size: 12.5px; color: #1e8449;
             }
-            body.mob-step-2:not(.mob-other-tab) #${CFG.categoryContainerId} {
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.categoryContainerId} {
                 display: flex !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important;
                 white-space: nowrap !important; padding: 8px 10px !important; gap: 6px !important;
             }
-            body.mob-step-2:not(.mob-other-tab) .cat-btn { padding: 8px 14px !important; font-size: 12.5px !important; flex-shrink: 0 !important; }
-            body.mob-step-2:not(.mob-other-tab) #${CFG.productGridId} {
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} .cat-btn {
+                padding: 8px 14px !important; font-size: 12.5px !important; flex-shrink: 0 !important;
+            }
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.productGridId} {
                 display: grid !important; grid-template-columns: repeat(2, 1fr) !important;
                 gap: 8px !important; padding: 10px !important;
             }
-            body.mob-step-2:not(.mob-other-tab) .product-card {
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} .product-card {
                 min-height: 94px !important; padding: 10px !important;
                 display: flex !important; flex-direction: column !important; justify-content: space-between !important;
             }
-            body.mob-step-2:not(.mob-other-tab) .product-card h4 { font-size: 13.5px !important; line-height: 1.25 !important; }
-            body.mob-step-2:not(.mob-other-tab) .price-badge { font-size: 12px !important; padding: 4px 10px !important; margin-top: 6px !important; }
-            body.mob-step-2:not(.mob-other-tab) .mob-card-qty-badge {
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} .product-card h4 { font-size: 13.5px !important; line-height: 1.25 !important; }
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} .price-badge { font-size: 12px !important; padding: 4px 10px !important; margin-top: 6px !important; }
+            body.mob-step-2:not(.mob-other-tab) #${CFG.posScreenId} .mob-card-qty-badge {
                 display: inline-block !important; margin-top: 5px; background: #27ae60;
                 color: white; padding: 2px 8px; border-radius: 10px; font-size: 10.5px; font-weight: bold;
             }
@@ -4832,16 +4859,18 @@ window.initMobilePosWizard = function() {
                 box-shadow: 0 -3px 12px rgba(0,0,0,0.25);
             }
 
-            /* LAYER 3: Keranjang (Left Menu Panel Hidden, Full Scroll) */
-            body.mob-step-3:not(.mob-other-tab) .mob-left-panel { display: none !important; }
-            body.mob-step-3:not(.mob-other-tab) .mob-right-panel { display: flex !important; flex-direction: column !important; padding: 10px !important; box-sizing: border-box !important; }
+            /* LAYER 3: Keranjang (Left Menu Panel Completely Hidden, Full Scroll) */
+            body.mob-step-3:not(.mob-other-tab) #${CFG.posScreenId} .mob-left-panel { display: none !important; }
+            body.mob-step-3:not(.mob-other-tab) #${CFG.posScreenId} .mob-right-panel {
+                display: flex !important; flex-direction: column !important; padding: 10px !important; box-sizing: border-box !important;
+            }
             body.mob-step-3:not(.mob-other-tab) #mobile-step3-header {
                 display: flex !important; justify-content: space-between; align-items: center; gap: 8px;
                 background: #ecf0f1; padding: 8px 10px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #bdc3c7;
             }
-            body.mob-step-3:not(.mob-other-tab) #${CFG.cartItemsId} button { width: 36px !important; height: 36px !important; font-size: 18px !important; }
-            body.mob-step-3:not(.mob-other-tab) .mob-cart-desktop-footer { display: none !important; }
-            body.mob-step-3:not(.mob-other-tab) #${CFG.cartItemsId}:empty + #mobile-step3-emptybar { display: block !important; }
+            body.mob-step-3:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.cartItemsId} button { width: 36px !important; height: 36px !important; font-size: 18px !important; }
+            body.mob-step-3:not(.mob-other-tab) #${CFG.posScreenId} .mob-cart-desktop-footer { display: none !important; }
+            body.mob-step-3:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.cartItemsId}:empty + #mobile-step3-emptybar { display: block !important; }
             body.mob-step-3:not(.mob-other-tab) #mobile-step3-footer {
                 display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
                 background: #2c3e50; color: #fff; padding: 9px 12px calc(9px + env(safe-area-inset-bottom, 0px)) 12px;
@@ -4849,7 +4878,7 @@ window.initMobilePosWizard = function() {
                 box-shadow: 0 -3px 12px rgba(0,0,0,0.25);
             }
 
-            body.mob-other-tab .mob-right-panel { display: none !important; }
+            body.mob-other-tab #${CFG.posScreenId} .mob-right-panel { display: none !important; }
 
             /* 4. Secondary Tabs Card Alignment (Cucian Aktif & Piutang) */
             .ticket-card {
@@ -4953,6 +4982,9 @@ window.initMobilePosWizard = function() {
     const mainWorkspace = leftPanel ? leftPanel.parentElement : null;
     if (!leftPanel || !rightPanel || !mainWorkspace) return;
 
+    window.mobLeftPanelEl = leftPanel;
+    window.mobRightPanelEl = rightPanel;
+
     mainWorkspace.classList.add("mob-main-workspace");
     leftPanel.classList.add("mob-left-panel");
     rightPanel.classList.add("mob-right-panel");
@@ -5009,7 +5041,7 @@ window.initMobilePosWizard = function() {
     if (topBar) {
         topBar.classList.add("mob-top-bar");
         const topRow1 = topBar.children[0];
-        const topRow2 = topBar.querySelector(".status-indicator") || topBar.children[1];
+        const topRow2 = topBar.children[1];
         if (topRow2) topRow2.classList.add("mob-top-row2");
 
         if (topRow1 && !document.getElementById("mob-menu-toggle-btn")) {
@@ -5037,16 +5069,16 @@ window.initMobilePosWizard = function() {
             return pinnedKeywords.some(kw => kw && (clean.includes(kw) || (btn.id && btn.id.toLowerCase().includes(kw))));
         };
 
-        const indicator = document.querySelector(".mob-top-bar .mob-top-row2");
-        if (indicator) {
-            const btns = Array.from(indicator.querySelectorAll("button")).filter(b => b.id !== "mob-menu-toggle-btn");
+        const row2 = document.querySelector(".mob-top-bar .mob-top-row2");
+        if (row2) {
+            const btns = Array.from(row2.querySelectorAll("button")).filter(b => b.id !== "mob-menu-toggle-btn");
             const pinnedBtns = [], extraBtns = [];
             btns.forEach(btn => {
                 if (isPinnedBtn(btn)) { btn.classList.remove("mob-collapsible-btn"); pinnedBtns.push(btn); }
                 else { btn.classList.add("mob-collapsible-btn"); extraBtns.push(btn); }
             });
-            pinnedBtns.forEach(btn => indicator.appendChild(btn));
-            extraBtns.forEach(btn => indicator.appendChild(btn));
+            pinnedBtns.forEach(btn => row2.appendChild(btn));
+            extraBtns.forEach(btn => row2.appendChild(btn));
         }
     };
 
@@ -5092,6 +5124,7 @@ window.initMobilePosWizard = function() {
             } else if (cartTabOrigParent && cartTabBar.parentNode !== cartTabOrigParent) {
                 cartTabOrigParent.insertBefore(cartTabBar, cartTabOrigNext);
             }
+            window.syncMobilePanelVisibility();
         };
         syncCartTabPlacement();
         window.addEventListener("resize", syncCartTabPlacement);
@@ -5164,6 +5197,27 @@ window.initMobilePosWizard = function() {
     window.setMobilePosStep(1);
 };
 
+window.syncMobilePanelVisibility = function() {
+    const lp = window.mobLeftPanelEl;
+    const rp = window.mobRightPanelEl;
+    if (!lp || !rp) return;
+
+    if (window.innerWidth > 768) {
+        lp.classList.remove("mob-hidden-panel");
+        rp.classList.remove("mob-hidden-panel");
+        return;
+    }
+
+    const step = window.mobilePosStep || 1;
+    if (step === 1 || step === 2) {
+        lp.classList.remove("mob-hidden-panel");
+        rp.classList.add("mob-hidden-panel");
+    } else if (step === 3) {
+        lp.classList.add("mob-hidden-panel");
+        rp.classList.remove("mob-hidden-panel");
+    }
+};
+
 window.goToMobileCartStep = function() {
     if (!currentCart || currentCart.length === 0) {
         return alert("Keranjang masih kosong! Silakan pilih menu terlebih dahulu.");
@@ -5181,6 +5235,7 @@ window.setMobilePosStep = function(step) {
 
     document.body.classList.remove("mob-step-1", "mob-step-2", "mob-step-3");
     document.body.classList.add("mob-step-" + step);
+    window.syncMobilePanelVisibility();
 
     for (let i = 1; i <= 4; i++) {
         const pill = document.getElementById("mob-pill-" + i);
