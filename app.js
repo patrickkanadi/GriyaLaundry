@@ -1592,7 +1592,7 @@ window.handleAutocomplete = function(e) {
                 resBox.innerHTML = allMatches.map(m => {
                     let badge = m.isStaffProfile ? `<span style="background:#3498db; color:white; font-size:10px; padding:2px 4px; border-radius:3px; margin-left:5px;">Staff</span>` : "";
                     return `
-                    <div class="autocomplete-item" onmousedown="window.selectStaffOrMember('${m.phone}', '${m.name}', ${m.isStaffProfile ? 'true' : 'false'})" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px; z-index: 10000; position:relative;">
+                    <div class="autocomplete-item" onclick="window.selectStaffOrMember('${m.phone}', '${m.name}', ${m.isStaffProfile ? 'true' : 'false'})" style="padding: 12px 15px; border-bottom: 1px solid #eef2f3; cursor: pointer; text-align: left; background: #fff; font-size: 15px; z-index: 10000; position:relative;">
                         <div style="font-weight: bold; color: #2980b9;">${m.phone} ${badge}</div>
                         <div style="font-size: 13px; color: #555; margin-top:2px;">${m.name}</div>
                     </div>
@@ -4230,6 +4230,8 @@ function populateShiftModal(data, isActive) {
 
 
     let modal = document.getElementById("shift-detail-modal"); if (modal) modal.classList.remove("hidden");
+    let shiftScroll = document.getElementById("mob-shift-scroll-body");
+    if (shiftScroll) shiftScroll.scrollTop = 0;
 
 }
 
@@ -4960,10 +4962,21 @@ window.initMobilePosWizard = function() {
                 font-size: 16px !important; padding: 10px 12px !important;
                 min-height: 44px !important; border-radius: 8px !important; box-sizing: border-box !important;
             }
+            .modal-overlay input.promo-input {
+                width: 72px !important; min-width: 72px !important;
+                padding: 8px 4px !important; text-align: center !important;
+            }
             .modal-overlay input[type="date"] { font-size: 13.5px !important; padding: 8px 8px !important; }
             .modal-overlay button {
                 font-size: 13.5px !important; padding: 11px 12px !important;
                 min-height: 44px !important; border-radius: 8px !important; line-height: 1.25 !important;
+            }
+
+            /* History Modal Tab Buttons Fit Cleanly on Narrow Phones */
+            #${CFG.historyModalId} button[onclick*="renderHistoryList"] {
+                flex: 1 1 22% !important; min-width: 0 !important;
+                padding: 8px 4px !important; font-size: 11.5px !important;
+                min-height: 38px !important; white-space: nowrap !important;
             }
 
             /* Numpad Modal 3-Column Grid Protection */
@@ -4978,10 +4991,13 @@ window.initMobilePosWizard = function() {
             /* Shift Report Modal: Pinned Header + Scrollable Middle + Pinned Footer */
             #${CFG.shiftModalId} {
                 position: fixed !important;
-                inset: 0 !important;
-                width: 100vw !important;
-                height: 100dvh !important;
-                max-height: 100dvh !important;
+                top: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                max-height: 100% !important;
                 padding: 8px !important;
                 align-items: stretch !important;
                 justify-content: center !important;
