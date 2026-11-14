@@ -1075,6 +1075,8 @@ window.switchAntrean = function(index) {
 
     antreans[currentAntreanIndex].isLocked = isMenuLocked;
 
+    antreans[currentAntreanIndex].mobileStep = window.mobilePosStep || 1;
+
     
 
     let cp = document.getElementById("cust-phone"); if (cp) antreans[currentAntreanIndex].phoneInput = cp.value;
@@ -2299,8 +2301,11 @@ window.clearCart = function(force = false) {
 
     if(pf) { if(pf.tagName === 'INPUT') pf.value = 0; else pf.innerText = 0; }
 
-};
+    if (!force && !isMenuLocked && window.setMobilePosStep && window.mobilePosStep === 3) {
+        window.setMobilePosStep(2);
+    }
 
+};
 
 
 window.finalizeOrder = async function(shouldPrint) {
@@ -4517,7 +4522,7 @@ window.onload = async () => {
 };
 
 // =========================================================================
-// 📱 UNIVERSAL MOBILE POS WIZARD & RESPONSIVE ENGINE (<= 768px)
+// 📱 GRIYA LAUNDRY MOBILE POS WIZARD & RESPONSIVE ENGINE (<= 768px)
 // =========================================================================
 window.MOBILE_POS_CONFIG = {
     defaultPinnedKeywords: ["printer", "sync", "riwayat"],
@@ -4554,20 +4559,20 @@ window.initMobilePosWizard = function() {
     style.textContent = `
         #mobile-wizard-stepper, #mobile-step2-footer, #mobile-step3-footer,
         #mobile-step2-custbar, #mobile-step3-header, #mobile-step1-nextbar,
-        .mob-card-qty-badge { display: none; }
+        #mobile-step3-emptybar, .mob-card-qty-badge { display: none; }
 
         /* Clean Left-Aligned Customer Autocomplete */
         #${CFG.autocompleteId} .autocomplete-item {
             display: block !important;
             text-align: left !important;
-            padding: 9px 14px !important;
+            padding: 10px 14px !important;
             border-bottom: 1px solid #e5e8e8 !important;
             cursor: pointer !important;
         }
         #${CFG.autocompleteId} .autocomplete-item:hover { background: #f0f7ff !important; }
 
         @media (max-width: 768px) {
-            /* 1. Lock Login Screen, Unlock Full Page Scroll After Login */
+            /* 1. Lock Login Screen vs. Unlock Full Page Scroll After Login */
             html.mob-login-html, body.mob-login-open {
                 position: fixed !important;
                 inset: 0 !important;
@@ -4606,21 +4611,22 @@ window.initMobilePosWizard = function() {
                 min-height: 100vh !important;
                 max-height: none !important;
                 overflow: visible !important;
-                padding-bottom: 120px !important;
+                padding-bottom: 115px !important;
             }
             body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId}:not(.hidden) {
-                padding-bottom: 48vh !important;
+                padding-bottom: 45vh !important;
             }
-            #main-workspace-wrapper, #main-workspace, #menu-section, #cart-section,
-            #${CFG.productGridId}, #${CFG.cartItemsId}, ${secondarySelectors},
-            .mob-main-workspace, .mob-left-panel, .mob-right-panel, .mob-menu-wrapper {
+            #main-workspace-wrapper, #${CFG.productGridId}, #${CFG.cartItemsId}, ${secondarySelectors},
+            .mob-main-workspace, .mob-left-panel, .mob-right-panel, .mob-scroll-unlock {
                 height: auto !important;
+                min-height: 0 !important;
                 max-height: none !important;
                 overflow: visible !important;
+                touch-action: pan-y !important;
             }
             ${secondarySelectors} { padding: 12px !important; }
 
-            /* 2. Compact 2-Row Top Bar */
+            /* 2. Compact 2-Row Mobile Top Bar */
             .mob-top-bar {
                 display: flex !important;
                 flex-direction: column !important;
@@ -4700,21 +4706,24 @@ window.initMobilePosWizard = function() {
                 margin-bottom: 2px !important;
             }
             body.mob-header-collapsed .mob-top-bar .mob-top-row2 button.mob-collapsible-btn,
-            .mob-top-bar .mob-top-row2 button.hidden {
+            .mob-top-bar button.hidden,
+            .mob-top-bar button[style*="display: none"] {
                 display: none !important;
             }
             .mob-top-bar .mob-top-row2 button {
-                flex: 1 1 auto !important;
+                flex: 1 1 30% !important;
                 min-width: 0 !important;
-                padding: 6px 7px !important;
+                padding: 6px 6px !important;
                 font-size: 11px !important;
                 margin: 0 !important;
                 border-radius: 5px !important;
                 text-align: center !important;
                 white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
             }
 
-            /* 3. Main Tabs & 4-Step Wizard Stepper */
+            /* 3. Main Tabs, Queue Tabs & 4-Step Wizard Stepper */
             .mob-main-tabs-bar { display: flex !important; flex-wrap: nowrap !important; gap: 0 !important; }
             ${mainTabSelectors} {
                 min-width: 0 !important;
@@ -4761,63 +4770,81 @@ window.initMobilePosWizard = function() {
             .mob-main-workspace { display: block !important; width: 100% !important; }
             .mob-left-panel, .mob-right-panel { width: 100% !important; max-width: 100% !important; min-width: 0 !important; border: none !important; margin: 0 !important; }
 
-            /* STEP 1: Customer */
+            /* LAYER 1: Customer / Member / Walk-in (Menu & Keranjang Hidden) */
             body.mob-step-1:not(.mob-other-tab) .mob-right-panel,
             body.mob-step-1:not(.mob-other-tab) #${CFG.categoryContainerId},
             body.mob-step-1:not(.mob-other-tab) #${CFG.productGridId},
             body.mob-step-1:not(.mob-other-tab) #${CFG.glassOverlayId},
             body.mob-step-1:not(.mob-other-tab) .mob-menu-wrapper { display: none !important; }
-            body.mob-step-1:not(.mob-other-tab) .mob-command-bar { display: block !important; padding: 8px 10px !important; width: 100% !important; }
+            body.mob-step-1:not(.mob-other-tab) .mob-command-bar { display: block !important; padding: 10px !important; width: 100% !important; box-sizing: border-box !important; }
             body.mob-step-1:not(.mob-other-tab) #customer-input-section:not(.hidden) { display: flex !important; flex-direction: column !important; gap: 8px !important; width: 100% !important; }
             body.mob-step-1:not(.mob-other-tab) #customer-input-section input,
-            body.mob-step-1:not(.mob-other-tab) #customer-input-section button { width: 100% !important; min-height: 42px !important; font-size: 14.5px !important; margin: 0 !important; box-sizing: border-box !important; }
+            body.mob-step-1:not(.mob-other-tab) #customer-input-section button { width: 100% !important; min-height: 44px !important; font-size: 16px !important; margin: 0 !important; box-sizing: border-box !important; border-radius: 8px !important; }
             body.mob-step-1:not(.mob-other-tab) #${CFG.autocompleteId}:not(.hidden) {
                 position: static !important; width: 100% !important; max-width: 100% !important;
                 max-height: none !important; overflow: visible !important;
-                border: 2px solid #3498db !important; border-radius: 8px !important; margin-top: 4px !important;
+                border: 2px solid #3498db !important; border-radius: 8px !important; margin-top: 6px !important;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
             }
-            body.mob-step-1:not(.mob-other-tab) #${CFG.activeBannerId}:not(.hidden) #mobile-step1-nextbar { display: block !important; margin-top: 10px; }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.activeBannerId}:not(.hidden) {
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 8px !important;
+                padding: 12px !important;
+                border-radius: 8px !important;
+            }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.activeBannerId}:not(.hidden) #mobile-step1-nextbar { display: block !important; margin-top: 6px; width: 100%; }
 
-            /* STEP 2: Menu Grid */
+            /* LAYER 2: Choosing Menu (Keranjang & Search Inputs Hidden, Full Scroll) */
             body.mob-step-2:not(.mob-other-tab) .mob-right-panel,
             body.mob-step-2:not(.mob-other-tab) #customer-input-section,
             body.mob-step-2:not(.mob-other-tab) #${CFG.activeBannerId},
             body.mob-step-2:not(.mob-other-tab) #${CFG.glassOverlayId} { display: none !important; }
             body.mob-step-2:not(.mob-other-tab) .mob-command-bar { display: block !important; padding: 6px 8px !important; }
             body.mob-step-2:not(.mob-other-tab) #mobile-step2-custbar {
-                display: flex !important; justify-content: space-between; align-items: center;
-                background: #eafaf1; border: 1px solid #a9dfbf; padding: 6px 10px;
-                border-radius: 6px; margin-top: 4px; font-size: 12px; color: #1e8449;
+                display: flex !important; justify-content: space-between; align-items: center; gap: 8px;
+                background: #eafaf1; border: 1px solid #a9dfbf; padding: 7px 10px;
+                border-radius: 7px; font-size: 12.5px; color: #1e8449;
             }
-            body.mob-step-2:not(.mob-other-tab) #${CFG.categoryContainerId} { display: flex !important; overflow-x: auto !important; white-space: nowrap !important; padding: 8px 10px !important; gap: 6px !important; }
-            body.mob-step-2:not(.mob-other-tab) .cat-btn { padding: 8px 13px !important; font-size: 12.5px !important; flex-shrink: 0 !important; }
-            body.mob-step-2:not(.mob-other-tab) #${CFG.productGridId} { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; padding: 10px !important; }
-            body.mob-step-2:not(.mob-other-tab) .product-card { min-height: 92px !important; padding: 10px !important; }
-            body.mob-step-2:not(.mob-other-tab) .product-card h4 { font-size: 13.5px !important; }
-            body.mob-step-2:not(.mob-other-tab) .price-badge { font-size: 12px !important; padding: 4px 10px !important; }
+            body.mob-step-2:not(.mob-other-tab) #${CFG.categoryContainerId} {
+                display: flex !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important;
+                white-space: nowrap !important; padding: 8px 10px !important; gap: 6px !important;
+            }
+            body.mob-step-2:not(.mob-other-tab) .cat-btn { padding: 8px 14px !important; font-size: 12.5px !important; flex-shrink: 0 !important; }
+            body.mob-step-2:not(.mob-other-tab) #${CFG.productGridId} {
+                display: grid !important; grid-template-columns: repeat(2, 1fr) !important;
+                gap: 8px !important; padding: 10px !important;
+            }
+            body.mob-step-2:not(.mob-other-tab) .product-card {
+                min-height: 94px !important; padding: 10px !important;
+                display: flex !important; flex-direction: column !important; justify-content: space-between !important;
+            }
+            body.mob-step-2:not(.mob-other-tab) .product-card h4 { font-size: 13.5px !important; line-height: 1.25 !important; }
+            body.mob-step-2:not(.mob-other-tab) .price-badge { font-size: 12px !important; padding: 4px 10px !important; margin-top: 6px !important; }
             body.mob-step-2:not(.mob-other-tab) .mob-card-qty-badge {
                 display: inline-block !important; margin-top: 5px; background: #27ae60;
                 color: white; padding: 2px 8px; border-radius: 10px; font-size: 10.5px; font-weight: bold;
             }
             body.mob-step-2:not(.mob-other-tab) #mobile-step2-footer {
                 display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
-                background: #2c3e50; color: #fff; padding: 9px 12px;
+                background: #2c3e50; color: #fff; padding: 9px 12px calc(9px + env(safe-area-inset-bottom, 0px)) 12px;
                 justify-content: space-between; align-items: center; z-index: 95;
                 box-shadow: 0 -3px 12px rgba(0,0,0,0.25);
             }
 
-            /* STEP 3: Cart Confirmation */
+            /* LAYER 3: Keranjang (Left Menu Panel Hidden, Full Scroll) */
             body.mob-step-3:not(.mob-other-tab) .mob-left-panel { display: none !important; }
-            body.mob-step-3:not(.mob-other-tab) .mob-right-panel { display: flex !important; flex-direction: column !important; padding: 10px !important; }
+            body.mob-step-3:not(.mob-other-tab) .mob-right-panel { display: flex !important; flex-direction: column !important; padding: 10px !important; box-sizing: border-box !important; }
             body.mob-step-3:not(.mob-other-tab) #mobile-step3-header {
-                display: flex !important; justify-content: space-between; align-items: center;
+                display: flex !important; justify-content: space-between; align-items: center; gap: 8px;
                 background: #ecf0f1; padding: 8px 10px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #bdc3c7;
             }
-            body.mob-step-3:not(.mob-other-tab) #${CFG.cartItemsId} button { width: 34px !important; height: 34px !important; font-size: 16px !important; }
-            body.mob-step-3:not(.mob-other-tab) .mob-right-panel > div:last-child { display: none !important; }
+            body.mob-step-3:not(.mob-other-tab) #${CFG.cartItemsId} button { width: 36px !important; height: 36px !important; font-size: 18px !important; }
+            body.mob-step-3:not(.mob-other-tab) .mob-cart-desktop-footer { display: none !important; }
+            body.mob-step-3:not(.mob-other-tab) #${CFG.cartItemsId}:empty + #mobile-step3-emptybar { display: block !important; }
             body.mob-step-3:not(.mob-other-tab) #mobile-step3-footer {
                 display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
-                background: #2c3e50; color: #fff; padding: 9px 12px;
+                background: #2c3e50; color: #fff; padding: 9px 12px calc(9px + env(safe-area-inset-bottom, 0px)) 12px;
                 justify-content: space-between; align-items: center; gap: 8px; z-index: 95;
                 box-shadow: 0 -3px 12px rgba(0,0,0,0.25);
             }
@@ -4844,12 +4871,12 @@ window.initMobilePosWizard = function() {
                 margin-top: 0 !important;
             }
 
-            /* 5. Proportional & Responsive Popups / Modals */
+            /* 5. Layer 4 (Payment Modal) & All Popups Proportional Mobile Styling */
             .modal-overlay {
                 z-index: 250 !important;
                 align-items: flex-start !important;
                 justify-content: center !important;
-                padding: 8px 8px calc(74px + env(safe-area-inset-bottom, 0px)) 8px !important;
+                padding: 8px 8px calc(84px + env(safe-area-inset-bottom, 0px)) 8px !important;
                 overflow-y: auto !important;
                 -webkit-overflow-scrolling: touch !important;
             }
@@ -4867,14 +4894,23 @@ window.initMobilePosWizard = function() {
             .modal-overlay .form-box { margin-bottom: 10px !important; }
             .modal-overlay .form-box label, .modal-overlay label { font-size: 12px !important; margin-bottom: 4px !important; }
             .modal-overlay input, .modal-overlay select, .modal-overlay textarea {
-                font-size: 14px !important; padding: 9px 10px !important;
-                min-height: 40px !important; border-radius: 7px !important; box-sizing: border-box !important;
+                font-size: 16px !important; padding: 9px 10px !important;
+                min-height: 42px !important; border-radius: 7px !important; box-sizing: border-box !important;
             }
-            .modal-overlay input[type="date"] { font-size: 12.5px !important; padding: 8px 6px !important; }
+            .modal-overlay input[type="date"] { font-size: 13px !important; padding: 8px 6px !important; }
             .modal-overlay button {
-                font-size: 12.5px !important; padding: 10px !important;
-                min-height: 40px !important; border-radius: 7px !important; line-height: 1.2 !important;
+                font-size: 13px !important; padding: 10px !important;
+                min-height: 42px !important; border-radius: 7px !important; line-height: 1.2 !important;
             }
+
+            /* Numpad Modal 3-Column Grid Protection */
+            #numpad-modal .numpad-grid,
+            #numpad-modal div[style*="grid-template-columns"] {
+                display: grid !important;
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 8px !important;
+            }
+            #numpad-modal button { min-height: 48px !important; font-size: 18px !important; }
 
             /* Shift Report Modal Responsive Layout */
             #${CFG.shiftModalId} .stats-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 7px !important; margin-bottom: 8px !important; }
@@ -4900,21 +4936,55 @@ window.initMobilePosWizard = function() {
     document.head.appendChild(style);
 
     const custInputSection = document.getElementById("customer-input-section");
-    const commandBar = document.getElementById("command-bar") || (custInputSection ? custInputSection.parentElement : null);
     const cartItems = document.getElementById(CFG.cartItemsId);
     const productGrid = document.getElementById(CFG.productGridId);
-    if (!commandBar || !cartItems) return;
+    const posScreen = document.getElementById(CFG.posScreenId);
+    if (!cartItems || !productGrid) return;
 
-    commandBar.classList.add("mob-command-bar");
-    const leftPanel = commandBar.parentElement;
-    const mainWorkspace = leftPanel.parentElement;
-    const rightPanel = Array.from(mainWorkspace.children).find(el => el !== leftPanel && el.contains(cartItems));
+    // Deterministically locate Left Panel, Right Panel, and Main Workspace
+    let leftPanel = productGrid;
+    while (leftPanel && leftPanel.parentElement && !leftPanel.parentElement.contains(cartItems)) {
+        leftPanel = leftPanel.parentElement;
+    }
+    let rightPanel = cartItems;
+    while (rightPanel && rightPanel.parentElement && !rightPanel.parentElement.contains(productGrid)) {
+        rightPanel = rightPanel.parentElement;
+    }
+    const mainWorkspace = leftPanel ? leftPanel.parentElement : null;
+    if (!leftPanel || !rightPanel || !mainWorkspace) return;
 
     mainWorkspace.classList.add("mob-main-workspace");
     leftPanel.classList.add("mob-left-panel");
-    if (rightPanel) rightPanel.classList.add("mob-right-panel");
-    if (productGrid && productGrid.parentElement !== leftPanel) {
+    rightPanel.classList.add("mob-right-panel");
+
+    // Unlock scroll on every intermediate wrapper between productGrid/cartItems and posScreen
+    [productGrid, cartItems, custInputSection].forEach(el => {
+        let curr = el ? el.parentElement : null;
+        while (curr && curr !== posScreen && curr !== document.body) {
+            curr.classList.add("mob-scroll-unlock");
+            curr = curr.parentElement;
+        }
+    });
+
+    if (productGrid.parentElement !== leftPanel) {
         productGrid.parentElement.classList.add("mob-menu-wrapper");
+    }
+
+    const commandBar = document.getElementById("command-bar") || (custInputSection ? custInputSection.parentElement : null);
+    if (commandBar && commandBar !== leftPanel) {
+        commandBar.classList.add("mob-command-bar");
+    }
+
+    // Mark desktop cart footer so Step 3 hides only the desktop footer bar
+    const totalEl = document.getElementById("cart-grand-total") || document.getElementById("cart-total");
+    if (totalEl) {
+        let footerBlock = totalEl;
+        while (footerBlock && footerBlock.parentElement !== rightPanel) {
+            footerBlock = footerBlock.parentElement;
+        }
+        if (footerBlock && footerBlock !== cartItems) {
+            footerBlock.classList.add("mob-cart-desktop-footer");
+        }
     }
 
     const tabNewOrder = document.getElementById("tab-new-order");
@@ -5042,7 +5112,11 @@ window.initMobilePosWizard = function() {
         <span id="mob-s2-cust" style="font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">👤 Pelanggan</span>
         <button type="button" onclick="window.setMobilePosStep(1)" style="background:#2980b9; color:white; border:none; padding:5px 10px; border-radius:5px; font-weight:bold; font-size:11.5px; cursor:pointer; flex-shrink:0;">Ganti / Detail</button>
     `;
-    commandBar.appendChild(step2CustBar);
+    if (commandBar && commandBar !== leftPanel) {
+        commandBar.appendChild(step2CustBar);
+    } else {
+        leftPanel.insertBefore(step2CustBar, leftPanel.firstChild);
+    }
 
     const step2Footer = document.createElement("div");
     step2Footer.id = "mobile-step2-footer";
@@ -5051,9 +5125,19 @@ window.initMobilePosWizard = function() {
             <div id="mob-f2-count" style="font-size:12px; color:#bdc3c7;">0 Item dipilih</div>
             <div id="mob-f2-total" style="font-size:17px; font-weight:bold; color:#2ecc71;">Rp 0</div>
         </div>
-        <button type="button" id="mob-f2-next-btn" onclick="window.setMobilePosStep(3)" style="background:#27ae60; color:white; border:none; padding:12px 18px; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer;">Keranjang ➔</button>
+        <button type="button" id="mob-f2-next-btn" onclick="window.goToMobileCartStep()" style="background:#27ae60; color:white; border:none; padding:12px 18px; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer;">Keranjang ➔</button>
     `;
     document.body.appendChild(step2Footer);
+
+    const step3EmptyBar = document.createElement("div");
+    step3EmptyBar.id = "mobile-step3-emptybar";
+    step3EmptyBar.innerHTML = `
+        <div style="text-align:center; padding:30px 15px; background:#fff; border-radius:10px; border:1px dashed #bdc3c7;">
+            <div style="font-size:14px; color:#7f8c8d; margin-bottom:12px;">Keranjang masih kosong.</div>
+            <button type="button" onclick="window.setMobilePosStep(2)" style="background:#3498db; color:white; border:none; padding:11px 18px; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer;">⬅ Kembali Pilih Menu</button>
+        </div>
+    `;
+    cartItems.parentNode.insertBefore(step3EmptyBar, cartItems.nextSibling);
 
     const step3Footer = document.createElement("div");
     step3Footer.id = "mobile-step3-footer";
@@ -5069,17 +5153,22 @@ window.initMobilePosWizard = function() {
     `;
     document.body.appendChild(step3Footer);
 
-    if (rightPanel) {
-        const step3Header = document.createElement("div");
-        step3Header.id = "mobile-step3-header";
-        step3Header.innerHTML = `
-            <button type="button" onclick="window.setMobilePosStep(2)" style="background:#3498db; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; font-size:13px; cursor:pointer;">⬅ Tambah Menu</button>
-            <div id="mob-s3-cust" style="font-size:13px; font-weight:bold; color:#2c3e50; text-align:right;">👤 Pelanggan</div>
-        `;
-        rightPanel.insertBefore(step3Header, rightPanel.firstChild);
-    }
+    const step3Header = document.createElement("div");
+    step3Header.id = "mobile-step3-header";
+    step3Header.innerHTML = `
+        <button type="button" onclick="window.setMobilePosStep(2)" style="background:#3498db; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; font-size:13px; cursor:pointer;">⬅ Tambah Menu</button>
+        <div id="mob-s3-cust" style="font-size:13px; font-weight:bold; color:#2c3e50; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">👤 Pelanggan</div>
+    `;
+    rightPanel.insertBefore(step3Header, rightPanel.firstChild);
 
     window.setMobilePosStep(1);
+};
+
+window.goToMobileCartStep = function() {
+    if (!currentCart || currentCart.length === 0) {
+        return alert("Keranjang masih kosong! Silakan pilih menu terlebih dahulu.");
+    }
+    window.setMobilePosStep(3);
 };
 
 window.setMobilePosStep = function(step) {
