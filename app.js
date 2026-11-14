@@ -4559,7 +4559,7 @@ window.initMobilePosWizard = function() {
     style.textContent = `
         #mobile-wizard-stepper, #mobile-step2-footer, #mobile-step3-footer,
         #mobile-step2-custbar, #mobile-step3-header, #mobile-step1-nextbar,
-        #mobile-step3-emptybar, .mob-card-qty-badge { display: none; }
+        #mobile-step3-emptybar, .mob-card-qty-badge, #mob-menu-toggle-btn { display: none; }
 
         /* Clean Left-Aligned Customer Autocomplete */
         #${CFG.autocompleteId} .autocomplete-item {
@@ -4632,13 +4632,16 @@ window.initMobilePosWizard = function() {
             }
             ${secondarySelectors} { padding: 12px !important; }
 
-            /* 2. Compact 2-Row Mobile Top Bar */
+            /* 2. Compact 2-Row Mobile Top Bar (Kasir + Outlet | Menu | Permanent Koin) */
             #${CFG.posScreenId} .mob-top-bar {
                 display: flex !important;
                 flex-direction: column !important;
                 align-items: stretch !important;
                 gap: 6px !important;
-                padding: 7px 10px !important;
+                padding: 7px 8px !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
             }
             #${CFG.posScreenId} .mob-top-bar > div:first-child {
                 display: flex !important;
@@ -4652,20 +4655,20 @@ window.initMobilePosWizard = function() {
                 display: flex !important;
                 flex-wrap: wrap !important;
                 align-items: center !important;
-                gap: 2px 4px !important;
+                gap: 1px 4px !important;
                 flex: 1 1 auto !important;
                 min-width: 0 !important;
-                font-size: 12px !important;
+                font-size: 11.5px !important;
                 line-height: 1.2 !important;
             }
-            #mob-menu-toggle-btn {
+            #${CFG.posScreenId} #mob-menu-toggle-btn {
                 display: inline-flex !important;
                 align-items: center !important;
                 justify-content: center !important;
                 flex: 0 0 auto !important;
                 width: auto !important;
-                margin-left: auto !important;
-                padding: 5px 10px !important;
+                margin: 0 0 0 auto !important;
+                padding: 5px 9px !important;
                 font-size: 11.5px !important;
                 line-height: 1.15 !important;
                 font-weight: bold !important;
@@ -4676,19 +4679,33 @@ window.initMobilePosWizard = function() {
                 cursor: pointer !important;
                 white-space: nowrap !important;
             }
-            body:not(.mob-header-collapsed) #mob-menu-toggle-btn {
+            body:not(.mob-header-collapsed) #${CFG.posScreenId} #mob-menu-toggle-btn {
                 background: #34495e !important;
                 border-color: #95a5a6 !important;
             }
-            #${CFG.posScreenId} .mob-top-bar > div:first-child button:not(#mob-menu-toggle-btn) {
+            #${CFG.posScreenId} #btn-koin-top {
                 display: inline-flex !important;
                 align-items: center !important;
                 justify-content: center !important;
                 flex: 0 0 auto !important;
                 width: auto !important;
-                margin-left: 0 !important;
-                padding: 5px 9px !important;
-                font-size: 11.5px !important;
+                margin: 0 !important;
+                padding: 5px 8px !important;
+                font-size: 10.5px !important;
+                line-height: 1.15 !important;
+                font-weight: bold !important;
+                border-radius: 5px !important;
+                white-space: nowrap !important;
+            }
+            #${CFG.posScreenId} .mob-top-bar > div:first-child button:not(#mob-menu-toggle-btn):not(#btn-koin-top) {
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                flex: 0 0 auto !important;
+                width: auto !important;
+                margin: 0 !important;
+                padding: 5px 8px !important;
+                font-size: 11px !important;
                 line-height: 1.15 !important;
                 border-radius: 5px !important;
                 white-space: nowrap !important;
@@ -4699,7 +4716,7 @@ window.initMobilePosWizard = function() {
                 align-items: center !important;
                 justify-content: flex-start !important;
                 width: 100% !important;
-                gap: 5px !important;
+                gap: 6px !important;
                 padding-top: 6px !important;
                 border-top: 1px solid rgba(255,255,255,0.16) !important;
             }
@@ -4711,22 +4728,27 @@ window.initMobilePosWizard = function() {
                 margin-bottom: 2px !important;
                 font-size: 11.5px !important;
             }
-            body.mob-header-collapsed #${CFG.posScreenId} .mob-top-bar button.mob-collapsible-btn,
-            #${CFG.posScreenId} .mob-top-bar button.hidden,
-            #${CFG.posScreenId} .mob-top-bar button[style*="display: none"] {
+            body.mob-header-collapsed #${CFG.posScreenId} .mob-top-bar .mob-top-row2 button.mob-collapsible-btn,
+            #${CFG.posScreenId} .mob-top-bar .mob-top-row2 button.hidden,
+            #${CFG.posScreenId} .mob-top-bar .mob-top-row2 button[style*="display: none"] {
                 display: none !important;
             }
             #${CFG.posScreenId} .mob-top-bar .mob-top-row2 button {
                 flex: 1 1 30% !important;
                 min-width: 0 !important;
-                padding: 6px 6px !important;
-                font-size: 11px !important;
+                min-height: 36px !important;
+                padding: 7px 6px !important;
+                font-size: 11.5px !important;
+                font-weight: bold !important;
                 margin: 0 !important;
-                border-radius: 5px !important;
+                border-radius: 6px !important;
                 text-align: center !important;
                 white-space: nowrap !important;
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
+            }
+            body:not(.mob-header-collapsed) #${CFG.posScreenId} .mob-top-bar .mob-top-row2 button {
+                flex: 1 1 46% !important;
+                min-height: 38px !important;
+                font-size: 12px !important;
             }
 
             /* 3. Main Tabs, Queue Tabs & 4-Step Wizard Stepper */
@@ -4734,8 +4756,8 @@ window.initMobilePosWizard = function() {
             ${mainTabSelectors} {
                 min-width: 0 !important;
                 flex: 1 1 0 !important;
-                font-size: 11px !important;
-                padding: 8px 3px !important;
+                font-size: 11.5px !important;
+                padding: 9px 4px !important;
                 white-space: normal !important;
                 line-height: 1.2 !important;
             }
@@ -4745,7 +4767,7 @@ window.initMobilePosWizard = function() {
                 background: #34495e !important;
                 border-bottom: 1px solid #1e272e !important;
             }
-            #${CFG.posScreenId} .antrean-btn { min-width: 0 !important; flex: 1 !important; font-size: 11.5px !important; padding: 8px 4px !important; }
+            #${CFG.posScreenId} .antrean-btn { min-width: 0 !important; flex: 1 !important; font-size: 12px !important; padding: 9px 4px !important; }
 
             #mobile-wizard-stepper {
                 display: flex !important;
@@ -4764,8 +4786,8 @@ window.initMobilePosWizard = function() {
 
             .mob-step-pill {
                 flex: 1; min-width: 0; text-align: center;
-                padding: 7px 2px; border-radius: 6px;
-                font-size: 10.5px; font-weight: bold;
+                padding: 8px 2px; border-radius: 6px;
+                font-size: 11px; font-weight: bold;
                 color: #95a5a6; background: #2f3640;
                 border: 1px solid transparent; cursor: pointer;
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -4810,8 +4832,17 @@ window.initMobilePosWizard = function() {
                 display: flex !important; flex-direction: column !important; gap: 8px !important;
                 padding: 12px !important; border-radius: 8px !important;
             }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.activeBannerId}:not(.hidden) > div {
+                display: flex !important; flex-wrap: wrap !important; gap: 8px !important; width: 100% !important;
+            }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.activeBannerId}:not(.hidden) button {
+                flex: 1 1 45% !important; min-height: 40px !important; font-size: 13px !important; border-radius: 7px !important;
+            }
             body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.activeBannerId}:not(.hidden) #mobile-step1-nextbar {
-                display: block !important; margin-top: 6px; width: 100%;
+                display: block !important; margin-top: 4px; width: 100%;
+            }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId} #${CFG.activeBannerId}:not(.hidden) #mobile-step1-nextbar button {
+                flex: 1 1 100% !important; width: 100% !important; min-height: 46px !important; font-size: 15px !important;
             }
 
             /* LAYER 2: Choosing Menu (Keranjang & Search Inputs Completely Hidden, Full Scroll) */
@@ -4905,7 +4936,7 @@ window.initMobilePosWizard = function() {
                 z-index: 250 !important;
                 align-items: flex-start !important;
                 justify-content: center !important;
-                padding: 8px 8px calc(84px + env(safe-area-inset-bottom, 0px)) 8px !important;
+                padding: 10px 10px calc(115px + env(safe-area-inset-bottom, 0px)) 10px !important;
                 overflow-y: auto !important;
                 -webkit-overflow-scrolling: touch !important;
             }
@@ -4913,23 +4944,24 @@ window.initMobilePosWizard = function() {
             .modal-overlay > div {
                 width: 100% !important; max-width: 100% !important;
                 min-height: auto !important; max-height: none !important;
-                margin: 0 auto !important; padding: 14px 12px 16px 12px !important;
+                height: auto !important;
+                margin: 0 auto !important; padding: 16px 14px 20px 14px !important;
                 border-radius: 12px !important; overflow: visible !important;
-                box-sizing: border-box !important; font-size: 13px !important;
+                box-sizing: border-box !important; font-size: 13.5px !important;
             }
-            .modal-overlay h2 { font-size: 16.5px !important; line-height: 1.25 !important; margin: 0 0 8px 0 !important; }
-            .modal-overlay h3 { font-size: 14px !important; line-height: 1.25 !important; margin: 0 0 6px 0 !important; }
-            .modal-overlay p { font-size: 12px !important; line-height: 1.35 !important; margin-bottom: 8px !important; }
-            .modal-overlay .form-box { margin-bottom: 10px !important; }
-            .modal-overlay .form-box label, .modal-overlay label { font-size: 12px !important; margin-bottom: 4px !important; }
+            .modal-overlay h2 { font-size: 17px !important; line-height: 1.3 !important; margin: 0 0 10px 0 !important; }
+            .modal-overlay h3 { font-size: 14.5px !important; line-height: 1.3 !important; margin: 0 0 8px 0 !important; }
+            .modal-overlay p { font-size: 12.5px !important; line-height: 1.4 !important; margin-bottom: 10px !important; }
+            .modal-overlay .form-box { margin-bottom: 12px !important; }
+            .modal-overlay .form-box label, .modal-overlay label { font-size: 12.5px !important; margin-bottom: 5px !important; display: block !important; }
             .modal-overlay input, .modal-overlay select, .modal-overlay textarea {
-                font-size: 16px !important; padding: 9px 10px !important;
-                min-height: 42px !important; border-radius: 7px !important; box-sizing: border-box !important;
+                font-size: 16px !important; padding: 10px 12px !important;
+                min-height: 44px !important; border-radius: 8px !important; box-sizing: border-box !important;
             }
-            .modal-overlay input[type="date"] { font-size: 13px !important; padding: 8px 6px !important; }
+            .modal-overlay input[type="date"] { font-size: 13.5px !important; padding: 8px 8px !important; }
             .modal-overlay button {
-                font-size: 13px !important; padding: 10px !important;
-                min-height: 42px !important; border-radius: 7px !important; line-height: 1.2 !important;
+                font-size: 13.5px !important; padding: 11px 12px !important;
+                min-height: 44px !important; border-radius: 8px !important; line-height: 1.25 !important;
             }
 
             /* Numpad Modal 3-Column Grid Protection */
@@ -4941,25 +4973,58 @@ window.initMobilePosWizard = function() {
             }
             #numpad-modal button { min-height: 48px !important; font-size: 18px !important; }
 
-            /* Shift Report Modal Responsive Layout */
-            #${CFG.shiftModalId} .stats-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 7px !important; margin-bottom: 8px !important; }
-            #${CFG.shiftModalId} .stat-box { padding: 8px 6px !important; border-radius: 8px !important; }
-            #${CFG.shiftModalId} .stat-label { font-size: 10.5px !important; margin-bottom: 2px !important; }
-            #${CFG.shiftModalId} .stat-value { font-size: 18px !important; }
-            #${CFG.shiftModalId} div[style*="grid-template-columns"]:not(.stats-grid) { display: grid !important; grid-template-columns: 1fr !important; gap: 8px !important; }
-            #${CFG.shiftModalId} .revenue-breakdown { padding: 10px 12px !important; margin-bottom: 8px !important; }
-            #${CFG.shiftModalId} .revenue-row { font-size: 13px !important; padding: 5px 0 !important; gap: 8px !important; }
+            /* Shift Report Modal Spacious Single-Scroll Layout */
+            #${CFG.shiftModalId} {
+                padding: 10px 10px calc(120px + env(safe-area-inset-bottom, 0px)) 10px !important;
+            }
+            #${CFG.shiftModalId} .modal-content {
+                padding: 16px 14px 22px 14px !important;
+            }
+            #${CFG.shiftModalId} .stats-grid {
+                display: grid !important; grid-template-columns: 1fr !important; gap: 8px !important;
+                background: #f8f9fa !important; padding: 10px 12px !important;
+                border-radius: 8px !important; border: 1px solid #e2e8f0 !important; margin-bottom: 10px !important;
+            }
+            #${CFG.shiftModalId} .stat-box {
+                display: flex !important; justify-content: space-between !important; align-items: center !important;
+                padding: 4px 0 !important; border-bottom: 1px dashed #e2e8f0 !important; text-align: left !important;
+            }
+            #${CFG.shiftModalId} .stat-box:last-child { border-bottom: none !important; }
+            #${CFG.shiftModalId} .stat-label { font-size: 12px !important; margin: 0 !important; }
+            #${CFG.shiftModalId} .stat-value { font-size: 14px !important; font-weight: bold !important; }
+            #${CFG.shiftModalId} div[style*="grid-template-columns"]:not(.stats-grid) {
+                display: grid !important; grid-template-columns: 1fr !important; gap: 10px !important; margin-bottom: 10px !important;
+            }
+            #${CFG.shiftModalId} .revenue-breakdown {
+                padding: 12px !important; margin-bottom: 10px !important; border-radius: 8px !important;
+            }
+            #${CFG.shiftModalId} .revenue-row {
+                font-size: 13.5px !important; padding: 7px 0 !important; gap: 10px !important;
+                display: flex !important; justify-content: space-between !important; align-items: center !important;
+            }
             #${CFG.shiftModalId} .revenue-row span:last-child,
             #${CFG.shiftModalId} .revenue-row strong:last-child { white-space: nowrap !important; flex-shrink: 0 !important; }
-            #${CFG.shiftModalId} .modal-content > div:last-child { display: flex !important; flex-wrap: wrap !important; gap: 8px !important; margin-top: 10px !important; }
-            #${CFG.shiftModalId} .modal-content > div:last-child button { flex: 1 1 46% !important; white-space: nowrap !important; padding: 11px 8px !important; }
-            #${CFG.shiftModalId} #${CFG.endShiftBtnId} { flex: 1 1 100% !important; font-size: 13px !important; }
+            #${CFG.shiftModalId} #sd-food,
+            #${CFG.shiftModalId} #sd-categories {
+                max-height: none !important; overflow: visible !important; font-size: 13px !important; line-height: 1.45 !important;
+            }
+            #${CFG.shiftModalId} .modal-content > div:last-child {
+                display: flex !important; flex-wrap: wrap !important; gap: 8px !important;
+                margin-top: 14px !important; padding-top: 10px !important; border-top: 1px solid #e2e8f0 !important;
+            }
+            #${CFG.shiftModalId} .modal-content > div:last-child button {
+                flex: 1 1 46% !important; white-space: nowrap !important; padding: 12px 10px !important; min-height: 44px !important;
+            }
+            #${CFG.shiftModalId} #${CFG.endShiftBtnId} {
+                flex: 1 1 100% !important; width: 100% !important; font-size: 14.5px !important;
+                font-weight: bold !important; min-height: 48px !important; margin-top: 2px !important;
+            }
 
             /* History Lists */
-            #${CFG.historyContainerId} { max-height: 48dvh !important; }
-            .history-row { padding: 9px 10px !important; font-size: 12.5px !important; flex-wrap: wrap !important; gap: 6px !important; }
+            #${CFG.historyContainerId} { max-height: 52dvh !important; }
+            .history-row { padding: 10px !important; font-size: 13px !important; flex-wrap: wrap !important; gap: 6px !important; }
             .history-row > div:last-child { width: 100% !important; display: flex !important; flex-wrap: wrap !important; justify-content: flex-start !important; gap: 6px !important; text-align: left !important; }
-            .history-row button { padding: 6px 9px !important; font-size: 11.5px !important; min-height: 32px !important; }
+            .history-row button { padding: 7px 10px !important; font-size: 12px !important; min-height: 36px !important; }
         }
     `;
     document.head.appendChild(style);
@@ -5035,27 +5100,52 @@ window.initMobilePosWizard = function() {
     `;
     mainWorkspace.parentNode.insertBefore(stepper, mainWorkspace);
 
-    // 2. Compact 2-Row Top Bar + [☰ Menu] Toggle Button
+    // 2. Compact 2-Row Top Bar + [☰ Menu] Toggle Button + Permanent Top-Right Koin Button
     const cashierEl = document.getElementById("display-cashier");
     const topBar = document.getElementById("top-bar") || (cashierEl ? cashierEl.closest(".top-bar, header, #pos-screen > div") : null);
+    const koinBtn = document.getElementById("btn-koin-top");
+    const koinOrigParent = koinBtn ? koinBtn.parentElement : null;
+    const koinOrigNext = koinBtn ? koinBtn.nextSibling : null;
+
     if (topBar) {
         topBar.classList.add("mob-top-bar");
         const topRow1 = topBar.children[0];
-        const topRow2 = topBar.children[1];
-        if (topRow2) topRow2.classList.add("mob-top-row2");
+        let topRow2 = topBar.children[1];
+        if (!topRow2) {
+            topRow2 = document.createElement("div");
+            topBar.appendChild(topRow2);
+        }
+        topRow2.classList.add("mob-top-row2");
+
+        // Gather ALL action buttons across topBar into topRow2 so none are ever hidden in extra containers
+        Array.from(topBar.querySelectorAll("button")).forEach(btn => {
+            if (btn.id !== "mob-menu-toggle-btn" && btn.id !== "btn-koin-top" && btn.parentElement !== topRow2) {
+                topRow2.appendChild(btn);
+            }
+        });
 
         if (topRow1 && !document.getElementById("mob-menu-toggle-btn")) {
             const toggleBtn = document.createElement("button");
             toggleBtn.type = "button";
             toggleBtn.id = "mob-menu-toggle-btn";
             toggleBtn.className = "btn-top";
-            toggleBtn.style.display = "none";
             toggleBtn.innerText = "☰ Menu";
             toggleBtn.onclick = (ev) => { ev.stopPropagation(); window.toggleMobileTopMenu(); };
-            const rightActionBtn = topRow1.querySelector("button");
-            if (rightActionBtn) topRow1.insertBefore(toggleBtn, rightActionBtn);
-            else topRow1.appendChild(toggleBtn);
+            topRow1.appendChild(toggleBtn);
         }
+
+        const syncTopBarPlacement = () => {
+            if (!topRow1 || !koinBtn) return;
+            if (window.innerWidth <= 768) {
+                if (koinBtn.parentNode !== topRow1) {
+                    topRow1.appendChild(koinBtn);
+                }
+            } else if (koinOrigParent && koinBtn.parentNode !== koinOrigParent) {
+                koinOrigParent.insertBefore(koinBtn, koinOrigNext);
+            }
+        };
+        syncTopBarPlacement();
+        window.addEventListener("resize", syncTopBarPlacement);
     }
 
     window.refreshMobileTopBarLayout = function() {
@@ -5064,14 +5154,14 @@ window.initMobilePosWizard = function() {
             : CFG.defaultPinnedKeywords;
 
         const isPinnedBtn = (btn) => {
-            if (!btn || btn.id === "mob-menu-toggle-btn") return true;
+            if (!btn || btn.id === "mob-menu-toggle-btn" || btn.id === "btn-koin-top") return true;
             let clean = String(btn.innerText || "").toLowerCase().trim();
             return pinnedKeywords.some(kw => kw && (clean.includes(kw) || (btn.id && btn.id.toLowerCase().includes(kw))));
         };
 
         const row2 = document.querySelector(".mob-top-bar .mob-top-row2");
         if (row2) {
-            const btns = Array.from(row2.querySelectorAll("button")).filter(b => b.id !== "mob-menu-toggle-btn");
+            const btns = Array.from(row2.querySelectorAll("button")).filter(b => b.id !== "mob-menu-toggle-btn" && b.id !== "btn-koin-top");
             const pinnedBtns = [], extraBtns = [];
             btns.forEach(btn => {
                 if (isPinnedBtn(btn)) { btn.classList.remove("mob-collapsible-btn"); pinnedBtns.push(btn); }
