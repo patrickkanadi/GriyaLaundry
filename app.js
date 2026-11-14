@@ -1016,11 +1016,17 @@ window.switchWorkspace = function(type) {
 
     if (type === 'new') {
 
+        document.body.classList.remove("mob-other-tab");
+
         let tab = document.getElementById("tab-new-order"); if(tab) tab.classList.add("active");
 
         if(mainWs) mainWs.classList.remove("hidden");
 
     } else if (type === 'tickets') {
+
+        document.body.classList.add("mob-other-tab", "mob-header-collapsed");
+
+        if (window.syncMobileMenuToggleBtn) window.syncMobileMenuToggleBtn();
 
         let tab = document.getElementById("tab-active-tickets"); if(tab) tab.classList.add("active");
 
@@ -1029,6 +1035,10 @@ window.switchWorkspace = function(type) {
         window.renderActiveTickets(); 
 
     } else if (type === 'piutang') {
+
+        document.body.classList.add("mob-other-tab", "mob-header-collapsed");
+
+        if (window.syncMobileMenuToggleBtn) window.syncMobileMenuToggleBtn();
 
         let tab = document.getElementById("tab-piutang"); if(tab) tab.classList.add("active");
 
@@ -1155,6 +1165,10 @@ window.switchAntrean = function(index) {
 
         window.updatePromoIndicator();
 
+    }
+
+    if (window.setMobilePosStep) {
+        window.setMobilePosStep(isMenuLocked ? 1 : (antreans[index].mobileStep || 2));
     }
 
     window.renderCart();
@@ -1397,11 +1411,13 @@ window.lockMenu = function() {
 
     currentCart = []; 
 
-    antreans[currentAntreanIndex] = { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "", pendingPromoCode: null };
+    antreans[currentAntreanIndex] = { cart: [], profile: null, isLocked: true, phoneInput: "", nameInput: "", pendingPromoCode: null, mobileStep: 1 };
 
     window.renderCart();
 
     let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
+
+    if (window.setMobilePosStep) window.setMobilePosStep(1);
 
 };
 
@@ -1450,6 +1466,8 @@ function proceedToUnlock(phone, name) {
 
 
     window.updatePromoIndicator(); window.renderCart();
+
+    if (window.setMobilePosStep) window.setMobilePosStep(2);
 
 }
 
@@ -1781,7 +1799,11 @@ function renderProductGrid() {
 
         }
 
-        card.innerHTML = `<div><h4>${item.name}</h4>${stockHtml}</div><div class="price-badge">Rp ${item.price.toLocaleString('id-ID')}</div>`;
+        const inCart = currentCart.find(c => c.itemId === item.itemId);
+        const qtyBadgeHtml = (inCart && inCart.qty > 0)
+            ? `<div class="mob-card-qty-badge">✓ ${inCart.qty % 1 !== 0 ? inCart.qty.toFixed(2) : inCart.qty} di Keranjang</div>`
+            : "";
+        card.innerHTML = `<div><h4>${item.name}</h4>${stockHtml}${qtyBadgeHtml}</div><div class="price-badge">Rp ${item.price.toLocaleString('id-ID')}</div>`;
 
         card.onclick = () => { 
 
@@ -1948,6 +1970,16 @@ window.renderCart = function() {
     if (totalContainer) totalContainer.innerText = `Rp ${total.toLocaleString('id-ID')}`;
 
     window.cartSubtotal = total; window.cartGrandTotal = total;
+
+    const totalQtyCount = currentCart.reduce((sum, i) => sum + Number(i.qty || 0), 0);
+    const fmtQty = totalQtyCount % 1 !== 0 ? totalQtyCount.toFixed(2) : totalQtyCount;
+    const f2Count = document.getElementById("mob-f2-count");
+    const f2Total = document.getElementById("mob-f2-total");
+    const f3Total = document.getElementById("mob-f3-total");
+    if (f2Count) f2Count.innerText = `${fmtQty} Item dipilih`;
+    if (f2Total) f2Total.innerText = `Rp ${total.toLocaleString('id-ID')}`;
+    if (f3Total) f3Total.innerText = `Rp ${total.toLocaleString('id-ID')}`;
+    if (typeof renderProductGrid === "function" && currentCategory) renderProductGrid();
 
 };
 
@@ -2130,6 +2162,15 @@ window.openReview = async function() {
     window.applyPromo();
     
     let mod = document.getElementById("review-modal"); if(mod) mod.classList.remove("hidden");
+
+    for (let i = 1; i <= 4; i++) {
+        const pill = document.getElementById("mob-pill-" + i);
+        if (!pill) continue;
+        pill.classList.remove("active", "done");
+        if (i === 4) pill.classList.add("active");
+        else pill.classList.add("done");
+    }
+
 };
 
 
@@ -2143,6 +2184,8 @@ window.closeReview = function() {
     let reviewModal = document.getElementById("review-modal");
 
     if (reviewModal) { reviewModal.classList.add("hidden"); }
+
+    if (window.setMobilePosStep) window.setMobilePosStep(window.mobilePosStep || 3);
 
 };
 
@@ -2654,7 +2697,7 @@ window.renderActiveTickets = function() {
         let expectedWashing = ticket.washingCoins || 0; 
         
         let buttonsHtml = !isReady ? `<button class="ticket-btn" style="background:#f39c12;" onclick="window.markTicketReady('${ticket.orderId}', ${expectedWashing})">Tandai Selesai Cuci</button>` : `<button class="ticket-btn" style="background:#2ecc71;" onclick="window.openSettlement('${ticket.orderId}', 0)">Ambil & Selesai</button>`;
-        grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:13px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div>${buttonsHtml}</div>`;
+        grid.innerHTML += `<div class="ticket-card ${isReady ? 'ready' : ''}"><div class="ticket-card-info"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:13px; margin-bottom:10px; white-space:pre-wrap;">${receiptText}</div></div>${buttonsHtml}</div>`;
     });
 };
 
@@ -2678,7 +2721,7 @@ window.renderPiutangTickets = function() {
     tickets.forEach((ticket) => {
         const remaining = (ticket.hotelPiutangAmount || 0) + (ticket.tamuPiutangAmount || 0);
         let btn = `<button class="ticket-btn" style="background:#e74c3c;" onclick="window.openPiutangPayment('${ticket.orderId}', ${remaining})">Bayar Piutang</button>`;
-        grid.innerHTML += `<div class="ticket-card"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:16px; font-weight:bold; margin-top:5px; color:#c0392b;">Sisa: Rp ${remaining.toLocaleString('id-ID')}</div>${btn}</div>`;
+        grid.innerHTML += `<div class="ticket-card"><div class="ticket-card-info"><div class="ticket-header"><span>${ticket.customerName}</span> <span style="font-size:11px;">${ticket.orderId}</span></div><div style="font-size:16px; font-weight:bold; margin-top:5px; color:#c0392b;">Sisa: Rp ${remaining.toLocaleString('id-ID')}</div></div>${btn}</div>`;
     });
 };
 
@@ -3620,6 +3663,12 @@ window.syncMasterData = async function(isSilent = false) {
 
                 for (let k in result.data.settings) { txSet.objectStore("settings").put({ key: k, value: result.data.settings[k] }); }
 
+                let rawPinned = result.data.settings["Mobile_Pinned_Buttons"] !== undefined
+                    ? String(result.data.settings["Mobile_Pinned_Buttons"])
+                    : "Printer, Sync, Riwayat";
+                window.mobilePinnedButtons = rawPinned.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+                if (window.refreshMobileTopBarLayout) window.refreshMobileTopBarLayout();
+
             }
 
             if (result.data.staff) { let txStaff = db.transaction(["staff"], "readwrite"); result.data.staff.forEach(s => txStaff.objectStore("staff").put(s)); }
@@ -4415,7 +4464,9 @@ function checkExpiredShifts() {
 
 
 window.onload = async () => { 
+
     await initDB(); 
+    if (window.initMobilePosWizard) window.initMobilePosWizard();
     
     // --- AUTO-RESTORE SESSION (10 MINUTE TIMEOUT) ---
     let savedPin = localStorage.getItem("session_pin");
@@ -4463,4 +4514,599 @@ window.onload = async () => {
             }
         }
     }, 60000);
+};
+
+// =========================================================================
+// 📱 UNIVERSAL MOBILE POS WIZARD & RESPONSIVE ENGINE (<= 768px)
+// =========================================================================
+window.MOBILE_POS_CONFIG = {
+    defaultPinnedKeywords: ["printer", "sync", "riwayat"],
+    loginScreenId: "login-screen",
+    posScreenId: "pos-screen",
+    custPhoneId: "cust-phone",
+    custNameId: "cust-name",
+    autocompleteId: "autocomplete-results",
+    activeBannerId: "active-customer-banner",
+    glassOverlayId: "glass-overlay",
+    categoryContainerId: "category-container",
+    productGridId: "product-grid",
+    cartItemsId: "cart-items",
+    secondarySectionIds: ["active-tickets-workspace", "piutang-workspace"],
+    mainTabButtonIds: ["tab-new-order", "tab-active-tickets", "tab-piutang"],
+    reviewModalId: "review-modal",
+    shiftModalId: "shift-detail-modal",
+    endShiftBtnId: "btn-end-shift-modal",
+    historyModalId: "history-modal",
+    historyContainerId: "history-container"
+};
+
+window.mobilePosStep = 1;
+
+window.initMobilePosWizard = function() {
+    if (document.getElementById("mobile-pos-wizard-style")) return;
+    const CFG = window.MOBILE_POS_CONFIG;
+
+    const secondarySelectors = CFG.secondarySectionIds.map(id => `#${id}`).join(", ");
+    const mainTabSelectors = CFG.mainTabButtonIds.map(id => `#${id}`).join(", ");
+
+    const style = document.createElement("style");
+    style.id = "mobile-pos-wizard-style";
+    style.textContent = `
+        #mobile-wizard-stepper, #mobile-step2-footer, #mobile-step3-footer,
+        #mobile-step2-custbar, #mobile-step3-header, #mobile-step1-nextbar,
+        .mob-card-qty-badge { display: none; }
+
+        /* Clean Left-Aligned Customer Autocomplete */
+        #${CFG.autocompleteId} .autocomplete-item {
+            display: block !important;
+            text-align: left !important;
+            padding: 9px 14px !important;
+            border-bottom: 1px solid #e5e8e8 !important;
+            cursor: pointer !important;
+        }
+        #${CFG.autocompleteId} .autocomplete-item:hover { background: #f0f7ff !important; }
+
+        @media (max-width: 768px) {
+            /* 1. Lock Login Screen, Unlock Full Page Scroll After Login */
+            html.mob-login-html, body.mob-login-open {
+                position: fixed !important;
+                inset: 0 !important;
+                width: 100% !important;
+                height: 100dvh !important;
+                max-height: 100dvh !important;
+                overflow: hidden !important;
+            }
+            #${CFG.loginScreenId}:not(.hidden) {
+                height: 100dvh !important;
+                max-height: 100dvh !important;
+                overflow: hidden !important;
+                padding: 16px !important;
+            }
+            #${CFG.loginScreenId}:not(.hidden) .login-box {
+                padding: 24px 20px !important;
+                max-height: 92dvh !important;
+                overflow-y: auto !important;
+            }
+            #${CFG.posScreenId}.hidden { display: none !important; }
+
+            html:not(.mob-login-html), body:not(.mob-login-open) {
+                height: auto !important;
+                min-height: 100% !important;
+                max-height: none !important;
+                overflow-x: hidden !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                touch-action: pan-y !important;
+                max-width: 100vw !important;
+                position: static !important;
+            }
+            #${CFG.posScreenId}:not(.hidden) {
+                display: block !important;
+                height: auto !important;
+                min-height: 100vh !important;
+                max-height: none !important;
+                overflow: visible !important;
+                padding-bottom: 120px !important;
+            }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.posScreenId}:not(.hidden) {
+                padding-bottom: 48vh !important;
+            }
+            #main-workspace-wrapper, #main-workspace, #menu-section, #cart-section,
+            #${CFG.productGridId}, #${CFG.cartItemsId}, ${secondarySelectors},
+            .mob-main-workspace, .mob-left-panel, .mob-right-panel, .mob-menu-wrapper {
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+            ${secondarySelectors} { padding: 12px !important; }
+
+            /* 2. Compact 2-Row Top Bar */
+            .mob-top-bar {
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 6px !important;
+                padding: 7px 10px !important;
+            }
+            .mob-top-bar > div:first-child {
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                width: 100% !important;
+                gap: 5px !important;
+            }
+            .mob-top-bar > div:first-child > div {
+                display: flex !important;
+                flex-wrap: wrap !important;
+                align-items: center !important;
+                gap: 2px 4px !important;
+                flex: 1 1 auto !important;
+                min-width: 0 !important;
+                font-size: 11.5px !important;
+                line-height: 1.2 !important;
+            }
+            #mob-menu-toggle-btn {
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                flex: 0 0 auto !important;
+                width: auto !important;
+                margin-left: auto !important;
+                padding: 4px 8px !important;
+                font-size: 11px !important;
+                line-height: 1.15 !important;
+                font-weight: bold !important;
+                border-radius: 5px !important;
+                background: #e67e22 !important;
+                color: #ffffff !important;
+                border: 1px solid #f39c12 !important;
+                cursor: pointer !important;
+                white-space: nowrap !important;
+            }
+            body:not(.mob-header-collapsed) #mob-menu-toggle-btn {
+                background: #34495e !important;
+                border-color: #95a5a6 !important;
+            }
+            .mob-top-bar > div:first-child button:not(#mob-menu-toggle-btn) {
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                flex: 0 0 auto !important;
+                width: auto !important;
+                margin-left: 0 !important;
+                padding: 4px 8px !important;
+                font-size: 11px !important;
+                line-height: 1.15 !important;
+                border-radius: 5px !important;
+                white-space: nowrap !important;
+            }
+            .mob-top-bar .mob-top-row2 {
+                display: flex !important;
+                flex-wrap: wrap !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+                width: 100% !important;
+                gap: 5px !important;
+                padding-top: 6px !important;
+                border-top: 1px solid rgba(255,255,255,0.16) !important;
+            }
+            .mob-top-bar .mob-top-row2 > div:first-child {
+                width: 100% !important;
+                display: flex !important;
+                align-items: center !important;
+                flex-wrap: wrap !important;
+                gap: 5px !important;
+                margin-bottom: 2px !important;
+            }
+            body.mob-header-collapsed .mob-top-bar .mob-top-row2 button.mob-collapsible-btn,
+            .mob-top-bar .mob-top-row2 button.hidden {
+                display: none !important;
+            }
+            .mob-top-bar .mob-top-row2 button {
+                flex: 1 1 auto !important;
+                min-width: 0 !important;
+                padding: 6px 7px !important;
+                font-size: 11px !important;
+                margin: 0 !important;
+                border-radius: 5px !important;
+                text-align: center !important;
+                white-space: nowrap !important;
+            }
+
+            /* 3. Main Tabs & 4-Step Wizard Stepper */
+            .mob-main-tabs-bar { display: flex !important; flex-wrap: nowrap !important; gap: 0 !important; }
+            ${mainTabSelectors} {
+                min-width: 0 !important;
+                flex: 1 1 0 !important;
+                font-size: 11px !important;
+                padding: 8px 3px !important;
+                white-space: normal !important;
+                line-height: 1.2 !important;
+            }
+            .mob-cart-tab-bar {
+                display: flex !important;
+                width: 100% !important;
+                background: #34495e !important;
+                border-bottom: 1px solid #1e272e !important;
+            }
+            .antrean-btn { min-width: 0 !important; flex: 1 !important; font-size: 11.5px !important; padding: 8px 4px !important; }
+
+            #mobile-wizard-stepper {
+                display: flex !important;
+                align-items: center;
+                justify-content: space-between;
+                background: #1e272e;
+                padding: 6px 8px;
+                gap: 4px;
+                position: sticky;
+                top: 0;
+                z-index: 90;
+                border-bottom: 2px solid #3498db;
+            }
+            body.mob-other-tab #mobile-wizard-stepper,
+            body.mob-other-tab .mob-cart-tab-bar { display: none !important; }
+
+            .mob-step-pill {
+                flex: 1; min-width: 0; text-align: center;
+                padding: 7px 2px; border-radius: 6px;
+                font-size: 10.5px; font-weight: bold;
+                color: #95a5a6; background: #2f3640;
+                border: 1px solid transparent; cursor: pointer;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            }
+            .mob-step-pill.active { background: #3498db; color: #ffffff; border-color: #74b9ff; }
+            .mob-step-pill.done { background: #1e8449; color: #eafaf1; }
+
+            .mob-main-workspace { display: block !important; width: 100% !important; }
+            .mob-left-panel, .mob-right-panel { width: 100% !important; max-width: 100% !important; min-width: 0 !important; border: none !important; margin: 0 !important; }
+
+            /* STEP 1: Customer */
+            body.mob-step-1:not(.mob-other-tab) .mob-right-panel,
+            body.mob-step-1:not(.mob-other-tab) #${CFG.categoryContainerId},
+            body.mob-step-1:not(.mob-other-tab) #${CFG.productGridId},
+            body.mob-step-1:not(.mob-other-tab) #${CFG.glassOverlayId},
+            body.mob-step-1:not(.mob-other-tab) .mob-menu-wrapper { display: none !important; }
+            body.mob-step-1:not(.mob-other-tab) .mob-command-bar { display: block !important; padding: 8px 10px !important; width: 100% !important; }
+            body.mob-step-1:not(.mob-other-tab) #customer-input-section:not(.hidden) { display: flex !important; flex-direction: column !important; gap: 8px !important; width: 100% !important; }
+            body.mob-step-1:not(.mob-other-tab) #customer-input-section input,
+            body.mob-step-1:not(.mob-other-tab) #customer-input-section button { width: 100% !important; min-height: 42px !important; font-size: 14.5px !important; margin: 0 !important; box-sizing: border-box !important; }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.autocompleteId}:not(.hidden) {
+                position: static !important; width: 100% !important; max-width: 100% !important;
+                max-height: none !important; overflow: visible !important;
+                border: 2px solid #3498db !important; border-radius: 8px !important; margin-top: 4px !important;
+            }
+            body.mob-step-1:not(.mob-other-tab) #${CFG.activeBannerId}:not(.hidden) #mobile-step1-nextbar { display: block !important; margin-top: 10px; }
+
+            /* STEP 2: Menu Grid */
+            body.mob-step-2:not(.mob-other-tab) .mob-right-panel,
+            body.mob-step-2:not(.mob-other-tab) #customer-input-section,
+            body.mob-step-2:not(.mob-other-tab) #${CFG.activeBannerId},
+            body.mob-step-2:not(.mob-other-tab) #${CFG.glassOverlayId} { display: none !important; }
+            body.mob-step-2:not(.mob-other-tab) .mob-command-bar { display: block !important; padding: 6px 8px !important; }
+            body.mob-step-2:not(.mob-other-tab) #mobile-step2-custbar {
+                display: flex !important; justify-content: space-between; align-items: center;
+                background: #eafaf1; border: 1px solid #a9dfbf; padding: 6px 10px;
+                border-radius: 6px; margin-top: 4px; font-size: 12px; color: #1e8449;
+            }
+            body.mob-step-2:not(.mob-other-tab) #${CFG.categoryContainerId} { display: flex !important; overflow-x: auto !important; white-space: nowrap !important; padding: 8px 10px !important; gap: 6px !important; }
+            body.mob-step-2:not(.mob-other-tab) .cat-btn { padding: 8px 13px !important; font-size: 12.5px !important; flex-shrink: 0 !important; }
+            body.mob-step-2:not(.mob-other-tab) #${CFG.productGridId} { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; padding: 10px !important; }
+            body.mob-step-2:not(.mob-other-tab) .product-card { min-height: 92px !important; padding: 10px !important; }
+            body.mob-step-2:not(.mob-other-tab) .product-card h4 { font-size: 13.5px !important; }
+            body.mob-step-2:not(.mob-other-tab) .price-badge { font-size: 12px !important; padding: 4px 10px !important; }
+            body.mob-step-2:not(.mob-other-tab) .mob-card-qty-badge {
+                display: inline-block !important; margin-top: 5px; background: #27ae60;
+                color: white; padding: 2px 8px; border-radius: 10px; font-size: 10.5px; font-weight: bold;
+            }
+            body.mob-step-2:not(.mob-other-tab) #mobile-step2-footer {
+                display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
+                background: #2c3e50; color: #fff; padding: 9px 12px;
+                justify-content: space-between; align-items: center; z-index: 95;
+                box-shadow: 0 -3px 12px rgba(0,0,0,0.25);
+            }
+
+            /* STEP 3: Cart Confirmation */
+            body.mob-step-3:not(.mob-other-tab) .mob-left-panel { display: none !important; }
+            body.mob-step-3:not(.mob-other-tab) .mob-right-panel { display: flex !important; flex-direction: column !important; padding: 10px !important; }
+            body.mob-step-3:not(.mob-other-tab) #mobile-step3-header {
+                display: flex !important; justify-content: space-between; align-items: center;
+                background: #ecf0f1; padding: 8px 10px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #bdc3c7;
+            }
+            body.mob-step-3:not(.mob-other-tab) #${CFG.cartItemsId} button { width: 34px !important; height: 34px !important; font-size: 16px !important; }
+            body.mob-step-3:not(.mob-other-tab) .mob-right-panel > div:last-child { display: none !important; }
+            body.mob-step-3:not(.mob-other-tab) #mobile-step3-footer {
+                display: flex !important; position: fixed; bottom: 0; left: 0; right: 0;
+                background: #2c3e50; color: #fff; padding: 9px 12px;
+                justify-content: space-between; align-items: center; gap: 8px; z-index: 95;
+                box-shadow: 0 -3px 12px rgba(0,0,0,0.25);
+            }
+
+            body.mob-other-tab .mob-right-panel { display: none !important; }
+
+            /* 4. Secondary Tabs Card Alignment (Cucian Aktif & Piutang) */
+            .ticket-card {
+                display: flex !important;
+                flex-wrap: nowrap !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+                gap: 10px !important;
+            }
+            .ticket-card .ticket-card-info {
+                flex: 1 !important;
+                min-width: 0 !important;
+                word-break: break-word !important;
+            }
+            .ticket-card .ticket-btn {
+                flex-shrink: 0 !important;
+                white-space: nowrap !important;
+                width: auto !important;
+                margin-top: 0 !important;
+            }
+
+            /* 5. Proportional & Responsive Popups / Modals */
+            .modal-overlay {
+                z-index: 250 !important;
+                align-items: flex-start !important;
+                justify-content: center !important;
+                padding: 8px 8px calc(74px + env(safe-area-inset-bottom, 0px)) 8px !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+            }
+            .modal-overlay > .modal-content,
+            .modal-overlay > div {
+                width: 100% !important; max-width: 100% !important;
+                min-height: auto !important; max-height: none !important;
+                margin: 0 auto !important; padding: 14px 12px 16px 12px !important;
+                border-radius: 12px !important; overflow: visible !important;
+                box-sizing: border-box !important; font-size: 13px !important;
+            }
+            .modal-overlay h2 { font-size: 16.5px !important; line-height: 1.25 !important; margin: 0 0 8px 0 !important; }
+            .modal-overlay h3 { font-size: 14px !important; line-height: 1.25 !important; margin: 0 0 6px 0 !important; }
+            .modal-overlay p { font-size: 12px !important; line-height: 1.35 !important; margin-bottom: 8px !important; }
+            .modal-overlay .form-box { margin-bottom: 10px !important; }
+            .modal-overlay .form-box label, .modal-overlay label { font-size: 12px !important; margin-bottom: 4px !important; }
+            .modal-overlay input, .modal-overlay select, .modal-overlay textarea {
+                font-size: 14px !important; padding: 9px 10px !important;
+                min-height: 40px !important; border-radius: 7px !important; box-sizing: border-box !important;
+            }
+            .modal-overlay input[type="date"] { font-size: 12.5px !important; padding: 8px 6px !important; }
+            .modal-overlay button {
+                font-size: 12.5px !important; padding: 10px !important;
+                min-height: 40px !important; border-radius: 7px !important; line-height: 1.2 !important;
+            }
+
+            /* Shift Report Modal Responsive Layout */
+            #${CFG.shiftModalId} .stats-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 7px !important; margin-bottom: 8px !important; }
+            #${CFG.shiftModalId} .stat-box { padding: 8px 6px !important; border-radius: 8px !important; }
+            #${CFG.shiftModalId} .stat-label { font-size: 10.5px !important; margin-bottom: 2px !important; }
+            #${CFG.shiftModalId} .stat-value { font-size: 18px !important; }
+            #${CFG.shiftModalId} div[style*="grid-template-columns"]:not(.stats-grid) { display: grid !important; grid-template-columns: 1fr !important; gap: 8px !important; }
+            #${CFG.shiftModalId} .revenue-breakdown { padding: 10px 12px !important; margin-bottom: 8px !important; }
+            #${CFG.shiftModalId} .revenue-row { font-size: 13px !important; padding: 5px 0 !important; gap: 8px !important; }
+            #${CFG.shiftModalId} .revenue-row span:last-child,
+            #${CFG.shiftModalId} .revenue-row strong:last-child { white-space: nowrap !important; flex-shrink: 0 !important; }
+            #${CFG.shiftModalId} .modal-content > div:last-child { display: flex !important; flex-wrap: wrap !important; gap: 8px !important; margin-top: 10px !important; }
+            #${CFG.shiftModalId} .modal-content > div:last-child button { flex: 1 1 46% !important; white-space: nowrap !important; padding: 11px 8px !important; }
+            #${CFG.shiftModalId} #${CFG.endShiftBtnId} { flex: 1 1 100% !important; font-size: 13px !important; }
+
+            /* History Lists */
+            #${CFG.historyContainerId} { max-height: 48dvh !important; }
+            .history-row { padding: 9px 10px !important; font-size: 12.5px !important; flex-wrap: wrap !important; gap: 6px !important; }
+            .history-row > div:last-child { width: 100% !important; display: flex !important; flex-wrap: wrap !important; justify-content: flex-start !important; gap: 6px !important; text-align: left !important; }
+            .history-row button { padding: 6px 9px !important; font-size: 11.5px !important; min-height: 32px !important; }
+        }
+    `;
+    document.head.appendChild(style);
+
+    const custInputSection = document.getElementById("customer-input-section");
+    const commandBar = document.getElementById("command-bar") || (custInputSection ? custInputSection.parentElement : null);
+    const cartItems = document.getElementById(CFG.cartItemsId);
+    const productGrid = document.getElementById(CFG.productGridId);
+    if (!commandBar || !cartItems) return;
+
+    commandBar.classList.add("mob-command-bar");
+    const leftPanel = commandBar.parentElement;
+    const mainWorkspace = leftPanel.parentElement;
+    const rightPanel = Array.from(mainWorkspace.children).find(el => el !== leftPanel && el.contains(cartItems));
+
+    mainWorkspace.classList.add("mob-main-workspace");
+    leftPanel.classList.add("mob-left-panel");
+    if (rightPanel) rightPanel.classList.add("mob-right-panel");
+    if (productGrid && productGrid.parentElement !== leftPanel) {
+        productGrid.parentElement.classList.add("mob-menu-wrapper");
+    }
+
+    const tabNewOrder = document.getElementById("tab-new-order");
+    if (tabNewOrder && tabNewOrder.parentElement) {
+        tabNewOrder.parentElement.classList.add("mob-main-tabs-bar");
+    }
+
+    // 1. Inject 4-Step Wizard Bar
+    const stepper = document.createElement("div");
+    stepper.id = "mobile-wizard-stepper";
+    stepper.innerHTML = `
+        <div class="mob-step-pill active" id="mob-pill-1" onclick="window.setMobilePosStep(1)">1. Pelanggan</div>
+        <div class="mob-step-pill" id="mob-pill-2" onclick="window.setMobilePosStep(2)">2. Menu</div>
+        <div class="mob-step-pill" id="mob-pill-3" onclick="window.setMobilePosStep(3)">3. Keranjang</div>
+        <div class="mob-step-pill" id="mob-pill-4" onclick="window.reviewOrder()">4. Bayar</div>
+    `;
+    mainWorkspace.parentNode.insertBefore(stepper, mainWorkspace);
+
+    // 2. Compact 2-Row Top Bar + [☰ Menu] Toggle Button
+    const cashierEl = document.getElementById("display-cashier");
+    const topBar = document.getElementById("top-bar") || (cashierEl ? cashierEl.closest(".top-bar, header, #pos-screen > div") : null);
+    if (topBar) {
+        topBar.classList.add("mob-top-bar");
+        const topRow1 = topBar.children[0];
+        const topRow2 = topBar.querySelector(".status-indicator") || topBar.children[1];
+        if (topRow2) topRow2.classList.add("mob-top-row2");
+
+        if (topRow1 && !document.getElementById("mob-menu-toggle-btn")) {
+            const toggleBtn = document.createElement("button");
+            toggleBtn.type = "button";
+            toggleBtn.id = "mob-menu-toggle-btn";
+            toggleBtn.className = "btn-top";
+            toggleBtn.style.display = "none";
+            toggleBtn.innerText = "☰ Menu";
+            toggleBtn.onclick = (ev) => { ev.stopPropagation(); window.toggleMobileTopMenu(); };
+            const rightActionBtn = topRow1.querySelector("button");
+            if (rightActionBtn) topRow1.insertBefore(toggleBtn, rightActionBtn);
+            else topRow1.appendChild(toggleBtn);
+        }
+    }
+
+    window.refreshMobileTopBarLayout = function() {
+        const pinnedKeywords = Array.isArray(window.mobilePinnedButtons)
+            ? window.mobilePinnedButtons
+            : CFG.defaultPinnedKeywords;
+
+        const isPinnedBtn = (btn) => {
+            if (!btn || btn.id === "mob-menu-toggle-btn") return true;
+            let clean = String(btn.innerText || "").toLowerCase().trim();
+            return pinnedKeywords.some(kw => kw && (clean.includes(kw) || (btn.id && btn.id.toLowerCase().includes(kw))));
+        };
+
+        const indicator = document.querySelector(".mob-top-bar .mob-top-row2");
+        if (indicator) {
+            const btns = Array.from(indicator.querySelectorAll("button")).filter(b => b.id !== "mob-menu-toggle-btn");
+            const pinnedBtns = [], extraBtns = [];
+            btns.forEach(btn => {
+                if (isPinnedBtn(btn)) { btn.classList.remove("mob-collapsible-btn"); pinnedBtns.push(btn); }
+                else { btn.classList.add("mob-collapsible-btn"); extraBtns.push(btn); }
+            });
+            pinnedBtns.forEach(btn => indicator.appendChild(btn));
+            extraBtns.forEach(btn => indicator.appendChild(btn));
+        }
+    };
+
+    window.syncMobileMenuToggleBtn = function() {
+        const btn = document.getElementById("mob-menu-toggle-btn");
+        if (btn) btn.innerText = document.body.classList.contains("mob-header-collapsed") ? "☰ Menu" : "▲ Tutup";
+    };
+
+    window.toggleMobileTopMenu = function() {
+        document.body.classList.toggle("mob-header-collapsed");
+        window.syncMobileMenuToggleBtn();
+    };
+
+    // 3. Login Screen Scroll Lock Sync
+    const syncLoginLockClass = () => {
+        const loginEl = document.getElementById(CFG.loginScreenId);
+        const isLoginVisible = loginEl && !loginEl.classList.contains("hidden");
+        document.documentElement.classList.toggle("mob-login-html", !!isLoginVisible);
+        document.body.classList.toggle("mob-login-open", !!isLoginVisible);
+    };
+    syncLoginLockClass();
+    const loginElObs = document.getElementById(CFG.loginScreenId);
+    if (loginElObs) new MutationObserver(syncLoginLockClass).observe(loginElObs, { attributes: true, attributeFilter: ["class"] });
+
+    new MutationObserver(() => {
+        if (window.syncMobileMenuToggleBtn) window.syncMobileMenuToggleBtn();
+    }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+
+    document.body.classList.add("mob-header-collapsed");
+    window.refreshMobileTopBarLayout();
+    window.syncMobileMenuToggleBtn();
+
+    // 4. Relocate Queue Tabs (Antrean 1-3) Above Stepper on Mobile
+    const firstAntreanBtn = document.querySelector(".antrean-btn");
+    const cartTabBar = firstAntreanBtn ? firstAntreanBtn.parentElement : null;
+    const cartTabOrigParent = cartTabBar ? cartTabBar.parentElement : null;
+    const cartTabOrigNext = cartTabBar ? cartTabBar.nextSibling : null;
+    if (cartTabBar) {
+        cartTabBar.classList.add("mob-cart-tab-bar");
+        const syncCartTabPlacement = () => {
+            if (window.innerWidth <= 768) {
+                if (cartTabBar.parentNode !== mainWorkspace.parentNode) mainWorkspace.parentNode.insertBefore(cartTabBar, stepper);
+            } else if (cartTabOrigParent && cartTabBar.parentNode !== cartTabOrigParent) {
+                cartTabOrigParent.insertBefore(cartTabBar, cartTabOrigNext);
+            }
+        };
+        syncCartTabPlacement();
+        window.addEventListener("resize", syncCartTabPlacement);
+    }
+
+    // 5. Step Navigation Bars & Sticky Footers
+    const activeBanner = document.getElementById(CFG.activeBannerId);
+    if (activeBanner) {
+        const nextBar = document.createElement("div");
+        nextBar.id = "mobile-step1-nextbar";
+        nextBar.innerHTML = `<button type="button" onclick="window.setMobilePosStep(2)" style="width:100%; background:#27ae60; color:white; border:none; padding:13px; border-radius:8px; font-weight:bold; font-size:15px; cursor:pointer;">Lanjut Pilih Menu ➔</button>`;
+        activeBanner.appendChild(nextBar);
+    }
+
+    const step2CustBar = document.createElement("div");
+    step2CustBar.id = "mobile-step2-custbar";
+    step2CustBar.innerHTML = `
+        <span id="mob-s2-cust" style="font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">👤 Pelanggan</span>
+        <button type="button" onclick="window.setMobilePosStep(1)" style="background:#2980b9; color:white; border:none; padding:5px 10px; border-radius:5px; font-weight:bold; font-size:11.5px; cursor:pointer; flex-shrink:0;">Ganti / Detail</button>
+    `;
+    commandBar.appendChild(step2CustBar);
+
+    const step2Footer = document.createElement("div");
+    step2Footer.id = "mobile-step2-footer";
+    step2Footer.innerHTML = `
+        <div>
+            <div id="mob-f2-count" style="font-size:12px; color:#bdc3c7;">0 Item dipilih</div>
+            <div id="mob-f2-total" style="font-size:17px; font-weight:bold; color:#2ecc71;">Rp 0</div>
+        </div>
+        <button type="button" id="mob-f2-next-btn" onclick="window.setMobilePosStep(3)" style="background:#27ae60; color:white; border:none; padding:12px 18px; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer;">Keranjang ➔</button>
+    `;
+    document.body.appendChild(step2Footer);
+
+    const step3Footer = document.createElement("div");
+    step3Footer.id = "mobile-step3-footer";
+    step3Footer.innerHTML = `
+        <div>
+            <div style="font-size:11px; color:#bdc3c7;">Total Keranjang</div>
+            <div id="mob-f3-total" style="font-size:17px; font-weight:bold; color:#2ecc71;">Rp 0</div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <button type="button" onclick="window.clearCart()" style="background:#e74c3c; color:white; border:none; padding:12px; border-radius:8px; font-weight:bold; font-size:13px; cursor:pointer;">🗑️ Hapus</button>
+            <button type="button" id="mob-f3-pay-btn" onclick="window.reviewOrder()" style="background:#27ae60; color:white; border:none; padding:12px 18px; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer;">Lanjut Bayar ➔</button>
+        </div>
+    `;
+    document.body.appendChild(step3Footer);
+
+    if (rightPanel) {
+        const step3Header = document.createElement("div");
+        step3Header.id = "mobile-step3-header";
+        step3Header.innerHTML = `
+            <button type="button" onclick="window.setMobilePosStep(2)" style="background:#3498db; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; font-size:13px; cursor:pointer;">⬅ Tambah Menu</button>
+            <div id="mob-s3-cust" style="font-size:13px; font-weight:bold; color:#2c3e50; text-align:right;">👤 Pelanggan</div>
+        `;
+        rightPanel.insertBefore(step3Header, rightPanel.firstChild);
+    }
+
+    window.setMobilePosStep(1);
+};
+
+window.setMobilePosStep = function(step) {
+    if (step >= 2 && isMenuLocked) step = 1;
+    if (step >= 2) document.body.classList.add("mob-header-collapsed");
+    window.mobilePosStep = step;
+    if (typeof antreans !== "undefined" && antreans[currentAntreanIndex]) {
+        antreans[currentAntreanIndex].mobileStep = step;
+    }
+
+    document.body.classList.remove("mob-step-1", "mob-step-2", "mob-step-3");
+    document.body.classList.add("mob-step-" + step);
+
+    for (let i = 1; i <= 4; i++) {
+        const pill = document.getElementById("mob-pill-" + i);
+        if (!pill) continue;
+        pill.classList.remove("active", "done");
+        if (i === step) pill.classList.add("active");
+        else if (i < step) pill.classList.add("done");
+    }
+
+    const prof = activeCustomerProfile;
+    const cName = (prof && prof.name) || document.getElementById(window.MOBILE_POS_CONFIG.custNameId)?.value || "Walk-in";
+    const s2Cust = document.getElementById("mob-s2-cust");
+    if (s2Cust) s2Cust.innerText = "👤 " + cName;
+    const s3Cust = document.getElementById("mob-s3-cust");
+    if (s3Cust) s3Cust.innerText = "👤 " + cName;
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
 };
