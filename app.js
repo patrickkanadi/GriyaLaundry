@@ -3417,33 +3417,62 @@ window.confirmAdminVoid = async function() {
 // ==========================================
 
 window.openCashDrop = function() {
-
-    document.getElementById("cashdrop-modal").classList.remove("hidden");
-
+    const modal = document.getElementById("cash-drop-modal") || document.getElementById("cashdrop-modal");
+    if (!modal) return;
+    const liveDisp = document.getElementById("live-drawer-display");
+    if (liveDisp) {
+        liveDisp.innerText = "Rp " + (Number(window.masterDrawerBalance) || 0).toLocaleString('id-ID');
+    }
+    const amtEl = document.getElementById("drop-amount");
+    const noteEl = document.getElementById("drop-notes");
+    if (amtEl) amtEl.value = "";
+    if (noteEl) noteEl.value = "";
+    modal.classList.remove("hidden");
 };
 
+window.submitCashDrop = function() {
+    const amtEl = document.getElementById("drop-amount");
+    const destEl = document.getElementById("drop-destination");
+    let admin = 0, bank = 0, drawer = 0;
 
+    if (amtEl) {
+        const amt = Number(amtEl.value) || 0;
+        const dest = destEl ? String(destEl.value).trim() : "Admin";
+        if (amt <= 0) return alert("Masukkan nominal setor uang.");
+        if (dest === "Bank") bank = amt;
+        else admin = amt;
+        drawer = Math.max(0, (Number(window.masterDrawerBalance) || 0) - amt);
+    } else {
+        admin = Number(document.getElementById("drop-admin")?.value) || 0;
+        bank = Number(document.getElementById("drop-bank")?.value) || 0;
+        drawer = Number(document.getElementById("drop-drawer")?.value) || 0;
+        if (admin === 0 && bank === 0) return alert("Masukkan nominal setor uang.");
+    }
 
-window.submitCashDrop = function() { 
-
-    const admin = Number(document.getElementById("drop-admin").value) || 0; 
-
-    const bank = Number(document.getElementById("drop-bank").value) || 0; 
-
-    const drawer = Number(document.getElementById("drop-drawer").value) || 0;
-
-    if (admin === 0 && bank === 0) return alert("Masukkan nominal setor uang."); 
-
-    const payload = { dropId: "DRP-" + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, shiftId: currentShiftId, toAdmin: admin, toBank: bank, leftInDrawer: drawer, notes: document.getElementById("drop-notes").value || "-", outlet: window.getActiveOutlet(), syncStatus: "Pending" };
+    const notes = document.getElementById("drop-notes")?.value.trim() || "-";
+    const payload = {
+        dropId: "DRP-" + Date.now(),
+        timestamp: new Date().toISOString(),
+        cashier: currentCashier,
+        shiftId: currentShiftId,
+        toAdmin: admin,
+        toBank: bank,
+        leftInDrawer: drawer,
+        notes: notes,
+        outlet: window.getActiveOutlet(),
+        syncStatus: "Pending"
+    };
 
     db.transaction(["cash_drops"], "readwrite").objectStore("cash_drops").add(payload);
+    window.masterDrawerBalance = Math.max(0, (Number(window.masterDrawerBalance) || 0) - (admin + bank));
 
-    document.getElementById("cashdrop-modal").classList.add("hidden");
+    const modal = document.getElementById("cash-drop-modal") || document.getElementById("cashdrop-modal");
+    if (modal) modal.classList.add("hidden");
+    if (amtEl) amtEl.value = "";
+    if (document.getElementById("drop-notes")) document.getElementById("drop-notes").value = "";
 
-    document.getElementById("drop-admin").value = ""; document.getElementById("drop-bank").value = ""; document.getElementById("drop-drawer").value = ""; document.getElementById("drop-notes").value = "";
-
-    alert("Setoran berhasil dicatat!"); window.runBackgroundSync(); 
-
+    alert("Setoran berhasil dicatat!");
+    window.runBackgroundSync();
 };
 
 
@@ -3824,11 +3853,64 @@ window.manualPushSync = async function() {
     alert("Sinkronisasi Manual Berhasil!");
 };
 
-window.runBackgroundSync = async function() {
+window.updatePendingSyncBadge = function(pendingCount) {
+    let nTxt = document.getElementById("network-text");
+    let nDot = document.getElementById("network-dot");
+    if (!navigator.onLine) {
+        if (nTxt) nTxt.innerText = pendingCount > 0 ? `Offline (${pendingCount} Pending)` : "Mode Offline";
+        if (nDot) nDot.style.backgroundColor = "#e74c3c";
+        return;
+    }
+    if (pendingCount > 0) {
+        if (nTxt) nTxt.innerText = `Menyinkronkan (${pendingCount})...`;
+        if (nDot) nDot.style.backgroundColor = "#f39c12";
+    } else {
+        if (nTxt) nTxt.innerText = "Online ✅";
+        if (nDot) nDot.style.backgroundColor = "#2ecc71";
+    }
+};
 
-    if (!navigator.onLine || isSyncing) return; isSyncing = true; 
+window.getPendingSyncItemsCount = async function() {
+    if (!db) return 0;
+    const countPending = (storeName, filterFn) => new Promise(res => {
+        try {
+            db.transaction([storeName], "readonly").objectStore(storeName).getAll().onsuccess = e => {
+                let items = e.target.result || [];
+                res(filterFn ? items.filter(filterFn).length : items.length);
+            };
+        } catch (err) { res(0); }
+    });
+    const [o, sr, pc, ex, cd, vr, um, cr, pu] = await Promise.all([
+        countPending("orders", x => x.syncStatus === "Pending"),
+        countPending("shift_reports"),
+        countPending("promo_claims"),
+        countPending("expenses", x => x.syncStatus === "Pending"),
+        countPending("cash_drops"),
+        countPending("void_requests"),
+        countPending("unsynced_members"),
+        countPending("coin_retrievals", x => x.syncStatus === "Pending"),
+        countPending("phone_updates")
+    ]);
+    return o + sr + pc + ex + cd + vr + um + cr + pu;
+};
 
-    try {
+window.runBackgroundSync = async function(waitForAll = false) {
+    if (!navigator.onLine) {
+        let pCount = await window.getPendingSyncItemsCount();
+        window.updatePendingSyncBadge(pCount);
+        return false;
+    }
+
+    if (isSyncing && window.activeSyncPromise) {
+        await window.activeSyncPromise;
+        if (!waitForAll) return true;
+    }
+
+    if (isSyncing) return false;
+    isSyncing = true;
+
+    window.activeSyncPromise = (async () => {
+        try {
 
         let orders = await new Promise(res => db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = e => res(e.target.result));
 
@@ -3966,8 +4048,16 @@ window.runBackgroundSync = async function() {
 
         }
 
-    } finally { isSyncing = false; }
+        let remaining = await window.getPendingSyncItemsCount();
+        window.updatePendingSyncBadge(remaining);
+        return remaining === 0;
+    } finally {
+        isSyncing = false;
+        window.activeSyncPromise = null;
+    }
+    })();
 
+    return await window.activeSyncPromise;
 };
 
 
@@ -4097,7 +4187,10 @@ window.openShiftReport = function(historyData = null) {
     if (navigator.onLine) {
         (async () => {
             try {
-                await window.runBackgroundSync();
+                await window.runBackgroundSync(true);
+
+                let allLocalOrders = await new Promise(res => db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = e => res(e.target.result || []));
+                let shiftLocalOrders = allLocalOrders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
 
                 let res = await fetch(API_URL, {
                     method: 'POST',
@@ -4108,7 +4201,8 @@ window.openShiftReport = function(historyData = null) {
                             cashier: currentCashier,
                             outlet: window.getActiveOutlet(),
                             shiftId: currentShiftId || ("SHF-" + Date.now()),
-                            fallbackLoginTime: currentLoginTime || localStorage.getItem("session_login_time")
+                            fallbackLoginTime: currentLoginTime || localStorage.getItem("session_login_time"),
+                            localOrders: shiftLocalOrders
                         }
                     })
                 });
@@ -4318,10 +4412,28 @@ window.triggerEndShift = async function() {
     }
 
     try {
-        // 1. DORONG SEMUA DATA OFFLINE DULU KE SPREADSHEET
-        await window.runBackgroundSync();
+        // 1. DORONG SEMUA DATA OFFLINE DULU KE SPREADSHEET (TUNGGU HINGGA SELESAI)
+        await window.runBackgroundSync(true);
 
-        // 2. MINTA SPREADSHEET MENGHITUNG SHIFT REPORT
+        // 1B. VERIFIKASI ZERO-PENDING: Pastikan tidak ada order lokal yang gagal terkirim
+        let allLocalOrders = await new Promise(res => db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = e => res(e.target.result || []));
+        let shiftLocalOrders = allLocalOrders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
+        let stillPendingOrders = shiftLocalOrders.filter(o => o.syncStatus === "Pending");
+
+        if (stillPendingOrders.length > 0) {
+            await window.runBackgroundSync(true);
+            allLocalOrders = await new Promise(res => db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = e => res(e.target.result || []));
+            shiftLocalOrders = allLocalOrders.filter(o => o.shiftId === currentShiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
+            stillPendingOrders = shiftLocalOrders.filter(o => o.syncStatus === "Pending");
+        }
+
+        if (stillPendingOrders.length > 0) {
+            let pendingIds = stillPendingOrders.map(o => o.orderId).join(", ");
+            if (endBtn) { endBtn.innerText = originalBtnText; endBtn.disabled = false; }
+            return alert(`⚠️ TUTUP SHIFT DITAHAN: Masih ada ${stillPendingOrders.length} transaksi yang belum masuk ke server (${pendingIds}).\n\nPeriksa koneksi internet Anda lalu tekan "Akhiri Shift" kembali.`);
+        }
+
+        // 2. MINTA SPREADSHEET MENGHITUNG SHIFT REPORT + VERIFIKASI MANIFEST ORDER
         let initialC = Number(localStorage.getItem("session_initial_coins")) || 0;
         let endC = window.laciStocks ? (window.laciStocks[window.getActiveOutlet()] || 0) : 0;
 
@@ -4331,7 +4443,8 @@ window.triggerEndShift = async function() {
             tabletCoinCategories: data.coinCategorySummary || {}, 
             outlet: window.getActiveOutlet(),
             initialCoins: initialC, // INJEKSI KOIN AWAL
-            endCoins: endC          // INJEKSI KOIN AKHIR
+            endCoins: endC,         // INJEKSI KOIN AKHIR
+            localOrders: shiftLocalOrders // MANIFEST ORDER UNTUK AUTO-HEAL JIKA ADA YANG TERLEWAT
         };
 
         let res = await fetch(API_URL, {
@@ -4972,6 +5085,17 @@ window.initMobilePosWizard = function() {
                 min-height: 44px !important; border-radius: 8px !important; line-height: 1.25 !important;
             }
 
+            /* Checkout Modal Buttons Wrap Cleanly on Narrow Phones */
+            #${CFG.reviewModalId} > .modal-content > div:last-child {
+                display: flex !important; flex-wrap: wrap !important; gap: 8px !important;
+            }
+            #${CFG.reviewModalId} > .modal-content > div:last-child button {
+                flex: 1 1 45% !important;
+            }
+            #${CFG.reviewModalId} > .modal-content > div:last-child button:last-child {
+                flex: 1 1 100% !important; min-height: 48px !important; font-size: 14.5px !important;
+            }
+
             /* History Modal Tab Buttons Fit Cleanly on Narrow Phones */
             #${CFG.historyModalId} button[onclick*="renderHistoryList"] {
                 flex: 1 1 22% !important; min-width: 0 !important;
@@ -5370,6 +5494,17 @@ window.initMobilePosWizard = function() {
                 middleEls.forEach(el => scrollBody.appendChild(el));
 
                 modalCard.insertBefore(scrollBody, footerEl);
+            } else if (children.length === 2) {
+                const headerEl = children[0];
+                const bodyEl = children[1];
+                headerEl.classList.add("mob-shift-header");
+                bodyEl.id = "mob-shift-scroll-body";
+
+                const lastChildInBody = bodyEl.lastElementChild;
+                if (lastChildInBody && lastChildInBody.querySelector("button")) {
+                    lastChildInBody.classList.add("mob-shift-footer");
+                    modalCard.appendChild(lastChildInBody);
+                }
             }
         }
     }
