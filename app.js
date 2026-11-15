@@ -2652,6 +2652,9 @@ window.finalizeOrder = async function(shouldPrint) {
         window.renderPiutangTickets(); 
         window.switchWorkspace('new'); 
         window.lockMenu(); 
+        if (window.getPendingSyncItemsCount && window.updatePendingSyncBadge) {
+            window.getPendingSyncItemsCount().then(window.updatePendingSyncBadge);
+        }
         window.runBackgroundSync();
 
         // Buka kembali gembok setelah seluruh proses selesai
