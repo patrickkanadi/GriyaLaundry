@@ -949,19 +949,30 @@ window.attemptLogin = async function() {
 
 
 
-            db.transaction(["active_shifts"], "readonly").objectStore("active_shifts").get(hashedPin).onsuccess = (shiftReq) => {
+            db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").get(hashedPin).onsuccess = (shiftReq) => {
                     const activeShift = shiftReq.target.result; currentCashier = staff.name; currentPin = hashedPin;
-                    if (activeShift) { 
+                    let todayMidnight = new Date().setHours(0, 0, 0, 0);
+                    let isSameDayShift = activeShift && (new Date(activeShift.loginTime).getTime() >= todayMidnight);
+
+                    if (isSameDayShift) { 
                         currentShiftId = activeShift.shiftId; currentLoginTime = activeShift.loginTime;
+                        activeShift.lastActiveTime = Date.now();
+                        activeShift.outlet = selectedOutlet;
+                        db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put(activeShift);
                         // TARIK MEMORI KOIN AWAL JIKA MELANJUTKAN SHIFT
                         localStorage.setItem("session_initial_coins", activeShift.initialCoins || 0);
                     } else { 
+                        if (activeShift) {
+                            // Shift kemarin lupa di-logout -> tutup otomatis dengan waktu aktivitas terakhir kemarin
+                            performAutoClose(activeShift);
+                        }
                         currentShiftId = "SHF-" + Date.now(); currentLoginTime = new Date().toISOString();
                         // REKAM KOIN AWAL SAAT BUKA SHIFT BARU
                         let initCoin = window.laciStocks ? (window.laciStocks[selectedOutlet] || 0) : 0;
                         db.transaction(["active_shifts"], "readwrite").objectStore("active_shifts").put({
                             pin: hashedPin, shiftId: currentShiftId, loginTime: currentLoginTime, 
-                            lastActiveTime: Date.now(), cashierName: currentCashier, initialCoins: initCoin
+                            lastActiveTime: Date.now(), cashierName: currentCashier, initialCoins: initCoin,
+                            outlet: selectedOutlet
                         });
                         localStorage.setItem("session_initial_coins", initCoin);
                     }
@@ -4500,11 +4511,17 @@ function performAutoClose(shift) {
         let vOrders = allOrders.filter(o => o.shiftId === shift.shiftId && o.orderStatus !== "Voided" && o.orderStatus !== "Void Pending");
         let vExpenses = allExpenses.filter(ex => ex.shiftId === shift.shiftId && ex.status === "Active");
 
+        let loginMs = new Date(shift.loginTime).getTime();
+        let lastActivityMs = Math.max(loginMs, Number(shift.lastActiveTime) || 0);
+
         let tCust = 0, tOrders = vOrders.length, tOmset = 0, tCash = 0, tQris = 0, tTransfer = 0;
         let hPiu = 0, tPiu = 0, tFree = 0, tExpense = 0, tFreeItems = 0;
         let foodSummary = {}, freeItemsSummary = {};
 
         vOrders.forEach(o => {
+            let oTs = new Date(o.timestamp).getTime();
+            if (!isNaN(oTs) && oTs > lastActivityMs) lastActivityMs = oTs;
+
             if (o.customerPhone && o.customerPhone !== "-" && o.customerPhone !== "Walk-in") tCust++;
             tOmset += (Number(o.grandTotal) || 0);
             tCash += (Number(o.cashAmount) || 0);
@@ -4526,19 +4543,29 @@ function performAutoClose(shift) {
             }
         });
 
-        vExpenses.forEach(ex => { tExpense += (Number(ex.amount) || 0); });
+        vExpenses.forEach(ex => {
+            let eTs = new Date(ex.timestamp).getTime();
+            if (!isNaN(eTs) && eTs > lastActivityMs) lastActivityMs = eTs;
+            tExpense += (Number(ex.amount) || 0);
+        });
 
+        // Jika lupa logout melewati tengah malam, kunci waktu logout maksimal di 23:59:59 hari login agar tanggal shift tetap akurat
+        let loginDateObj = new Date(loginMs);
+        let endOfLoginDayMs = new Date(loginDateObj.getFullYear(), loginDateObj.getMonth(), loginDateObj.getDate(), 23, 59, 59, 999).getTime();
+        let effectiveLogoutMs = Math.min(lastActivityMs, endOfLoginDayMs);
+
+        let shiftOutlet = shift.outlet || window.getActiveOutlet();
         let netCash = Math.max(0, tCash - tExpense);
         let initialC = Number(shift.initialCoins || localStorage.getItem("session_initial_coins")) || 0;
-        let endC = window.laciStocks ? (window.laciStocks[window.getActiveOutlet()] || 0) : 0;
+        let endC = window.laciStocks ? (window.laciStocks[shiftOutlet] || 0) : 0;
 
         const report = { 
-            shiftId: shift.shiftId, cashier: shift.cashierName, loginTime: shift.loginTime, logoutTime: new Date().toISOString(), 
+            shiftId: shift.shiftId, cashier: shift.cashierName, loginTime: shift.loginTime, logoutTime: new Date(effectiveLogoutMs).toISOString(), 
             totalCustomers: tCust, totalOrders: tOrders, totalOmset: tOmset, totalCash: tCash, totalQris: tQris, totalTransfer: tTransfer, 
             totalHotelPiutang: hPiu, totalTamuPiutang: tPiu, totalFree: tFree, totalExpenses: tExpense, netCash: netCash, 
             foodSummary: foodSummary, freeItemsSummary: freeItemsSummary, totalFreeItems: tFreeItems,
             closeNote: "System Auto-Closed (Kasir Lupa Tutup Shift)", 
-            outlet: window.getActiveOutlet(), syncStatus: "Pending",
+            outlet: shiftOutlet, syncStatus: "Pending",
             initialCoins: initialC, endCoins: endC
         };
 
@@ -4548,9 +4575,10 @@ function performAutoClose(shift) {
         txW.objectStore("active_shifts").delete(shift.pin);
 
         txW.oncomplete = () => {
+            if (window.runBackgroundSync) window.runBackgroundSync();
             if (shift.shiftId === currentShiftId) { 
                 localStorage.removeItem("session_pin");
-                alert("Shift kadaluarsa dan telah ditutup otomatis!"); 
+                alert("Shift sebelumnya yang lupa ditutup telah otomatis direkap & ditutup!"); 
                 window.location.reload(); 
             }
         };
@@ -4576,16 +4604,16 @@ function checkExpiredShifts() {
             // Cek apakah shift ini dimulai sebelum jam 00:00 hari ini
             let crossedMidnight = loginTime < todayMidnight;
             
-            // Auto-close HANYA JIKA: 
-            // 1. Melewati jam 00:00 (Beda hari)
-            // 2. ATAU Sudah login >= 8 jam DAN tidak ada aktivitas (idle) >= 1 jam
-            if (crossedMidnight || (hoursSinceLogin >= 8 && hoursSinceActive >= 1)) {
+            // Shift tetap aktif sepanjang hari (termasuk shift Full Day saat rekan libur).
+            // Auto-close HANYA JIKA kasir benar-benar lupa logout:
+            // 1. Melewati jam 00:00 (ganti hari / shift kemarin lupa ditutup)
+            // 2. ATAU Sudah login >= 16 jam (melebihi durasi Full Day) DAN tidak ada aktivitas >= 3 jam
+            if (crossedMidnight || (hoursSinceLogin >= 16 && hoursSinceActive >= 3)) {
                 performAutoClose(shift);
             }
         });
     };
 }
-
 
 
 window.onload = async () => { 
