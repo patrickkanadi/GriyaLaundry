@@ -4858,6 +4858,8 @@ window.initMobilePosWizard = function() {
         #mobile-step2-custbar, #mobile-step3-header, #mobile-step1-nextbar,
         #mobile-step3-emptybar, .mob-card-qty-badge, #mob-menu-toggle-btn { display: none; }
 
+        .mob-status-line { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
         /* Clean Left-Aligned Customer Autocomplete */
         #${CFG.autocompleteId} .autocomplete-item {
             display: block !important;
