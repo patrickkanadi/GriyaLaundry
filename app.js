@@ -159,13 +159,16 @@ window.installPWA = function() {
 // --- ULTIMATE PATCHED HELPER: ROLLBACK POINTS, COINS, STAMPS & PROG ---
 window.rollbackOrderImpact = async function(order) {
     // 1. UPDATE LOCAL LACI & MESIN UI ONLY
-    if (order.expectedCoins && order.expectedCoins > 0 && !order.coinsRefunded) {
+    let coinsToRefund = (order.orderStatus === "Processing" || order.actualCoins === "" || order.actualCoins === undefined || order.actualCoins === null)
+        ? (Number(order.expectedCoins) || 0)
+        : (Number(order.actualCoins) || 0);
+    if (coinsToRefund > 0 && !order.coinsRefunded) {
         let currentOutlet = order.outlet || localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
         if (!window.laciStocks) window.laciStocks = {};
         if (!window.coinsInMachines) window.coinsInMachines = {};
         
-        window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + order.expectedCoins;
-        window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - order.expectedCoins);
+        window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + coinsToRefund;
+        window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - coinsToRefund);
         
         let btnKoin = document.getElementById("btn-koin-top");
         if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
@@ -2617,7 +2620,8 @@ window.finalizeOrder = async function(shouldPrint) {
         salesperson: selectedSalesperson,
         customerName: custName, customerPhone: custPhone, orderStatus: finalStatus, items: currentCart, subtotal: window.cartSubtotal, discounts: free, grandTotal: window.cartGrandTotal,
         paymentMethod: payMethod, cashAmount: cash, qrisAmount: qris, transferAmount: transfer, hotelPiutangAmount: hotelPiutang, tamuPiutangAmount: tamuPiutang, freeAmount: free, remainingDue: 0,
-        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, actualCoins: isLaundry ? 0 : expectedCoinsTotal, 
+        coinsEarned: paidCoins, redeemedPromos: redeemedList, newEarnedRewards: newEarnedRewards, expectedCoins: expectedCoinsTotal, washingCoins: assumedWashingCoins, instantCoins: koinSoldQty, actualCoins: isLaundry ? "" : expectedCoinsTotal,
+        pendingCoinDelta: expectedCoinsTotal,
         finalStoredRewards: activeCustomerProfile ? JSON.stringify(activeCustomerProfile.storedRewards) : null,
         outlet: currentOutlet, syncStatus: "Pending" 
     };
@@ -2767,11 +2771,36 @@ window.submitTicketDone = function() {
 
     let ticket = activeLaundryTickets.find(t => t.orderId === window.activeDoneOrderId);
     if (ticket) {
-        ticket.orderStatus = "Ready for Pickup"; 
-        let instantC = ticket.instantCoins || 0;
-        ticket.actualCoins = actualWashingInput + instantC; 
-        if (actualWashingInput !== expectedWashing) { ticket.coinDiscrepancy = true; } 
+        let instantC = Number(ticket.instantCoins) || 0;
+        let prevCharged = Number(ticket.expectedCoins) || 0;
+        let newActual = actualWashingInput + instantC;
+        let coinDelta = newActual - prevCharged;
+        let ticketOutlet = ticket.outlet || window.getActiveOutlet();
+
+        if (coinDelta > 0) {
+            let availLaci = window.laciStocks ? (window.laciStocks[ticketOutlet] || 0) : 0;
+            if (coinDelta > availLaci) {
+                return alert(`⚠️ Koin di Laci tidak cukup untuk tambahan ${coinDelta} koin! (Sisa Laci: ${availLaci}). Lakukan Daur Ulang terlebih dahulu.`);
+            }
+        }
+
+        ticket.orderStatus = "Ready for Pickup";
+        ticket.actualCoins = newActual;
+        if (actualWashingInput !== expectedWashing) { ticket.coinDiscrepancy = true; }
         ticket.syncStatus = "Pending";
+        ticket.pendingCoinDelta = (Number(ticket.pendingCoinDelta) || 0) + coinDelta;
+
+        // Optimistic update Laci & Mesin agar angka top bar langsung sinkron
+        if (coinDelta !== 0) {
+            if (!window.laciStocks) window.laciStocks = {};
+            if (!window.coinsInMachines) window.coinsInMachines = {};
+            window.laciStocks[ticketOutlet] = Math.max(0, (window.laciStocks[ticketOutlet] || 0) - coinDelta);
+            window.coinsInMachines[ticketOutlet] = Math.max(0, (window.coinsInMachines[ticketOutlet] || 0) + coinDelta);
+            let btnKoin = document.getElementById("btn-koin-top");
+            if (btnKoin && ticketOutlet === window.getActiveOutlet()) {
+                btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[ticketOutlet]} | Mesin: ${window.coinsInMachines[ticketOutlet]}`;
+            }
+        }
 
         // MERGE DATA LOCALLY INSTEAD OF OVERWRITING
         let tx = db.transaction(["orders"], "readwrite");
@@ -2780,6 +2809,7 @@ window.submitTicketDone = function() {
             if (localTicket) {
                 localTicket.orderStatus = ticket.orderStatus;
                 localTicket.actualCoins = ticket.actualCoins;
+                localTicket.pendingCoinDelta = (Number(localTicket.pendingCoinDelta) || 0) + coinDelta;
                 localTicket.syncStatus = "Pending";
                 tx.objectStore("orders").put(localTicket);
             } else {
@@ -2884,9 +2914,10 @@ window.confirmPiutangPayment = function() {
     
     activeSettlementTicket.cashAmount = (activeSettlementTicket.cashAmount || 0) + c; 
     activeSettlementTicket.qrisAmount = (activeSettlementTicket.qrisAmount || 0) + q; 
+    let isStillWashing = (activeSettlementTicket.orderStatus === "Processing" || activeSettlementTicket.orderStatus === "Ready for Pickup");
     activeSettlementTicket.hotelPiutangAmount = 0;
     activeSettlementTicket.tamuPiutangAmount = 0;
-    activeSettlementTicket.orderStatus = "Completed"; 
+    if (!isStillWashing) activeSettlementTicket.orderStatus = "Completed";
     activeSettlementTicket.piutangPaidDate = new Date().toISOString(); 
     activeSettlementTicket.syncStatus = "Pending";
     
@@ -2899,7 +2930,7 @@ window.confirmPiutangPayment = function() {
             localTicket.qrisAmount = activeSettlementTicket.qrisAmount;
             localTicket.hotelPiutangAmount = 0;
             localTicket.tamuPiutangAmount = 0;
-            localTicket.orderStatus = "Completed";
+            if (!isStillWashing) localTicket.orderStatus = "Completed";
             localTicket.piutangPaidDate = activeSettlementTicket.piutangPaidDate;
             localTicket.syncStatus = "Pending";
             tx.objectStore("orders").put(localTicket);
@@ -2908,7 +2939,9 @@ window.confirmPiutangPayment = function() {
         }
     };
     
-    activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
+    if (!isStillWashing) {
+        activeLaundryTickets = activeLaundryTickets.filter(t => t.orderId !== activeSettlementTicket.orderId);
+    }
     document.getElementById("piutang-payment-modal").classList.add("hidden"); 
     window.renderPiutangTickets(); window.runBackgroundSync();
 };
@@ -3511,31 +3544,37 @@ window.submitCoinManagement = function() {
     // KUNCI GANDA: Tarik dari localStorage pada detik terakhir tombol dipencet
     let currentOutlet = localStorage.getItem("selectedOutlet") || window.currentOutlet || "Pusat";
     
-    // VALIDASI KUNCI 1: Cegah Daur Ulang melebihi isi mesin
+    // VALIDASI KUNCI 1: Cegah Daur Ulang melebihi isi mesin & cegah Macet melebihi isi laci
     let maxMachine = window.coinsInMachines ? (window.coinsInMachines[currentOutlet] || 0) : 0;
+    let maxLaci = window.laciStocks ? (window.laciStocks[currentOutlet] || 0) : 0;
     if (actionType === "recycle" && qty > maxMachine) {
         return alert(`⚠️ Gagal Daur Ulang: Anda mencoba menarik ${qty} koin, tapi koin di mesin saat ini hanya ${maxMachine}.`);
+    }
+    if (actionType === "jammed" && qty > maxLaci) {
+        return alert(`⚠️ Gagal Catat Koin Macet: Penggantian ${qty} koin melebihi sisa koin di Laci (${maxLaci}).`);
     }
     
     const payload = { retrievalId: prefix + Date.now(), timestamp: new Date().toISOString(), cashier: currentCashier, qty: qty, notes: note, outlet: currentOutlet, syncStatus: "Pending" };
     db.transaction(["coin_retrievals"], "readwrite").objectStore("coin_retrievals").add(payload);
     
-    // --- TAMBAHAN: Update stok laci secara instan tanpa menunggu cloud (Optimistic Update) ---
+    // Update stok laci & mesin secara instan (baik Daur Ulang maupun Macet)
+    if (!window.laciStocks) window.laciStocks = {};
+    if (!window.coinsInMachines) window.coinsInMachines = {};
     if (actionType === "recycle") {
-        if (!window.laciStocks) window.laciStocks = {};
-        if (!window.coinsInMachines) window.coinsInMachines = {};
-        
         window.laciStocks[currentOutlet] = (window.laciStocks[currentOutlet] || 0) + qty;
         window.coinsInMachines[currentOutlet] = Math.max(0, (window.coinsInMachines[currentOutlet] || 0) - qty);
-        
-        let btnKoin = document.getElementById("btn-koin-top");
-        if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
-        
-        if (window.globalMenuData) {
-            let koinItem = window.globalMenuData.find(m => String(m.name).toUpperCase().includes("KOIN_FISIK") || String(m.name).toUpperCase().includes("KOIN FISIK"));
-            if (koinItem) { koinItem.currentStock = window.laciStocks[currentOutlet]; }
-            if (typeof renderProductGrid === "function") renderProductGrid();
-        }
+    } else if (actionType === "jammed") {
+        window.laciStocks[currentOutlet] = Math.max(0, (window.laciStocks[currentOutlet] || 0) - qty);
+        window.coinsInMachines[currentOutlet] = (window.coinsInMachines[currentOutlet] || 0) + qty;
+    }
+
+    let btnKoin = document.getElementById("btn-koin-top");
+    if (btnKoin) btnKoin.innerHTML = `🪙 Laci: ${window.laciStocks[currentOutlet]} | Mesin: ${window.coinsInMachines[currentOutlet]}`;
+
+    if (window.globalMenuData) {
+        let koinItem = window.globalMenuData.find(m => String(m.name).toUpperCase().includes("KOIN_FISIK") || String(m.name).toUpperCase().includes("KOIN FISIK"));
+        if (koinItem) { koinItem.currentStock = window.laciStocks[currentOutlet]; }
+        if (typeof renderProductGrid === "function") renderProductGrid();
     }
     // -------------------------------------------------------------------------------------
     
@@ -3653,9 +3692,32 @@ window.syncMasterData = async function(isSilent = false) {
 
             window.availableOutlets = (result.data.settings["Available_Outlets"] || "Pusat").split(",").map(s => s.trim());
 
-            window.laciStocks = result.laciStock || {};
+            // Gabungkan saldo server dengan order & laporan koin lokal yang masih Pending agar angka tidak loncat balik
+            let pendingDeltasByOutlet = {};
+            try {
+                let [pOrders, pCoinRets] = await Promise.all([
+                    new Promise(res => db.transaction(["orders"], "readonly").objectStore("orders").getAll().onsuccess = e => res(e.target.result || [])),
+                    new Promise(res => db.transaction(["coin_retrievals"], "readonly").objectStore("coin_retrievals").getAll().onsuccess = e => res(e.target.result || []))
+                ]);
+                pOrders.filter(o => o.syncStatus === "Pending" && o.pendingCoinDelta).forEach(o => {
+                    let out = o.outlet || "Pusat";
+                    pendingDeltasByOutlet[out] = (pendingDeltasByOutlet[out] || 0) + (Number(o.pendingCoinDelta) || 0);
+                });
+                pCoinRets.filter(cr => cr.syncStatus === "Pending").forEach(cr => {
+                    let out = cr.outlet || "Pusat";
+                    let sign = String(cr.retrievalId || "").startsWith("JAM-") ? 1 : -1;
+                    pendingDeltasByOutlet[out] = (pendingDeltasByOutlet[out] || 0) + (sign * (Number(cr.qty) || 0));
+                });
+            } catch (e) {}
 
-            window.coinsInMachines = result.coinsInMachine || {};
+            window.laciStocks = {};
+            window.coinsInMachines = {};
+            let allCoinOutlets = new Set([...window.availableOutlets, ...Object.keys(result.laciStock || {}), ...Object.keys(result.coinsInMachine || {})]);
+            allCoinOutlets.forEach(out => {
+                let pendingDelta = pendingDeltasByOutlet[out] || 0;
+                window.laciStocks[out] = Math.max(0, (Number(result.laciStock?.[out]) || 0) - pendingDelta);
+                window.coinsInMachines[out] = Math.max(0, (Number(result.coinsInMachine?.[out]) || 0) + pendingDelta);
+            });
 
             
 
@@ -3936,7 +3998,7 @@ window.runBackgroundSync = async function(waitForAll = false) {
 
                     let r = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: "syncOrder", data: order }) });
 
-                    if ((await r.json()).status === "Success") { order.syncStatus = "Synced"; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); }
+                    if ((await r.json()).status === "Success") { order.syncStatus = "Synced"; order.pendingCoinDelta = 0; db.transaction(["orders"], "readwrite").objectStore("orders").put(order); }
 
                 } catch(e) {}
 
@@ -4153,7 +4215,9 @@ window.openShiftReport = function(historyData = null) {
                         let name = String(i.name).toUpperCase();
                         let itemCoins = 0;
 
-                        if (enableCoinAssumption) {
+                        if (name.includes("KOIN")) {
+                            itemCoins = Number(i.qty) || 0;
+                        } else if (enableCoinAssumption) {
                             if (name.includes("KESET")) { itemCoins = Math.ceil(i.qty / kesetPerBatch) * 3; } 
                             else if (name.includes("BANTAL")) { itemCoins = Math.ceil(i.qty / bantalPerBatch) * 2; } 
                             else if (i.inputMode === "DECIMAL") { itemCoins = Math.ceil(i.qty / kgPerCuci) + Math.ceil(i.qty / kgPerKering); } 
@@ -4164,7 +4228,8 @@ window.openShiftReport = function(historyData = null) {
                     });
                 }
 
-                let orderTotalCoins = o.actualCoins !== undefined ? Number(o.actualCoins) : (o.expectedCoins || orderExpectedCoins);
+                let hasExplicitActual = (o.orderStatus !== "Processing" && o.actualCoins !== "" && o.actualCoins !== undefined && o.actualCoins !== null);
+                let orderTotalCoins = hasExplicitActual ? Number(o.actualCoins) : (o.expectedCoins || orderExpectedCoins);
                 tCoinsUsed += orderTotalCoins;
                 for (let cat in orderCoinBreakdown) { coinCategorySummary[cat] = (coinCategorySummary[cat] || 0) + orderCoinBreakdown[cat]; }
 
