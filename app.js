@@ -1303,9 +1303,9 @@ window.openLotteryModal = function() {
 
     if(select) { 
 
-        select.innerHTML = '-- Pilih Promo Undian --';
+        select.innerHTML = '<option value="">-- Pilih Promo Undian --</option>';
 
-        let currentOutlet = window.currentOutlet || "Pusat";
+        let currentOutlet = window.getActiveOutlet();
 
         window.globalPromos.forEach(p => { 
 
@@ -2901,6 +2901,8 @@ window.openPiutangPayment = function(orderId, remainingDue) {
 
     document.getElementById("piutang-settle-qris").value = 0;
 
+    let elPtTf = document.getElementById("piutang-settle-transfer"); if (elPtTf) elPtTf.value = 0;
+
     document.getElementById("piutang-payment-modal").classList.remove("hidden");
 
 };
@@ -3930,6 +3932,9 @@ window.syncMasterData = async function(isSilent = false) {
                 };
             };
 
+            if (window.getPendingSyncItemsCount && window.updatePendingSyncBadge) {
+                window.getPendingSyncItemsCount().then(window.updatePendingSyncBadge);
+            }
         }
 
     } catch (error) {}
@@ -3966,17 +3971,27 @@ window.manualPushSync = async function() {
 window.updatePendingSyncBadge = function(pendingCount) {
     let nTxt = document.getElementById("network-text");
     let nDot = document.getElementById("network-dot");
+    let lTxt = document.getElementById("login-network-text");
+    let lDot = document.getElementById("login-network-dot");
     if (!navigator.onLine) {
-        if (nTxt) nTxt.innerText = pendingCount > 0 ? `Offline (${pendingCount} Pending)` : "Mode Offline";
+        let msg = pendingCount > 0 ? `Offline (${pendingCount} Pending)` : "Mode Offline";
+        if (nTxt) nTxt.innerText = msg;
         if (nDot) nDot.style.backgroundColor = "#e74c3c";
+        if (lTxt) lTxt.innerText = msg;
+        if (lDot) lDot.style.backgroundColor = "#e74c3c";
         return;
     }
     if (pendingCount > 0) {
-        if (nTxt) nTxt.innerText = `Menyinkronkan (${pendingCount})...`;
+        let msg = `Menyinkronkan (${pendingCount})...`;
+        if (nTxt) nTxt.innerText = msg;
         if (nDot) nDot.style.backgroundColor = "#f39c12";
+        if (lTxt) lTxt.innerText = msg;
+        if (lDot) lDot.style.backgroundColor = "#f39c12";
     } else {
         if (nTxt) nTxt.innerText = "Online ✅";
         if (nDot) nDot.style.backgroundColor = "#2ecc71";
+        if (lTxt) lTxt.innerText = "Online ✅";
+        if (lDot) lDot.style.backgroundColor = "#2ecc71";
     }
 };
 
@@ -4769,6 +4784,7 @@ window.onload = async () => {
         document.getElementById("login-screen").classList.add("hidden"); 
         document.getElementById("pos-screen").classList.remove("hidden");
         let selectedOutlet = window.getActiveOutlet();
+        window.currentOutlet = selectedOutlet;
         document.getElementById("display-cashier").innerText = currentCashier + ` (${selectedOutlet})`;
         
         window.switchWorkspace('new'); window.lockMenu(); loadMenuUI();
@@ -4970,6 +4986,7 @@ window.initMobilePosWizard = function() {
                 justify-content: center !important;
                 flex: 0 0 auto !important;
                 width: auto !important;
+                min-width: 0 !important;
                 margin: 0 !important;
                 padding: 5px 8px !important;
                 font-size: 10.5px !important;
@@ -4977,6 +4994,19 @@ window.initMobilePosWizard = function() {
                 font-weight: bold !important;
                 border-radius: 5px !important;
                 white-space: nowrap !important;
+            }
+            #${CFG.posScreenId} .mob-status-line {
+                width: 100% !important;
+                flex: 1 0 100% !important;
+                display: flex !important;
+                align-items: center !important;
+                gap: 6px !important;
+                font-size: 11.5px !important;
+                margin-bottom: 2px !important;
+            }
+            #${CFG.shiftModalId} input {
+                font-size: 16px !important;
+                min-height: 40px !important;
             }
             #${CFG.posScreenId} .mob-top-bar > div:first-child button:not(#mob-menu-toggle-btn):not(#btn-koin-top) {
                 display: inline-flex !important;
@@ -5471,6 +5501,18 @@ window.initMobilePosWizard = function() {
             topBar.appendChild(topRow2);
         }
         topRow2.classList.add("mob-top-row2");
+
+        // Group network dot & status text on their own clean line above Row 2 buttons
+        const netDot = document.getElementById("network-dot");
+        const netTxt = document.getElementById("network-text");
+        if (netDot && netTxt && !document.getElementById("mob-status-line")) {
+            const statusLine = document.createElement("div");
+            statusLine.id = "mob-status-line";
+            statusLine.className = "mob-status-line";
+            topRow2.insertBefore(statusLine, topRow2.firstChild);
+            statusLine.appendChild(netDot);
+            statusLine.appendChild(netTxt);
+        }
 
         // Gather ALL action buttons across topBar into topRow2 so none are ever hidden in extra containers
         Array.from(topBar.querySelectorAll("button")).forEach(btn => {
