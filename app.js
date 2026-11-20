@@ -1,7 +1,7 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxlnwV3YcT6yxvH-tsi-EmhKx0Uofkek18xgyamYollFdrALjePua4WcLfwrQfy0bYm/exec";
 const DB_NAME = "GriyaLaundry_POS";
 
-const APP_VERSION = 35; // Naikkan angka ini bersamaan dengan app.js?v=XX di index.html
+const APP_VERSION = 36; // Naikkan angka ini bersamaan dengan app.js?v=XX di index.html
 const DB_VERSION = 34;
 
 let db;
@@ -576,11 +576,48 @@ function processVoidApprovals(authStatuses) {
 
 
 async function hashString(str) {
-
-    const msgUint8 = new TextEncoder().encode(str); const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-
-    const hashArray = Array.from(new Uint8Array(hashBuffer)); return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
+    const s = String(str || "");
+    if (window.crypto && window.crypto.subtle && typeof window.crypto.subtle.digest === "function") {
+        const msgUint8 = new TextEncoder().encode(s);
+        const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgUint8);
+        return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    // Pure-JS SHA-256 fallback untuk HP/WebView tanpa crypto.subtle
+    const rightRotate = (v, a) => (v >>> a) | (v << (32 - a));
+    let maxWord = Math.pow(2, 32), result = "", words = [];
+    let ascii = unescape(encodeURIComponent(s)), asciiBitLength = ascii.length * 8;
+    let hash = [], k = [], primeCounter = 0, isComposite = {};
+    for (let candidate = 2; primeCounter < 64; candidate++) {
+        if (!isComposite[candidate]) {
+            for (let i = 0; i < 313; i += candidate) isComposite[i] = candidate;
+            hash[primeCounter] = (Math.pow(candidate, 0.5) * maxWord) | 0;
+            k[primeCounter++] = (Math.pow(candidate, 1 / 3) * maxWord) | 0;
+        }
+    }
+    ascii += '\x80';
+    while (ascii.length % 64 - 56) ascii += '\x00';
+    for (let i = 0; i < ascii.length; i++) words[i >> 2] |= ascii.charCodeAt(i) << ((3 - i) % 4) * 8;
+    words[words.length] = ((asciiBitLength / maxWord) | 0);
+    words[words.length] = (asciiBitLength);
+    for (let j = 0; j < words.length;) {
+        let w = words.slice(j, j += 16), oldHash = hash.slice(0, 8);
+        for (let i = 0; i < 64; i++) {
+            let w15 = w[i - 15], w2 = w[i - 2];
+            let a = hash[0], e = hash[4];
+            let temp1 = hash[7] + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) + ((e & hash[5]) ^ ((~e) & hash[6])) + k[i] + (w[i] = (i < 16) ? w[i] : (w[i - 16] + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) + w[i - 7] + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) | 0);
+            let temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+            hash = [(temp1 + temp2) | 0].concat(hash);
+            hash[4] = (hash[4] + temp1) | 0;
+        }
+        for (let i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+    for (let i = 0; i < 8; i++) {
+        for (let j = 3; j + 1; j--) {
+            let b = (hash[i] >> (j * 8)) & 255;
+            result += ((b < 16) ? 0 : '') + b.toString(16);
+        }
+    }
+    return result;
 }
 
 
@@ -1009,15 +1046,18 @@ window.togglePinVisibility = function() {
 
 window.attemptLogin = async function() {
 
+    if (!db) { await initDB(); }
+
     const pinInput = document.getElementById("cashier-pin");
+    if (!pinInput) return alert("Error: Kolom PIN tidak ditemukan.");
 
     const rawPin = pinInput.value.trim(); 
 
-    if (!rawPin) return; 
+    if (!rawPin) return alert("Masukkan PIN Kasir terlebih dahulu."); 
 
     let loginBtn = document.getElementById("btn-login"); 
 
-    if(loginBtn) loginBtn.innerText = "Memverifikasi...";
+    if(loginBtn) { loginBtn.innerText = "Memverifikasi..."; loginBtn.disabled = true; }
 
 
 
@@ -1027,15 +1067,21 @@ window.attemptLogin = async function() {
 
         let staff = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").get(hashedPin).onsuccess = e => res(e.target.result));
 
-        
+        if (!staff && Array.isArray(window.globalStaffCache)) {
+            staff = window.globalStaffCache.find(s => s.pin === hashedPin);
+        }
 
         if (!staff) { 
             if (navigator.onLine) { 
                 if(loginBtn) loginBtn.innerText = "Menarik Data Baru...";
                 await window.syncMasterData(); 
-                await new Promise(r => setTimeout(r, 400)); // Tunggu IndexedDB selesai menyimpan
-                let staffList = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = e => res(e.target.result));
-                staff = staffList.find(s => s.pin === hashedPin);
+                if (Array.isArray(window.globalStaffCache)) {
+                    staff = window.globalStaffCache.find(s => s.pin === hashedPin);
+                }
+                if (!staff) {
+                    let staffList = await new Promise(res => db.transaction(["staff"], "readonly").objectStore("staff").getAll().onsuccess = e => res(e.target.result || []));
+                    staff = staffList.find(s => s.pin === hashedPin);
+                }
             } 
         }
 
@@ -1143,7 +1189,7 @@ window.attemptLogin = async function() {
 
         } else { alert("PIN Kasir Salah atau Belum Terdaftar!"); }
 
-    } catch (err) { alert("Terjadi kesalahan sistem login."); } finally { pinInput.value = ""; if(loginBtn) loginBtn.innerText = "Masuk / Buka Shift"; }
+    } catch (err) { alert("Terjadi kesalahan sistem login: " + (err && err.message ? err.message : err)); } finally { pinInput.value = ""; if(loginBtn) { loginBtn.innerText = "Masuk / Buka Shift"; loginBtn.disabled = false; } }
 
 };
 
@@ -3962,7 +4008,16 @@ window.syncMasterData = async function(isSilent = false) {
 
             }
 
-            if (result.data.staff) { let txStaff = db.transaction(["staff"], "readwrite"); result.data.staff.forEach(s => txStaff.objectStore("staff").put(s)); }
+            if (result.data.staff) {
+                window.globalStaffCache = result.data.staff;
+                await new Promise(resolve => {
+                    let txStaff = db.transaction(["staff"], "readwrite");
+                    txStaff.objectStore("staff").clear();
+                    result.data.staff.forEach(s => txStaff.objectStore("staff").put(s));
+                    txStaff.oncomplete = () => resolve();
+                    txStaff.onerror = () => resolve();
+                });
+            }
 
             if (result.data.menu) { 
                 window.globalMenuDataRaw = result.data.menu; 
@@ -5035,13 +5090,16 @@ window.initMobilePosWizard = function() {
             #${CFG.loginScreenId}:not(.hidden) {
                 height: 100dvh !important;
                 max-height: 100dvh !important;
-                overflow: hidden !important;
-                padding: 16px !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                justify-content: flex-start !important;
+                padding: 16px 14px 40px 14px !important;
             }
             #${CFG.loginScreenId}:not(.hidden) .login-box {
-                padding: 24px 20px !important;
-                max-height: 92dvh !important;
-                overflow-y: auto !important;
+                padding: 20px 16px !important;
+                margin: auto 0 !important;
+                max-height: none !important;
+                overflow: visible !important;
             }
             #${CFG.posScreenId}.hidden { display: none !important; }
 
