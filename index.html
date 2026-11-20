@@ -366,7 +366,7 @@
 
             <p style="margin-bottom: 5px;">Masukkan PIN Kasir</p>
             <div style="position: relative; width: 100%; margin-bottom: 20px;">
-                <input type="password" id="cashier-pin" placeholder="****" inputmode="numeric" style="width: 100%; margin-bottom: 0; padding-right: 50px;">
+                <input type="password" id="cashier-pin" placeholder="****" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter') attemptLogin()" style="width: 100%; margin-bottom: 0; padding-right: 50px;">
                 <button onclick="togglePinVisibility()" type="button" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 20px; cursor: pointer; padding: 0; width: auto; color: #7f8c8d; box-shadow: none;">👁️</button>
             </div>
             <button id="btn-login" onclick="attemptLogin()">Masuk / Buka Shift</button>
@@ -832,11 +832,9 @@
 
             <div class="split-pay-grid">
 
-                <div class="form-box" style="margin-bottom:0;"><label>Tunai / Cash</label><input type="number" id="piutang-settle-cash" value="0" onclick="this.select()"></div>
+                <div class="form-box" style="margin-bottom:0;"><label>Tunai / Cash</label><input type="number" id="settle-cash" value="0" onclick="this.select()"></div>
 
-                <div class="form-box" style="margin-bottom:0;"><label>QRIS</label><input type="number" id="piutang-settle-qris" value="0" onclick="this.select()"></div>
-
-                <div class="form-box" style="margin-bottom:0;"><label>Transfer Bank</label><input type="number" id="piutang-settle-transfer" value="0" onclick="this.select()"></div>
+                <div class="form-box" style="margin-bottom:0;"><label>QRIS</label><input type="number" id="settle-qris" value="0" onclick="this.select()"></div>
 
             </div>
 
@@ -867,6 +865,8 @@
                 <div class="form-box" style="margin-bottom:0;"><label>Tunai / Cash</label><input type="number" id="piutang-settle-cash" value="0" onclick="this.select()"></div>
 
                 <div class="form-box" style="margin-bottom:0;"><label>QRIS</label><input type="number" id="piutang-settle-qris" value="0" onclick="this.select()"></div>
+
+                <div class="form-box" style="margin-bottom:0;"><label>Transfer Bank</label><input type="number" id="piutang-settle-transfer" value="0" onclick="this.select()"></div>
 
             </div>
 
