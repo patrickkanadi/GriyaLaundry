@@ -1,7 +1,8 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxlnwV3YcT6yxvH-tsi-EmhKx0Uofkek18xgyamYollFdrALjePua4WcLfwrQfy0bYm/exec";
 const DB_NAME = "GriyaLaundry_POS";
 
-const DB_VERSION = 35; 
+const APP_VERSION = 35; // Naikkan angka ini bersamaan dengan app.js?v=XX di index.html
+const DB_VERSION = 34;
 
 let db;
 
@@ -150,6 +151,146 @@ window.installPWA = function() {
 
     } 
 
+};
+
+// ==========================================
+// 1B. VERSION BADGE & FORCE AUTO-UPDATE ENGINE
+// ==========================================
+window.pendingAppUpdateVersion = null;
+window.isUpdatingApp = false;
+
+window.renderAppVersionBadges = function() {
+    const label = window.pendingAppUpdateVersion
+        ? `🔄 Update v${window.pendingAppUpdateVersion}`
+        : `App v${APP_VERSION} | DB v${DB_VERSION}`;
+    const bg = window.pendingAppUpdateVersion ? "#e74c3c" : "#f39c12";
+
+    ["app-version-badge", "login-version-badge"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.innerText = label;
+            el.style.background = bg;
+        }
+    });
+};
+
+window.purgeBrowserCachesOnly = async function() {
+    try {
+        if ("serviceWorker" in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map(r => r.unregister()));
+        }
+    } catch (e) {}
+    try {
+        if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(k => caches.delete(k)));
+        }
+    } catch (e) {}
+};
+
+window.forceAppUpdate = async function(targetVersion) {
+    if (window.isUpdatingApp) return;
+    window.isUpdatingApp = true;
+
+    const verTag = String(targetVersion || APP_VERSION);
+    try { sessionStorage.setItem("griya_upd_tried_" + verTag, String(Date.now())); } catch (e) {}
+
+    ["app-version-badge", "login-version-badge"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.innerText = `⏳ Updating v${verTag}...`; el.style.background = "#2980b9"; }
+    });
+
+    // Dorong data pending sebentar (maks 2.5 detik) sebelum reload agar tidak ada data tertinggal
+    if (navigator.onLine && typeof window.runBackgroundSync === "function") {
+        try {
+            await Promise.race([
+                window.runBackgroundSync(true),
+                new Promise(res => setTimeout(res, 2500))
+            ]);
+        } catch (e) {}
+    }
+
+    await window.purgeBrowserCachesOnly();
+
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.location.replace(`${cleanUrl}?v=${encodeURIComponent(verTag)}&t=${Date.now()}`);
+};
+
+window.isCashierBusyForUpdate = function() {
+    const hasCartItems = Array.isArray(currentCart) && currentCart.length > 0;
+    const hasOpenModal = !!document.querySelector(".modal-overlay:not(.hidden), .modal-backdrop:not(.hidden)");
+    return hasCartItems || hasOpenModal;
+};
+
+window.checkForAppUpdate = async function(isManual = false) {
+    if (!navigator.onLine) {
+        if (isManual) alert(`Offline. Versi saat ini: App v${APP_VERSION} | DB v${DB_VERSION}`);
+        return false;
+    }
+    if (window.isUpdatingApp) return false;
+
+    try {
+        const checkUrl = `${window.location.origin}${window.location.pathname}?_vercheck=${Date.now()}`;
+        const res = await fetch(checkUrl, { cache: "no-store" });
+        if (!res.ok) return false;
+
+        const html = await res.text();
+        const match = html.match(/app\.js\?v=([0-9.]+)/i);
+        if (!match) return false;
+
+        const remoteVersion = String(match[1]).trim();
+        const localVersion = String(APP_VERSION).trim();
+
+        if (remoteVersion !== localVersion) {
+            const lastAttempt = Number(sessionStorage.getItem("griya_upd_tried_" + remoteVersion)) || 0;
+            if (!isManual && (Date.now() - lastAttempt < 60000)) {
+                window.pendingAppUpdateVersion = remoteVersion;
+                window.renderAppVersionBadges();
+                return false;
+            }
+
+            if (!isManual && window.isCashierBusyForUpdate()) {
+                window.pendingAppUpdateVersion = remoteVersion;
+                window.renderAppVersionBadges();
+                return true;
+            }
+
+            await window.forceAppUpdate(remoteVersion);
+            return true;
+        }
+
+        window.pendingAppUpdateVersion = null;
+        window.renderAppVersionBadges();
+
+        if (isManual) {
+            if (confirm(`Aplikasi sudah versi terbaru (App v${APP_VERSION} | DB v${DB_VERSION}).\n\nTetap hapus cache lama & muat ulang sekarang?`)) {
+                await window.forceAppUpdate(APP_VERSION);
+            }
+        }
+        return false;
+    } catch (err) {
+        if (isManual) alert("Gagal memeriksa update. Pastikan koneksi internet stabil.");
+        return false;
+    }
+};
+
+window.initAppVersionSystem = async function() {
+    window.renderAppVersionBadges();
+
+    // Bersihkan parameter ?v=...&t=... di URL setelah reload selesai
+    if (window.location.search && window.location.search.includes("v=")) {
+        try { window.history.replaceState({}, document.title, window.location.pathname); } catch (e) {}
+    }
+
+    // Jika baru saja naik versi, pastikan cache lama benar-benar bersih
+    const savedVer = localStorage.getItem("griya_last_app_version");
+    if (savedVer && savedVer !== String(APP_VERSION)) {
+        await window.purgeBrowserCachesOnly();
+    }
+    localStorage.setItem("griya_last_app_version", String(APP_VERSION));
+
+    window.checkForAppUpdate(false);
 };
 
 
@@ -1434,6 +1575,10 @@ window.lockMenu = function() {
     let pi = document.getElementById("promo-indicator"); if(pi) pi.classList.add("hidden");
 
     if (window.setMobilePosStep) window.setMobilePosStep(1);
+
+    if (window.pendingAppUpdateVersion && !window.isCashierBusyForUpdate()) {
+        window.forceAppUpdate(window.pendingAppUpdateVersion);
+    }
 
 };
 
@@ -3965,7 +4110,9 @@ window.manualPushSync = async function() {
     // 2. Tarik update terbaru dari Google Sheets
     await window.syncMasterData(); 
     
-    alert("Sinkronisasi Manual Berhasil!");
+    // 3. Cek apakah ada versi aplikasi baru
+    const updated = await window.checkForAppUpdate(false);
+    if (!updated) alert("Sinkronisasi Manual Berhasil!");
 };
 
 window.updatePendingSyncBadge = function(pendingCount) {
@@ -4767,6 +4914,7 @@ window.onload = async () => {
 
     await initDB(); 
     if (window.initMobilePosWizard) window.initMobilePosWizard();
+    if (window.initAppVersionSystem) window.initAppVersionSystem();
     
     // --- AUTO-RESTORE SESSION (10 MINUTE TIMEOUT) ---
     let savedPin = localStorage.getItem("session_pin");
@@ -4805,7 +4953,11 @@ window.onload = async () => {
 
     window.setInterval(window.runBackgroundSync, 5000); 
     window.setInterval(window.syncMasterData, 30000); 
-    window.setInterval(checkExpiredShifts, 60000); 
+    window.setInterval(checkExpiredShifts, 60000);
+    window.setInterval(() => window.checkForAppUpdate(false), 60000);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") window.checkForAppUpdate(false);
+    });
     
     // LOOP: Mengunci layar otomatis jika tablet dibiarkan menyala tanpa disentuh selama 10 menit
     window.setInterval(() => {
