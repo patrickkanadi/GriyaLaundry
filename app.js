@@ -189,38 +189,87 @@ window.purgeBrowserCachesOnly = async function() {
     } catch (e) {}
 };
 
-window.forceAppUpdate = async function(targetVersion) {
-    if (window.isUpdatingApp) return;
-    window.isUpdatingApp = true;
+window.forceAppUpdate = async function(targetVersion, isManual = false) {
+    if (window.isUpdatingApp) return false;
 
     const verTag = String(targetVersion || APP_VERSION);
-    try { sessionStorage.setItem("griya_upd_tried_" + verTag, String(Date.now())); } catch (e) {}
-
-    ["app-version-badge", "login-version-badge"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) { el.innerText = `⏳ Updating v${verTag}...`; el.style.background = "#2980b9"; }
-    });
-
-    // Dorong data pending sebentar (maks 2.5 detik) sebelum reload agar tidak ada data tertinggal
-    if (navigator.onLine && typeof window.runBackgroundSync === "function") {
-        try {
-            await Promise.race([
-                window.runBackgroundSync(true),
-                new Promise(res => setTimeout(res, 2500))
-            ]);
-        } catch (e) {}
+    if (!navigator.onLine) {
+        window.pendingAppUpdateVersion = verTag;
+        window.renderAppVersionBadges();
+        if (isManual) alert("⚠️ Update ditunda karena perangkat sedang offline. Data lokal Anda tetap aman.");
+        return false;
     }
 
-    await window.purgeBrowserCachesOnly();
+    window.isUpdatingApp = true;
+    ["app-version-badge", "login-version-badge"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.innerText = "⏳ Syncing data..."; el.style.background = "#e67e22"; }
+    });
 
-    const cleanUrl = window.location.origin + window.location.pathname;
-    window.location.replace(`${cleanUrl}?v=${encodeURIComponent(verTag)}&t=${Date.now()}`);
+    try {
+        if (!db) { try { await initDB(); } catch (e) {} }
+
+        // 1. Dorong SEMUA data pending ke server tanpa timeout potong-tengah
+        if (typeof window.runBackgroundSync === "function") {
+            await window.runBackgroundSync(true);
+        }
+
+        let pendingCount = typeof window.getPendingSyncItemsCount === "function"
+            ? await window.getPendingSyncItemsCount()
+            : 0;
+
+        // 2. Retry 1x jika masih ada sisa pending
+        if (pendingCount > 0 && navigator.onLine && typeof window.runBackgroundSync === "function") {
+            await new Promise(res => setTimeout(res, 800));
+            await window.runBackgroundSync(true);
+            pendingCount = await window.getPendingSyncItemsCount();
+        }
+
+        // 3. STRICT ZERO-PENDING GATE: Batalkan update jika masih ada data belum tersimpan di server
+        if (pendingCount > 0) {
+            window.isUpdatingApp = false;
+            window.pendingAppUpdateVersion = verTag;
+            window.renderAppVersionBadges();
+            if (isManual) {
+                alert(`⚠️ UPDATE DITUNDA: Masih ada ${pendingCount} data lokal yang belum terkirim ke server.\n\nPeriksa koneksi internet Anda lalu coba lagi setelah semua data tersinkron.`);
+            }
+            return false;
+        }
+
+        // 4. Cek ulang apakah kasir mulai input order saat proses sync berjalan
+        if (!isManual && window.isCashierBusyForUpdate()) {
+            window.isUpdatingApp = false;
+            window.pendingAppUpdateVersion = verTag;
+            window.renderAppVersionBadges();
+            return false;
+        }
+
+        // 5. Semua data 100% tersinkron -> Hapus cache lama & muat ulang versi baru
+        try { sessionStorage.setItem("griya_upd_tried_" + verTag, String(Date.now())); } catch (e) {}
+        ["app-version-badge", "login-version-badge"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) { el.innerText = `⏳ Updating v${verTag}...`; el.style.background = "#2980b9"; }
+        });
+
+        await window.purgeBrowserCachesOnly();
+
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.location.replace(`${cleanUrl}?v=${encodeURIComponent(verTag)}&t=${Date.now()}`);
+        return true;
+    } catch (err) {
+        window.isUpdatingApp = false;
+        window.pendingAppUpdateVersion = verTag;
+        window.renderAppVersionBadges();
+        if (isManual) alert("⚠️ Gagal menyelesaikan sinkronisasi sebelum update. Coba lagi.");
+        return false;
+    }
 };
 
 window.isCashierBusyForUpdate = function() {
-    const hasCartItems = Array.isArray(currentCart) && currentCart.length > 0;
+    const hasCurrentCart = Array.isArray(currentCart) && currentCart.length > 0;
+    const hasQueuedCart = Array.isArray(antreans) && antreans.some(a => a && Array.isArray(a.cart) && a.cart.length > 0);
     const hasOpenModal = !!document.querySelector(".modal-overlay:not(.hidden), .modal-backdrop:not(.hidden)");
-    return hasCartItems || hasOpenModal;
+    return hasCurrentCart || hasQueuedCart || hasOpenModal || !!window.isOrderFinalizing || !!window.isVoidProcessing;
 };
 
 window.checkForAppUpdate = async function(isManual = false) {
@@ -253,19 +302,18 @@ window.checkForAppUpdate = async function(isManual = false) {
             if (!isManual && window.isCashierBusyForUpdate()) {
                 window.pendingAppUpdateVersion = remoteVersion;
                 window.renderAppVersionBadges();
-                return true;
+                return false;
             }
 
-            await window.forceAppUpdate(remoteVersion);
-            return true;
+            return await window.forceAppUpdate(remoteVersion, isManual);
         }
 
         window.pendingAppUpdateVersion = null;
         window.renderAppVersionBadges();
 
         if (isManual) {
-            if (confirm(`Aplikasi sudah versi terbaru (App v${APP_VERSION} | DB v${DB_VERSION}).\n\nTetap hapus cache lama & muat ulang sekarang?`)) {
-                await window.forceAppUpdate(APP_VERSION);
+            if (confirm(`Aplikasi sudah versi terbaru (App v${APP_VERSION} | DB v${DB_VERSION}).\n\nSinkronkan semua data, hapus cache lama, & muat ulang sekarang?`)) {
+                return await window.forceAppUpdate(APP_VERSION, true);
             }
         }
         return false;
@@ -4384,7 +4432,15 @@ window.runBackgroundSync = async function(waitForAll = false) {
     }
     })();
 
-    return await window.activeSyncPromise;
+    const allSynced = await window.activeSyncPromise;
+    if (allSynced && window.pendingAppUpdateVersion && !window.isUpdatingApp && !window.isCashierBusyForUpdate()) {
+        setTimeout(() => {
+            if (window.pendingAppUpdateVersion && !window.isUpdatingApp && !window.isCashierBusyForUpdate()) {
+                window.forceAppUpdate(window.pendingAppUpdateVersion, false);
+            }
+        }, 300);
+    }
+    return allSynced;
 };
 
 
